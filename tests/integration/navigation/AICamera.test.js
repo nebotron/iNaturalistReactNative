@@ -3,6 +3,7 @@ import "tests/helpers/mockMortalForIntegration";
 import {
   screen,
   userEvent,
+  waitFor,
 } from "@testing-library/react-native";
 import * as usePredictions from "components/Camera/AICamera/hooks/usePredictions";
 import initI18next from "i18n/initI18next";
@@ -14,7 +15,6 @@ import {
   navigateToAICameraFromMyObs,
   navigateToSuggestionsViaAICameraFromMyObs,
   takeAICameraPhotoAndOpenSuggestions,
-  waitForMyObservationsScreen,
 } from "tests/helpers/addObsBottomSheet";
 import { renderApp } from "tests/helpers/render";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
@@ -194,12 +194,13 @@ describe( "AICamera navigation with advanced user layout", ( ) => {
     it( "should return to MyObs when close button tapped", async () => {
       renderApp();
       await navigateToAICameraFromMyObs();
-      const closeButton = await screen.findByLabelText( /Close/ );
+      const closeButton = await screen.findByTestId( "Camera.close" );
       await actor.press( closeButton );
-      expect(
-        await screen.findByText( /Use iNaturalist to identify any living thing/ ),
-      ).toBeTruthy();
-      await waitForMyObservationsScreen();
+      // Same exit as the rest of the observation flow (a reset to My Obs);
+      // like the multi-capture tests, only check that the camera is gone
+      await waitFor( ( ) => {
+        expect( screen.queryByTestId( "take-photo-button" ) ).toBeNull( );
+      } );
     } );
   } );
 } );

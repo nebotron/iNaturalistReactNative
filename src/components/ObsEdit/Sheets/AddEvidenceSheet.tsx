@@ -44,7 +44,7 @@ const AddEvidenceSheet = ( {
                 screen: "Camera",
                 params: {
                   addEvidence: true,
-                  camera: "Standard",
+                  camera: "AI",
                 },
               } );
             }}

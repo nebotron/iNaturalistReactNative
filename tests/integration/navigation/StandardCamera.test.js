@@ -4,7 +4,6 @@ import {
   screen,
   userEvent,
   waitFor,
-  within,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
@@ -72,11 +71,10 @@ describe( "StandardCamera navigation with advanced user layout", ( ) => {
     it( "should leave the camera when close button tapped", async ( ) => {
       renderApp( );
       await navigateToStandardCameraFromMyObs( );
-      const cameraNavButtons = await screen.findByTestId( "CameraNavButtons" );
-      const closeButton = await within( cameraNavButtons ).findByLabelText( "Close" );
+      const closeButton = await screen.findByTestId( "Camera.close" );
       await actor.press( closeButton );
       await waitFor( ( ) => {
-        expect( screen.queryByTestId( "CameraNavButtons" ) ).toBeNull( );
+        expect( screen.queryByTestId( "take-photo-button" ) ).toBeNull( );
         // TODO: This used to be an expect like so, idk why that fails now
         // expect( screen.getByText( /Use iNaturalist to identify/ ) ).toBeVisible( );
       } );
@@ -87,13 +85,12 @@ describe( "StandardCamera navigation with advanced user layout", ( ) => {
       await navigateToStandardCameraFromMyObs( );
       const takePhotoButton = await screen.findByLabelText( /Take photo/ );
       await actor.press( takePhotoButton );
-      const cameraNavButtons = await screen.findByTestId( "CameraNavButtons" );
-      const closeButton = await within( cameraNavButtons ).findByLabelText( "Close" );
+      const closeButton = await screen.findByTestId( "Camera.close" );
       await actor.press( closeButton );
       const discardButton = await screen.findByText( "DISCARD" );
       await actor.press( discardButton );
       await waitFor( ( ) => {
-        expect( screen.queryByTestId( "CameraNavButtons" ) ).toBeNull( );
+        expect( screen.queryByTestId( "take-photo-button" ) ).toBeNull( );
       } );
     } );
   } );

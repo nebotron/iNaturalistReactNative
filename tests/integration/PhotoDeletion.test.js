@@ -3,6 +3,7 @@ import "tests/helpers/mockMortalForIntegration";
 import {
   screen,
   userEvent,
+  waitFor,
   within,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
@@ -106,8 +107,11 @@ describe( "Photo Deletion", ( ) => {
   }
 
   async function expectNoPhotosInStandardCamera() {
-    const noPhotoText = await screen.findByText( "Photos you take will appear here" );
-    expect( noPhotoText ).toBeVisible();
+    // Back on the camera, with no photos left in its photo strip
+    expect( await screen.findByTestId( "take-photo-button" ) ).toBeVisible();
+    await waitFor( () => {
+      expect( screen.queryAllByTestId( /PhotoCarousel\.displayPhoto/ ) ).toHaveLength( 0 );
+    } );
   }
 
   async function viewPhotoFromObsEdit() {

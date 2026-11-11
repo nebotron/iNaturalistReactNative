@@ -3,7 +3,6 @@ import {
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React, { useMemo } from "react";
-import { Platform } from "react-native";
 import Observation from "realmModels/Observation";
 import { useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
@@ -28,10 +27,6 @@ interface ObsCreateItem {
   accessibilityHint: string;
 }
 
-const majorVersionIOS = parseInt( String( Platform.Version ), 10 );
-const AI_CAMERA_SUPPORTED = ( Platform.OS === "ios" && majorVersionIOS >= 11 )
-  || ( Platform.OS === "android" && Platform.Version > 21 );
-
 const GREEN_CIRCLE_CLASS = "bg-inatGreen rounded-full h-[36px] w-[36px] mb-2";
 const ROW_CLASS = "flex-row justify-center gap-x-4 w-full flex-1";
 
@@ -51,14 +46,6 @@ const AddObsBottomSheet = ( {
       accessibilityLabel: t( "AI-Camera" ),
       accessibilityHint: t( "Navigates-to-AI-camera" ),
     },
-    standardCamera: {
-      text: t( "Take-photos" ),
-      icon: "camera",
-      onPress: ( ) => navAndCloseBottomSheet( ADD_OBS_SCREENS.CAMERA, { camera: "Standard" } ),
-      testID: "camera-button",
-      accessibilityLabel: t( "Camera" ),
-      accessibilityHint: t( "Navigates-to-camera" ),
-    },
     photoLibrary: {
       text: t( "Upload-photos" ),
       icon: "photo-library",
@@ -66,6 +53,14 @@ const AddObsBottomSheet = ( {
       testID: "import-media-button",
       accessibilityLabel: t( "Photo-importer" ),
       accessibilityHint: t( "Navigates-to-photo-importer" ),
+    },
+    audioId: {
+      text: t( "Audio-ID" ),
+      icon: "microphone",
+      onPress: ( ) => navAndCloseBottomSheet( ADD_OBS_SCREENS.AUDIO_ID ),
+      testID: "audio-id-button",
+      accessibilityLabel: t( "Audio-ID" ),
+      accessibilityHint: t( "Navigates-to-Audio-ID" ),
     },
     soundRecorder: {
       text: t( "Record-a-sound" ),
@@ -93,15 +88,11 @@ const AddObsBottomSheet = ( {
     t,
   ] );
 
-  const optionRows = AI_CAMERA_SUPPORTED
-    ? [
-      [obsCreateItems.standardCamera, obsCreateItems.photoLibrary],
-      [obsCreateItems.soundRecorder, obsCreateItems.aiCamera],
-    ]
-    : [
-      [obsCreateItems.standardCamera],
-      [obsCreateItems.soundRecorder, obsCreateItems.photoLibrary],
-    ];
+  // The AI camera is the only camera: it also takes several photos at once
+  const optionRows = [
+    [obsCreateItems.aiCamera, obsCreateItems.photoLibrary],
+    [obsCreateItems.soundRecorder, obsCreateItems.audioId],
+  ];
 
   const renderAddObsIcon = ( {
     accessibilityHint,

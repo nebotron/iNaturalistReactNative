@@ -6,6 +6,16 @@ import React from "react";
 import * as useTaxon from "sharedHooks/useTaxon";
 import cachedImageUri from "tests/helpers/cachedImageUri";
 
+jest.mock( "@react-navigation/native", () => ( {
+  ...jest.requireActual( "@react-navigation/native" ),
+  useNavigation: () => ( {
+    navigate: jest.fn( ),
+    addListener: () => jest.fn( ),
+  } ),
+  useRoute: () => ( {} ),
+  useFocusEffect: () => ( {} ),
+} ) );
+
 const mockTaxonPrediction = {
   id: 144351,
   name: "Poecile",
@@ -58,6 +68,13 @@ jest.mock( "components/Camera/hooks/useZoom", () => ( {
   ),
 } ) );
 
+const mockMultiCaptureProps = {
+  newPhotoUris: [],
+  setNewPhotoUris: jest.fn( ),
+  handleCheckmarkPress: jest.fn( ),
+  confirmPhotosInProgress: false,
+};
+
 describe( "AI Camera", ( ) => {
   it( "shows a taxon prediction when result & rank_level < 40", async () => {
     jest.spyOn( usePredictions, "default" ).mockImplementation( () => ( {
@@ -66,7 +83,7 @@ describe( "AI Camera", ( ) => {
         taxon: mockTaxonPrediction,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const taxonResult = screen.getByTestId( `AICamera.taxa.${mockTaxonPrediction.id}` );
 
@@ -81,7 +98,7 @@ describe( "AI Camera", ( ) => {
         taxon: mockTaxonNoPrediction,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const scanText = screen.getByText(
       i18next.t( "Point-the-camera-at-an-animal-plant-or-fungus" ),
@@ -95,7 +112,7 @@ describe( "AI Camera", ( ) => {
       ...mockModelLoaded,
       modelLoaded: false,
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const loadingText = screen.getByText( i18next.t( "Loading-iNaturalists-AI-Camera" ) );
 
@@ -110,7 +127,7 @@ describe( "AI Camera", ( ) => {
         taxon: mockLocalTaxon,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const taxonPhoto = screen.getByTestId( "ObsList.photo" );
 
@@ -133,7 +150,7 @@ describe( "AI Camera", ( ) => {
         taxon: mockLocalTaxon,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const taxonIcon = screen.getByTestId( "IconicTaxonName.iconicTaxonIcon" );
 

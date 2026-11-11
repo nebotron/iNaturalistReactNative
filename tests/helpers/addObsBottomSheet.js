@@ -12,7 +12,7 @@ const actor = userEvent.setup( );
 
 export const ADD_OBS_OPTIONS = {
   aiCamera: "aicamera-button",
-  standardCamera: "camera-button",
+  audioId: "audio-id-button",
   photoImporter: "import-media-button",
   soundRecorder: "record-sound-button",
   noEvidence: "observe-without-evidence-button",
@@ -70,22 +70,6 @@ export async function pressAddObsOption( testID ) {
   }
 }
 
-/** Waits for the standard camera screen after a stack reset from the add-obs flow. */
-export async function waitForStandardCameraScreen() {
-  await waitFor( ( ) => {
-    expect( screen.getByTestId( "CameraNavButtons" ) ).toBeVisible( );
-  }, { timeout: 10_000 } );
-}
-
-export async function navigateToStandardCameraFromMyObs() {
-  await waitFor( ( ) => {
-    expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
-  } );
-  await pressAddObservationsButton( );
-  await pressAddObsOption( ADD_OBS_OPTIONS.standardCamera );
-  await waitForStandardCameraScreen( );
-}
-
 export async function waitForMyObservationsScreen() {
   await waitFor( ( ) => {
     const tabBar = screen.getByTestId( "CustomTabBar" );
@@ -130,8 +114,17 @@ export async function navigateToAICameraFromMyObs() {
   }, { timeout: 10_000 } );
 }
 
-export async function takeAICameraPhotoAndOpenSuggestions() {
+// The AI camera is the only camera now, and takes several photos before its
+// checkmark moves on
+export const navigateToStandardCameraFromMyObs = navigateToAICameraFromMyObs;
+
+export async function takeStandardCameraPhotoAndConfirm() {
   await actor.press( await screen.findByTestId( "take-photo-button" ) );
+  await actor.press( await screen.findByLabelText( "View suggestions" ) );
+}
+
+export async function takeAICameraPhotoAndOpenSuggestions() {
+  await takeStandardCameraPhotoAndConfirm( );
   await waitFor( ( ) => {
     expect( screen.getByText( /ADD AN ID/ ) ).toBeVisible( );
   }, { timeout: 10_000 } );
@@ -141,11 +134,6 @@ export async function takeAICameraPhotoAndOpenSuggestions() {
 export async function navigateToSuggestionsViaAICameraFromMyObs() {
   await navigateToAICameraFromMyObs( );
   await takeAICameraPhotoAndOpenSuggestions( );
-}
-
-export async function takeStandardCameraPhotoAndConfirm() {
-  await actor.press( await screen.findByTestId( "take-photo-button" ) );
-  await actor.press( await screen.findByLabelText( "View suggestions" ) );
 }
 
 async function pressObsEditSaveButton() {

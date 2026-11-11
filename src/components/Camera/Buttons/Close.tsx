@@ -19,6 +19,7 @@ const Close = ( { handleClose, rotatableAnimatedStyle }: Props ) => {
         accessibilityLabel={t( "Close" )}
         accessibilityHint={t( "Navigates-to-previous-screen" )}
         icon="close"
+        testID="Camera.close"
       />
     </RotatableIconWrapper>
   );

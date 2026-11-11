@@ -197,6 +197,8 @@ attribution-cc-by-nd = some rights reserved (CC BY-ND)
 attribution-cc-by-sa = some rights reserved (CC BY-SA)
 # Menu item and screen title for identifying animals by sound
 AUDIO-ID = AUDIO ID
+# Add-observation option that opens Audio ID, which identifies animals by sound
+Audio-ID = Audio ID
 # Storage category: short audio clips saved with each Audio ID detection
 Audio-ID-clips--storage = Audio ID clips
 Audio-ID-clips--storage-description = Short clips of each call Audio ID heard
@@ -1196,6 +1198,8 @@ My-Observations--bottom-tab = Me
 Native = Native
 Native-to-place = Native to { $place }
 Navigates-to-AI-camera = Navigates to AI camera
+# Accessibility hint for the add-observation option that opens Audio ID
+Navigates-to-Audio-ID = Navigates to Audio ID
 Navigates-to-bulk-importer = Navigates to bulk importer
 Navigates-to-camera = Navigates to camera
 Navigates-to-explore = Navigates to explore
@@ -1952,7 +1956,6 @@ Tags-the-ID-as-right = Tags the ID as right.
 Tags-the-ID-as-wrong = Tags the ID as wrong.
 # Help text for the button that opens the multi-capture camera
 Take-photo = Take photo
-Take-photos = Take photos
 Tap-here-to-switch-to-Advanced-Mode = Tap here to switch to Advanced Mode
 # Shown in place of a group of observations that failed to load, prompting the user to
 # request them again

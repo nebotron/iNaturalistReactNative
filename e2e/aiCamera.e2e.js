@@ -41,6 +41,10 @@ describe( "AICamera", () => {
       const takePhotoButton = element( by.id( "take-photo-button" ) );
       await waitFor( takePhotoButton ).toBeVisible().withTimeout( TIMEOUT );
       await takePhotoButton.tap();
+      // The camera takes several photos until the checkmark moves on
+      const checkmark = element( by.label( "View suggestions" ) );
+      await waitFor( checkmark ).toBeVisible().withTimeout( TIMEOUT );
+      await checkmark.tap();
 
       // On suggestions find the first element in the suggestions list
       const otherSuggestionsTitle = element( by.text( "OTHER SUGGESTIONS" ) );

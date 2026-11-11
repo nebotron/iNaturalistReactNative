@@ -3,6 +3,7 @@ enum ADD_OBS_SCREENS {
   PHOTO_LIBRARY = "PhotoLibrary",
   GROUP_PHOTOS = "GroupPhotos",
   SOUND_RECORDER = "SoundRecorder",
+  AUDIO_ID = "AudioId",
   OBS_EDIT = "ObsEdit"
 }
 

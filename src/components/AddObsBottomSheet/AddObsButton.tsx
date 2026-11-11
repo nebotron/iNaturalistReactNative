@@ -135,6 +135,17 @@ const AddObsButton = ( ) => {
       camera?: string;
     },
   ) => {
+    // Audio ID lives in the Menu tab and doesn't start an observation, so it
+    // leaves the observation flow alone
+    if ( requestedScreen === ADD_OBS_SCREENS.AUDIO_ID ) {
+      navigation.navigate( "TabNavigator", {
+        screen: "MenuTab",
+        params: { screen: "AudioId" },
+      } );
+      closeBottomSheet( );
+      return;
+    }
+
     // An import the user stepped away from is worth returning to rather than
     // silently discarding, so pick it up where they left off
     const importInProgress = ( useStore.getState( ).groupedPhotos?.length || 0 ) > 0;

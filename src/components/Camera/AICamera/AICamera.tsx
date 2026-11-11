@@ -1,40 +1,53 @@
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useRoute } from "@react-navigation/native";
 import classnames from "classnames";
 import FadeInOutView from "components/Camera/FadeInOutView";
 import { useCameraDevices } from "components/Camera/helpers/visionCameraWrapper";
 import useRotation from "components/Camera/hooks/useRotation";
 import useZoom from "components/Camera/hooks/useZoom";
-import { Body1, INatIcon, TaxonResult } from "components/SharedComponents";
+import {
+  ActivityIndicator, Body1, INatIcon, TaxonResult,
+} from "components/SharedComponents";
 import Toast from "components/SharedComponents/Toast";
-import { View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
 import type { RefObject } from "react";
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback, useEffect, useRef, useState,
+} from "react";
 import DeviceInfo from "react-native-device-info";
 import LinearGradient from "react-native-linear-gradient";
+import { Snackbar } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
   CameraDevice, CameraPhotoOutput, CameraRef, CapturePhotoSettings,
 } from "react-native-vision-camera";
 import { VolumeManager } from "react-native-volume-manager";
+import ObservationPhoto from "realmModels/ObservationPhoto";
+import { BREAKPOINTS } from "sharedHelpers/breakpoint";
 import convertScoreToConfidence from "sharedHelpers/convertScores";
 import { completeSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
 import { logFirebaseEvent } from "sharedHelpers/tracking";
 import {
   useDebugMode,
+  useDeviceOrientation,
   useLayoutPrefs,
   useTranslation,
 } from "sharedHooks";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import type { UserLocation } from "sharedHooks/useWatchPosition";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import type { SavePhotoOptions } from "../CameraContainer";
+import { MAX_PHOTOS_ALLOWED } from "../CameraContainer";
 import {
   handleCameraError,
   handleClassifierError,
   handleLog,
 } from "../helpers";
+import DiscardChangesSheet from "../StandardCamera/DiscardChangesSheet";
+import useBackPress from "../StandardCamera/hooks/useBackPress";
+import PhotoPreview from "../StandardCamera/PhotoPreview";
 import AICameraButtons from "./AICameraButtons";
 import FrameProcessorCamera from "./FrameProcessorCamera";
 import usePredictions from "./hooks/usePredictions";
@@ -65,7 +78,11 @@ const getResultContainerClassName = ( insetsTop: number ) => {
 
 interface Props {
   camera: RefObject<CameraRef | null>;
+  confirmPhotosInProgress: boolean;
   device: CameraDevice;
+  handleCheckmarkPress: ( ) => void;
+  newPhotoUris: string[];
+  setNewPhotoUris: ( newPhotoUris: string[] ) => void;
   flipCamera: ( ) => void;
   isLandscapeMode: boolean;
   toggleFlash: ( ) => void;
@@ -88,9 +105,16 @@ const getMacroDevice = (
   && !d.isVirtualDevice
   && d.type === "ultra-wide-angle" );
 
+// The one camera in the app: it shows live AI suggestions like the old AI
+// camera and, like the old multi-capture camera, takes as many photos as the
+// user wants before the checkmark moves on to the next step.
 const AICamera = ( {
   camera,
+  confirmPhotosInProgress,
   device: defaultDevice,
+  handleCheckmarkPress,
+  newPhotoUris,
+  setNewPhotoUris,
   flipCamera,
   isLandscapeMode,
   toggleFlash,
@@ -102,7 +126,8 @@ const AICamera = ( {
   requestLocationPermissions,
   photoOutput,
 }: Props ) => {
-  const navigation = useNavigation<NoBottomTabStackScreenProps<"Camera">["navigation"]>( );
+  const { params } = useRoute<NoBottomTabStackScreenProps<"Camera">["route"]>( );
+  const addEvidence = params?.addEvidence;
   const sentinelFileName = useStore( state => state.sentinelFileName );
   const setAICameraSuggestion = useStore( state => state.setAICameraSuggestion );
 
@@ -128,6 +153,7 @@ const AICamera = ( {
   } = useZoom( device );
   const {
     rotatableAnimatedStyle,
+    rotation,
   } = useRotation( );
   const {
     handleTaxaDetected,
@@ -135,9 +161,31 @@ const AICamera = ( {
     result,
     setResult,
   } = usePredictions( );
-  const [inactive, setInactive] = useState( false );
   const [initialVolume, setInitialVolume] = useState<number | null>( null );
-  const [hasTakenPhoto, setHasTakenPhoto] = useState( false );
+  const [deletePhotoMode, setDeletePhotoMode] = useState( false );
+  const [showMaxPhotosAlert, setShowMaxPhotosAlert] = useState( false );
+  // The last confident prediction the shutter was pressed on, offered as the
+  // AI suggestion once the user is done taking photos
+  const visionResultRef = useRef<typeof result>( null );
+
+  const cameraUris = useStore( state => state.cameraUris );
+  const photoLibraryUris = useStore( state => state.photoLibraryUris );
+  const prepareCamera = useStore( state => state.prepareCamera );
+  const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
+  const { trackImageDeleted } = useInputImageTracking( );
+  const { screenWidth } = useDeviceOrientation( );
+
+  const totalObsPhotoUris = cameraUris.length + photoLibraryUris.length;
+  const disallowAddingPhotos = totalObsPhotoUris >= MAX_PHOTOS_ALLOWED;
+  // newPhotoUris tracks photos taken in *this* visit to the camera; photos
+  // the observation already had don't need a discard prompt or a checkmark
+  const photosTaken = newPhotoUris.length > 0 && totalObsPhotoUris > 0;
+  const {
+    handleBackButtonPress,
+    navigateBackOrExitFlow,
+    setShowDiscardSheet,
+    showDiscardSheet,
+  } = useBackPress( photosTaken );
 
   const userDisabledLocation = aiCameraSettings.locationDisabled;
   // hasLocationPermissions is undefined until permissions have been checked
@@ -165,6 +213,15 @@ const AICamera = ( {
     resetZoom( );
   }, [resetZoom, setResult] );
 
+  useFocusEffect(
+    useCallback( ( ) => {
+      // Start from the observation's current photos every time the camera
+      // comes into view, e.g. after backing out of Suggestions
+      prepareCamera( );
+      visionResultRef.current = null;
+    }, [prepareCamera] ),
+  );
+
   // only show predictions when rank is order or lower, like we do on Seek
   const showPrediction = ( result && result?.taxon?.rank_level <= 40 ) || false;
 
@@ -180,37 +237,55 @@ const AICamera = ( {
   };
 
   const handleTakePhoto = useCallback( async ( ) => {
-    await logStage( sentinelFileName, "take_photo_start" );
-    setHasTakenPhoto( true );
-    logFirebaseEvent( "ai_camera_shutter_tap", { hasLocationPermissions } );
-    // this feels a little duplicative, but we're currently using aICameraSuggestion
-    // to show the loading screen in Suggestions *without* setting an observation.taxon,
-    // and we're using visionResult to populate ObsEdit *with* the taxon
-    // before aICameraSuggestion has finished being stored.
-    // would be nice to refactor and set this more uniformly once the UX is more stable
-    // and we're fully certain we don't want to populate observation.taxon on Suggestions -> ObsEdit
-    const visionResult = showPrediction
-      ? result
-      : null;
-    setAICameraSuggestion( visionResult );
-
-    try {
-      await takePhotoAndStoreUri( {
-        replaceExisting: true,
-        inactivateCallback: () => setInactive( true ),
-        navigateImmediately: true,
-        visionResult,
-      } );
-    } finally {
-      setHasTakenPhoto( false );
+    if ( takingPhoto ) return;
+    if ( disallowAddingPhotos ) {
+      setShowMaxPhotosAlert( true );
+      return;
     }
+    await logStage( sentinelFileName, "take_photo_start" );
+    logFirebaseEvent( "ai_camera_shutter_tap", { hasLocationPermissions } );
+    if ( showPrediction && result ) {
+      visionResultRef.current = result;
+    }
+    await takePhotoAndStoreUri( { } );
   }, [
-    showPrediction,
-    setAICameraSuggestion,
-    sentinelFileName,
-    takePhotoAndStoreUri,
-    result,
+    disallowAddingPhotos,
     hasLocationPermissions,
+    result,
+    sentinelFileName,
+    showPrediction,
+    takePhotoAndStoreUri,
+    takingPhoto,
+  ] );
+
+  const handleConfirmPhotos = useCallback( ( ) => {
+    // this feels a little duplicative, but we're currently using aICameraSuggestion
+    // to show the loading screen in Suggestions *without* setting an observation.taxon.
+    // Adding photos to an existing observation doesn't go through Suggestions.
+    setAICameraSuggestion( addEvidence
+      ? null
+      : visionResultRef.current );
+    handleCheckmarkPress( );
+  }, [addEvidence, handleCheckmarkPress, setAICameraSuggestion] );
+
+  const deletePhotoByUri = useCallback( async ( photoUri: string ) => {
+    deletePhotoFromObservation( photoUri );
+    await ObservationPhoto.deletePhoto( photoUri );
+    trackImageDeleted( photoUri );
+    setNewPhotoUris( newPhotoUris.filter( uri => uri !== photoUri ) );
+  }, [deletePhotoFromObservation, newPhotoUris, setNewPhotoUris, trackImageDeleted] );
+
+  const handleDiscard = useCallback( async ( ) => {
+    await Promise.all( newPhotoUris.map( uri => deletePhotoByUri( uri ) ) );
+    setNewPhotoUris( [] );
+    await completeSentinelFile( sentinelFileName );
+    navigateBackOrExitFlow( );
+  }, [
+    deletePhotoByUri,
+    navigateBackOrExitFlow,
+    newPhotoUris,
+    sentinelFileName,
+    setNewPhotoUris,
   ] );
 
   useEffect( () => {
@@ -223,7 +298,7 @@ const AICamera = ( {
     }
 
     const volumeListener = VolumeManager.addVolumeListener( async ( ) => {
-      if ( initialVolume !== null && !hasTakenPhoto ) {
+      if ( initialVolume !== null ) {
         // Hardware volume button pressed - take a photo
         await handleTakePhoto();
 
@@ -239,17 +314,18 @@ const AICamera = ( {
       volumeListener.remove();
       VolumeManager.showNativeVolumeUI( { enabled: true } );
     };
-  }, [handleTakePhoto, hasTakenPhoto, initialVolume] );
+  }, [handleTakePhoto, initialVolume] );
 
   const handleClose = async ( ) => {
-    await completeSentinelFile( sentinelFileName );
-    navigation.navigate( "TabNavigator", {
-      screen: "ObservationsTab",
-      params: {
-        screen: "ObsList",
-      },
-    } );
+    // Leaving with photos asks first; the discard sheet finishes the sentinel
+    if ( !photosTaken ) {
+      await completeSentinelFile( sentinelFileName );
+    }
+    handleBackButtonPress( );
   };
+
+  const isLargeScreen = screenWidth > BREAKPOINTS.md;
+  const showPhotoPreview = cameraUris.length > 0 || takingPhoto;
 
   return (
     <>
@@ -266,7 +342,7 @@ const AICamera = ( {
             photoOutput={photoOutput}
             pinchToZoom={pinchToZoom}
             takingPhoto={takingPhoto}
-            inactive={inactive}
+            inactive={confirmPhotosInProgress}
             resetCameraOnFocus={resetCameraOnFocus}
             userLocation={userLocation}
             useLocation={useLocation}
@@ -342,17 +418,52 @@ const AICamera = ( {
           </View>
         </View>
       )}
-      <FadeInOutView takingPhoto={takingPhoto} cameraType="AI" />
+      <FadeInOutView takingPhoto={takingPhoto} cameraType="Standard" />
+      {confirmPhotosInProgress && (
+        <View className="absolute w-full h-full justify-center items-center">
+          <ActivityIndicator size={50} color={colors.white} />
+        </View>
+      )}
+      {deletePhotoMode && (
+        // Tapping anywhere outside the photos leaves delete mode
+        <Pressable
+          accessibilityRole="button"
+          className="absolute w-full h-full"
+          onPress={( ) => setDeletePhotoMode( false )}
+        />
+      )}
+      {showPhotoPreview && (
+        <View
+          className="absolute left-[72px] right-[72px]"
+          style={{ bottom: insets.bottom + 32 + 74 + 16 }}
+          pointerEvents="box-none"
+        >
+          <PhotoPreview
+            deletePhotoMode={deletePhotoMode}
+            rotation={rotation}
+            setDeletePhotoMode={setDeletePhotoMode}
+            takingPhoto={takingPhoto}
+            isLandscapeMode={isLandscapeMode}
+            isLargeScreen={isLargeScreen}
+            isTablet={isTablet}
+            photoUris={cameraUris}
+            onDelete={deletePhotoByUri}
+          />
+        </View>
+      )}
       <AICameraButtons
         handleZoomButtonPress={handleZoomButtonPress}
         flipCamera={onFlipCamera}
         hasFlash={hasFlash}
         handleClose={handleClose}
-        modelLoaded={modelLoaded}
+        photosTaken={photosTaken}
+        handleCheckmarkPress={handleConfirmPhotos}
+        confirmDisabled={takingPhoto || confirmPhotosInProgress}
         rotatableAnimatedStyle={rotatableAnimatedStyle}
         showPrediction={showPrediction}
         showZoomButton={showZoomButton}
         takePhoto={handleTakePhoto}
+        disallowAddingPhotos={disallowAddingPhotos}
         takePhotoOptions={takePhotoOptions}
         takingPhoto={takingPhoto}
         toggleFlash={toggleFlash}
@@ -362,6 +473,14 @@ const AICamera = ( {
         macroMode={macroMode}
         toggleMacro={toggleMacro}
         completeSentinelFile={() => completeSentinelFile( sentinelFileName )}
+      />
+      <Snackbar visible={showMaxPhotosAlert} onDismiss={() => setShowMaxPhotosAlert( false )}>
+        {t( "You-can-only-add-20-photos-per-observation" )}
+      </Snackbar>
+      <DiscardChangesSheet
+        setShowDiscardSheet={setShowDiscardSheet}
+        hidden={!showDiscardSheet}
+        onDiscard={handleDiscard}
       />
     </>
   );

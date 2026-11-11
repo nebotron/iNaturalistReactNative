@@ -129,8 +129,11 @@ describe( "Photo Deletion with existing saved observation", () => {
   }
 
   async function expectNoPhotosInStandardCamera() {
-    const noPhotoText = await screen.findByText( "Photos you take will appear here" );
-    expect( noPhotoText ).toBeVisible();
+    // Back on the camera, with no photos left in its photo strip
+    expect( await screen.findByTestId( "take-photo-button" ) ).toBeVisible();
+    await waitFor( () => {
+      expect( screen.queryAllByTestId( /PhotoCarousel\.displayPhoto/ ) ).toHaveLength( 0 );
+    } );
   }
 
   async function viewPhotoFromObsEdit() {
@@ -158,7 +161,7 @@ describe( "Photo Deletion with existing saved observation", () => {
     const cameraButton = await within( addEvidenceSheet ).findByLabelText( "Camera" );
     await actor.press( cameraButton );
     await waitFor( () => {
-      expect( screen.getByTestId( "CameraNavButtons" ) ).toBeVisible();
+      expect( screen.getByTestId( "take-photo-button" ) ).toBeVisible();
     } );
     // Tap the photo preview to enter the MediaViewer
     const carouselPhoto = await screen.findByTestId( /PhotoCarousel\.displayPhoto/ );
