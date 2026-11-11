@@ -2,6 +2,7 @@ import type { ParamListRoute } from "@react-navigation/native";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import AddObsBottomSheet from "components/AddObsBottomSheet/AddObsBottomSheet";
 import AddObsTooltip from "components/AddObsBottomSheet/AddObsTooltip";
+import useAudioIdSession from "components/AudioId/audioIdSession";
 import GradientButton from "components/SharedComponents/Buttons/GradientButton";
 import { groupCropResumeParams } from "components/SharedComponents/ImageCrop/groupCropResume";
 import { navigationRef } from "navigation/navigationUtils";
@@ -31,6 +32,9 @@ const AddObsButton = ( ) => {
   const closeBottomSheet = React.useCallback( () => setShowBottomSheet( false ), [] );
 
   const { isAllAddObsOptionsMode, isPhotoLibraryAddObsMode } = useLayoutPrefs( );
+  // While Audio ID is listening, the button is a shortcut back to it; a long
+  // press still shows every option
+  const audioIdListening = useAudioIdSession( state => state.listening );
   const currentUser = useCurrentUser( );
 
   // #region Tooltip logic
@@ -290,7 +294,9 @@ const AddObsButton = ( ) => {
           openBottomSheet();
         }}
         onPress={() => {
-          if ( isAllAddObsOptionsMode ) {
+          if ( audioIdListening ) {
+            navAndCloseBottomSheet( ADD_OBS_SCREENS.AUDIO_ID );
+          } else if ( isAllAddObsOptionsMode ) {
             openBottomSheet();
           } else if ( isPhotoLibraryAddObsMode ) {
             navAndCloseBottomSheet( ADD_OBS_SCREENS.PHOTO_LIBRARY );
@@ -300,12 +306,14 @@ const AddObsButton = ( ) => {
         }}
         accessibilityLabel={t( "Add-observations" )}
         accessibilityHint={
-          ( isAllAddObsOptionsMode && t( "Shows-observation-creation-options" ) )
+          ( audioIdListening && t( "Navigates-to-Audio-ID" ) )
+          || ( isAllAddObsOptionsMode && t( "Shows-observation-creation-options" ) )
           || ( isPhotoLibraryAddObsMode && t( "Navigates-to-photo-importer" ) )
           || t( "Opens-AI-camera" )
         }
-        iconName={( isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && "plus"}
-        iconSize={( isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && 31}
+        iconName={( audioIdListening && "microphone" )
+          || ( ( isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && "plus" )}
+        iconSize={( audioIdListening || isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && 31}
       />
     </>
   );

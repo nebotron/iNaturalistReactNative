@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react-native";
 import AddObsButton from "components/AddObsBottomSheet/AddObsButton";
+import useAudioIdSession from "components/AudioId/audioIdSession";
 import { navigationRef } from "navigation/navigationUtils";
 import React from "react";
 import * as useCurrentUser from "sharedHooks/useCurrentUser";
@@ -42,6 +43,25 @@ describe( "AddObsButton", () => {
       "Press and hold to view more options",
     );
     expect( tooltipText ).toBeFalsy();
+  } );
+} );
+
+describe( "while Audio ID is listening", () => {
+  afterEach( () => {
+    useAudioIdSession.setState( { listening: false } );
+  } );
+
+  it( "opens Audio ID instead of adding an observation", () => {
+    useAudioIdSession.setState( { listening: true } );
+    renderComponent( <AddObsButton /> );
+    expect( screen.getByLabelText( "Add observations" ) )
+      .toHaveProp( "accessibilityHint", "Navigates to Audio ID" );
+  } );
+
+  it( "goes back to adding observations once Audio ID stops", () => {
+    renderComponent( <AddObsButton /> );
+    expect( screen.getByLabelText( "Add observations" ) )
+      .not.toHaveProp( "accessibilityHint", "Navigates to Audio ID" );
   } );
 } );
 
