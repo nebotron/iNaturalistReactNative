@@ -133,9 +133,11 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
         <View
           className="bg-white rounded-t-3xl overflow-hidden shrink"
           // The home-indicator inset is only needed with the keyboard down
-          style={{ paddingBottom: keyboardShown
-            ? 0
-            : bottom }}
+          style={{
+            paddingBottom: keyboardShown
+              ? 0
+              : bottom,
+          }}
         >
           <View className="pt-7 pb-3 mx-12">
             <Heading4 className="w-full text-center">
