@@ -843,8 +843,14 @@ Hotspot-number = Hotspot { $number }
 Hotspot-obs-per-page = Total observations to fetch
 # Label for the parking time estimate setting in the hotspot finder filter
 Hotspot-parking-minutes = Parking estimate (min)
+# Label for the setting for how many hotspots trip planning considers
+Hotspot-plan-candidates = Trip plan candidates
+# Label for the setting for how many recent addresses Wildlife Hotspots remembers
+Hotspot-recent-addresses = Recent addresses to remember
 # Section header for hotspot finder algorithm settings in the Explore filters modal
 HOTSPOT-SETTINGS = HOTSPOT SETTINGS
+# Label for the setting for how much each tap changes the trip time limit
+Hotspot-time-step-minutes = Trip time step (min)
 # Accessibility label for a hotspot in a list
 Hotspot-X-with-Y-observations =
     { $count ->
@@ -2161,30 +2167,6 @@ Tunable-gameLookalikeRadiusKm-description = Radius in which lookalike species ar
 Tunable-gamePoolSize = Species game photos per round
 # Description of a tunable parameter in settings
 Tunable-gamePoolSize-description = Number of photos fetched for each round of the species game.
-# Label for a tunable parameter in settings
-Tunable-hotspotClusterRadiusKm = Hotspot cluster radius (km)
-# Description of a tunable parameter in settings
-Tunable-hotspotClusterRadiusKm-description = Maximum radius of a group of observations treated as one hotspot.
-# Label for a tunable parameter in settings
-Tunable-hotspotMaxPlanCandidates = Hotspot plan candidates
-# Description of a tunable parameter in settings
-Tunable-hotspotMaxPlanCandidates-description = Maximum number of hotspots considered when planning a trip.
-# Label for a tunable parameter in settings
-Tunable-hotspotParkingMinutes = Hotspot stop time (minutes)
-# Description of a tunable parameter in settings
-Tunable-hotspotParkingMinutes-description = Extra minutes added to a route for each hotspot stop.
-# Label for a tunable parameter in settings
-Tunable-hotspotRecentAddresses = Recent addresses
-# Description of a tunable parameter in settings
-Tunable-hotspotRecentAddresses-description = Number of recent addresses remembered in Wildlife Hotspots.
-# Label for a tunable parameter in settings
-Tunable-hotspotRoutePaddingKm = Hotspot route search padding (km)
-# Description of a tunable parameter in settings
-Tunable-hotspotRoutePaddingKm-description = How far around a route to search for hotspots.
-# Label for a tunable parameter in settings
-Tunable-hotspotTimeStepMinutes = Trip time step (minutes)
-# Description of a tunable parameter in settings
-Tunable-hotspotTimeStepMinutes-description = How much the trip time limit changes with each tap.
 # Label for a tunable parameter in settings
 Tunable-importMaxSectionSize = Photo import max section size
 # Description of a tunable parameter in settings

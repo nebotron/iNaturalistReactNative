@@ -23,6 +23,9 @@ const FIELDS: {
   { key: "hotspotObsPerPage", label: t => t( "Hotspot-obs-per-page" ), min: 1 },
   { key: "hotspotParkingMinutes", label: t => t( "Hotspot-parking-minutes" ), min: 0 },
   { key: "hotspotBboxPaddingKm", label: t => t( "Hotspot-bbox-padding-km" ), min: 0 },
+  { key: "hotspotMaxPlanCandidates", label: t => t( "Hotspot-plan-candidates" ), min: 1 },
+  { key: "hotspotTimeStepMinutes", label: t => t( "Hotspot-time-step-minutes" ), min: 1 },
+  { key: "hotspotRecentAddresses", label: t => t( "Hotspot-recent-addresses" ), min: 0 },
 ];
 
 type Field = typeof FIELDS[number];

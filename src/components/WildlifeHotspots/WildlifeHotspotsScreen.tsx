@@ -42,7 +42,6 @@ import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { getLatestTrackedLocation } from "sharedHelpers/locationHistoryTracker";
-import { getTunable } from "sharedHelpers/tunableParams";
 import { useTranslation } from "sharedHooks";
 import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -70,11 +69,6 @@ const INITIAL_REGION: Region = {
   latitudeDelta: 80,
   longitudeDelta: 100,
 };
-// Number of recently entered addresses to offer before the user types.
-const RECENT_ADDRESS_COUNT = getTunable( "hotspotRecentAddresses" );
-const TIME_LIMIT_STEP_MINUTES = getTunable( "hotspotTimeStepMinutes" );
-// Most hotspots, by observation count, considered when planning a route
-const MAX_PLAN_CANDIDATES = getTunable( "hotspotMaxPlanCandidates" );
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
@@ -147,6 +141,10 @@ const AddressInput = ( {
   addressHistory,
 }: AddressInputProps ) => {
   const [searching, setSearching] = useState( false );
+  // Number of recently entered addresses to offer
+  const recentAddressCount = useStore(
+    state => state.layout.hotspotSettings.hotspotRecentAddresses,
+  );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
   // Guards against a stale, slow-to-resolve search (from earlier text, or from
   // before this field lost focus) clobbering the currently relevant suggestions.
@@ -166,7 +164,7 @@ const AddressInput = ( {
     const lowerQuery = query.toLowerCase();
     const historyMatches = addressHistory
       .filter( a => a.display_name.toLowerCase().includes( lowerQuery ) )
-      .slice( 0, RECENT_ADDRESS_COUNT );
+      .slice( 0, recentAddressCount );
     onSuggestionsChange( historyMatches );
     if ( query.length < 3 ) return;
     debounceRef.current = setTimeout( async () => {
@@ -180,7 +178,14 @@ const AddressInput = ( {
         ...results.filter( r => !matchedNames.has( r.display_name ) ),
       ] );
     }, 200 );
-  }, [onChangeText, nearbyLatLng, onSuggestionsChange, presetSuggestions, addressHistory] );
+  }, [
+    onChangeText,
+    nearbyLatLng,
+    onSuggestionsChange,
+    presetSuggestions,
+    addressHistory,
+    recentAddressCount,
+  ] );
 
   const handleClear = useCallback( () => {
     handleChange( "" );
@@ -320,6 +325,12 @@ const WildlifeHotspotsScreen = ( {
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
+  const {
+    hotspotRecentAddresses: recentAddressCount,
+    hotspotTimeStepMinutes: timeLimitStepMinutes,
+    // Most hotspots, by observation count, considered when planning a route
+    hotspotMaxPlanCandidates: maxPlanCandidates,
+  } = useStore( state => state.layout.hotspotSettings );
 
   const {
     hotspots, candidates, routeCoords, routeDurationSec, loading, error, findHotspots,
@@ -336,8 +347,8 @@ const WildlifeHotspotsScreen = ( {
         lon: String( userLocation.longitude ),
       }]
       : [] ),
-    ...addressHistory.slice( 0, RECENT_ADDRESS_COUNT ),
-  ], [userLocation, addressHistory, t] );
+    ...addressHistory.slice( 0, recentAddressCount ),
+  ], [userLocation, addressHistory, recentAddressCount, t] );
 
   const confirmedStopPoints = stops
     .filter( s => s.point )
@@ -523,13 +534,13 @@ const WildlifeHotspotsScreen = ( {
   // Until the user picks a limit, offer an hour on top of the current route
   const limitMinutes = timeLimitMinutes ?? ( routeDurationSec === null
     ? null
-    : Math.ceil( ( routeDurationSec / 60 + 60 ) / TIME_LIMIT_STEP_MINUTES )
-      * TIME_LIMIT_STEP_MINUTES );
+    : Math.ceil( ( routeDurationSec / 60 + 60 ) / timeLimitStepMinutes )
+      * timeLimitStepMinutes );
 
   const handleChangeTimeLimit = useCallback( ( deltaMinutes: number ) => {
     if ( limitMinutes === null ) return;
-    setTimeLimitMinutes( Math.max( TIME_LIMIT_STEP_MINUTES, limitMinutes + deltaMinutes ) );
-  }, [limitMinutes] );
+    setTimeLimitMinutes( Math.max( timeLimitStepMinutes, limitMinutes + deltaMinutes ) );
+  }, [limitMinutes, timeLimitStepMinutes] );
 
   // Replaces the route's hotspot stops with the set that fits in the time limit
   // and has the most observations
@@ -540,7 +551,7 @@ const WildlifeHotspotsScreen = ( {
     const pool = candidates
       .filter( h => h.detourMinutes * 60 <= limitSec )
       .sort( ( a, b ) => b.observationCount - a.observationCount )
-      .slice( 0, MAX_PLAN_CANDIDATES );
+      .slice( 0, maxPlanCandidates );
     const points: LatLng[] = [
       ...fixedStops.map( s => s.point as LatLng ),
       ...pool.map( h => ( { latitude: h.centerLatitude, longitude: h.centerLongitude } ) ),
@@ -581,7 +592,7 @@ const WildlifeHotspotsScreen = ( {
     } finally {
       setPlanning( false );
     }
-  }, [stops, limitMinutes, candidates, t] );
+  }, [stops, limitMinutes, candidates, maxPlanCandidates, t] );
 
   const hotspotStopPoints = useMemo(
     () => stops.flatMap( s => ( s.fromHotspot && s.point
@@ -1077,7 +1088,7 @@ const WildlifeHotspotsScreen = ( {
           <View className="absolute top-2 left-2 right-2 bg-white rounded-lg p-3 shadow-md">
             <View className="flex-row items-center">
               <TouchableOpacity
-                onPress={() => handleChangeTimeLimit( -TIME_LIMIT_STEP_MINUTES )}
+                onPress={() => handleChangeTimeLimit( -timeLimitStepMinutes )}
                 className="px-3 py-1 border border-lightGray rounded-lg"
                 accessibilityRole="button"
                 accessibilityLabel={t( "Shorten-time-limit" )}
@@ -1091,7 +1102,7 @@ const WildlifeHotspotsScreen = ( {
                 } )}
               </Body3>
               <TouchableOpacity
-                onPress={() => handleChangeTimeLimit( TIME_LIMIT_STEP_MINUTES )}
+                onPress={() => handleChangeTimeLimit( timeLimitStepMinutes )}
                 className="px-3 py-1 border border-lightGray rounded-lg"
                 accessibilityRole="button"
                 accessibilityLabel={t( "Lengthen-time-limit" )}

@@ -339,10 +339,15 @@ const ExploreResults = ( ) => {
   }, [queryParams] );
 
   const hotspotSettings = useStore( s => s.layout.hotspotSettings );
-  const hotspotParams = useMemo(
-    ( ) => ( { ...baseSearchParams, ...hotspotSettings } ),
-    [baseSearchParams, hotspotSettings],
-  );
+  const hotspotParams = useMemo( ( ) => {
+    // Leave out the settings that don't change the search, so editing them
+    // doesn't rerun it
+    const {
+      hotspotRecentAddresses, hotspotTimeStepMinutes, hotspotMaxPlanCandidates,
+      ...searchSettings
+    } = hotspotSettings;
+    return { ...baseSearchParams, ...searchSettings };
+  }, [baseSearchParams, hotspotSettings] );
 
   const speciesListParams = useMemo( ( ) => ( {
     ...baseSearchParams,

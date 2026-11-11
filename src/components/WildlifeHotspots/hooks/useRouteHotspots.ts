@@ -2,7 +2,8 @@ import { searchObservations } from "api/observations";
 import i18n from "i18next";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
-import { getTunable } from "sharedHelpers/tunableParams";
+import type { HotspotSettings } from "stores/createLayoutSlice";
+import { DEFAULT_HOTSPOT_SETTINGS } from "stores/createLayoutSlice";
 
 export interface RoutePoint {
   latitude: number;
@@ -46,22 +47,8 @@ export interface Hotspot {
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const OSRM_TABLE_BASE = "https://router.project-osrm.org/table/v1/driving";
-// Max radius for each k-means cluster (2 km diameter)
-const MAX_CLUSTER_RADIUS_KM = getTunable( "hotspotClusterRadiusKm" );
-// Evaluate detour times for this many top-by-obs candidates
-const MAX_DETOUR_CANDIDATES = 200;
-// Extra minutes added to travel time to account for parking when ranking hotspots
-const PARKING_MINUTES = getTunable( "hotspotParkingMinutes" );
-// Bbox padding around route to look for observations
-const BBOX_PADDING_KM = getTunable( "hotspotRoutePaddingKm" );
-
-const HOTSPOT_PARAM_KEYS = [
-  "hotspotClusterRadiusKm",
-  "hotspotMaxDetourCandidates",
-  "hotspotObsPerPage",
-  "hotspotParkingMinutes",
-  "hotspotBboxPaddingKm",
-];
+// Hotspot settings ride along in filterParams but aren't iNaturalist API params
+const HOTSPOT_PARAM_KEYS = Object.keys( DEFAULT_HOTSPOT_SETTINGS );
 
 function parseTimeToMinutes( timeStr: string ): number | null {
   const match = timeStr.match( /T(\d{2}):(\d{2})/ );
@@ -184,7 +171,7 @@ async function fetchDetoursSec(
 // Km per degree of latitude/longitude, used to pad the bbox by a fixed distance
 const KM_PER_DEG_LAT = ( EARTH_RADIUS_KM * Math.PI ) / 180;
 
-function routeBbox( coords: RoutePoint[], paddingKm = BBOX_PADDING_KM ) {
+function routeBbox( coords: RoutePoint[], paddingKm: number ) {
   let minLat = Infinity;
   let maxLat = -Infinity;
   let minLng = Infinity;
@@ -363,7 +350,7 @@ function enclosingCircle( points: LatLng[] ): Circle {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_KM ): Map<string, {
+function clusterByKMeans( observations: any[], maxRadiusKm: number ): Map<string, {
   centerLat: number;
   centerLng: number;
   area: Circle;
@@ -503,17 +490,15 @@ export function useRouteHotspots() {
         setRouteCoords( routePoints );
         setRouteDurationSec( directDurationSec );
 
-        // Read algorithm constants from filterParams (with fallbacks to module defaults)
-        const clusterRadiusKm = ( filterParams.hotspotClusterRadiusKm as number | undefined )
-          ?? MAX_CLUSTER_RADIUS_KM;
-        const maxDetourCandidates = (
-          filterParams.hotspotMaxDetourCandidates as number | undefined
-        ) ?? MAX_DETOUR_CANDIDATES;
-        const parkingMinutes = ( filterParams.hotspotParkingMinutes as number | undefined )
-          ?? PARKING_MINUTES;
-        const bboxPaddingKm = ( filterParams.hotspotBboxPaddingKm as number | undefined )
-          ?? BBOX_PADDING_KM;
-        const totalObs = ( filterParams.hotspotObsPerPage as number | undefined ) ?? 200;
+        // Hotspot settings from filterParams, or their defaults
+        const setting = ( key: keyof HotspotSettings ) => (
+          filterParams[key] as number | undefined
+        ) ?? DEFAULT_HOTSPOT_SETTINGS[key];
+        const clusterRadiusKm = setting( "hotspotClusterRadiusKm" );
+        const maxDetourCandidates = setting( "hotspotMaxDetourCandidates" );
+        const parkingMinutes = setting( "hotspotParkingMinutes" );
+        const bboxPaddingKm = setting( "hotspotBboxPaddingKm" );
+        const totalObs = setting( "hotspotObsPerPage" );
         const API_PAGE_SIZE = 200; // iNaturalist API cap
 
         // 2. iNaturalist calls for the whole route bounding box, paginating until

@@ -23,7 +23,22 @@ export interface HotspotSettings {
   hotspotObsPerPage: number;
   hotspotParkingMinutes: number;
   hotspotBboxPaddingKm: number;
+  hotspotRecentAddresses: number;
+  hotspotTimeStepMinutes: number;
+  hotspotMaxPlanCandidates: number;
 }
+
+// Configured only from the gear button on the Wildlife Hotspots map
+export const DEFAULT_HOTSPOT_SETTINGS: HotspotSettings = {
+  hotspotClusterRadiusKm: 1.5,
+  hotspotMaxDetourCandidates: 200,
+  hotspotObsPerPage: 200,
+  hotspotParkingMinutes: 5,
+  hotspotBboxPaddingKm: 80,
+  hotspotRecentAddresses: 10,
+  hotspotTimeStepMinutes: 15,
+  hotspotMaxPlanCandidates: 40,
+};
 
 export interface ExploreGridOverlays {
   commonName: boolean;
@@ -275,14 +290,8 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
         mapType: newMapType,
       },
     } ) ),
-    // Wildlife Hotspots algorithm tuning, edited in ExploreV2 Advanced Search
-    hotspotSettings: {
-      hotspotClusterRadiusKm: 1.5,
-      hotspotMaxDetourCandidates: 200,
-      hotspotObsPerPage: 200,
-      hotspotParkingMinutes: 5,
-      hotspotBboxPaddingKm: 80,
-    },
+    // Wildlife Hotspots settings, edited from the gear button on its map
+    hotspotSettings: DEFAULT_HOTSPOT_SETTINGS,
     setHotspotSetting: ( key, value ) => set( state => ( {
       layout: {
         ...state.layout,

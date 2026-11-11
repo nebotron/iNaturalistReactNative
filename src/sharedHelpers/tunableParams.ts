@@ -97,12 +97,6 @@ export const TUNABLE_PARAMS = {
   usbMaxPhotosPerScan: def( "usb", 500, 1, 5000 ),
   usbStagingRetentionDays: def( "usb", 3, 0, 365, false ),
 
-  hotspotClusterRadiusKm: def( "explore", 1.5, 0.1, 50, false ),
-  hotspotParkingMinutes: def( "explore", 5, 0, 60 ),
-  hotspotRoutePaddingKm: def( "explore", 80, 1, 500 ),
-  hotspotRecentAddresses: def( "explore", 10, 0, 100 ),
-  hotspotTimeStepMinutes: def( "explore", 15, 1, 120 ),
-  hotspotMaxPlanCandidates: def( "explore", 40, 1, 200 ),
   placeSearchMaxSuggestions: def( "explore", 5, 1, 20 ),
 
   gamePoolSize: def( "game", 20, 1, 200 ),

@@ -250,30 +250,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-usbStagingRetentionDays" ),
     t( "Tunable-usbStagingRetentionDays-description" ),
   ],
-  hotspotClusterRadiusKm: [
-    t( "Tunable-hotspotClusterRadiusKm" ),
-    t( "Tunable-hotspotClusterRadiusKm-description" ),
-  ],
-  hotspotParkingMinutes: [
-    t( "Tunable-hotspotParkingMinutes" ),
-    t( "Tunable-hotspotParkingMinutes-description" ),
-  ],
-  hotspotRoutePaddingKm: [
-    t( "Tunable-hotspotRoutePaddingKm" ),
-    t( "Tunable-hotspotRoutePaddingKm-description" ),
-  ],
-  hotspotRecentAddresses: [
-    t( "Tunable-hotspotRecentAddresses" ),
-    t( "Tunable-hotspotRecentAddresses-description" ),
-  ],
-  hotspotTimeStepMinutes: [
-    t( "Tunable-hotspotTimeStepMinutes" ),
-    t( "Tunable-hotspotTimeStepMinutes-description" ),
-  ],
-  hotspotMaxPlanCandidates: [
-    t( "Tunable-hotspotMaxPlanCandidates" ),
-    t( "Tunable-hotspotMaxPlanCandidates-description" ),
-  ],
   placeSearchMaxSuggestions: [
     t( "Tunable-placeSearchMaxSuggestions" ),
     t( "Tunable-placeSearchMaxSuggestions-description" ),
