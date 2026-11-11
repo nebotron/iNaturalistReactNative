@@ -153,6 +153,48 @@ export const saveLocalPhotoToLibrary = async ( path: string, crop?: NormalizedCr
 };
 
 let sweeping = false;
+let breakdownLoggedAt = 0;
+
+// What is holding the staging folder's space, at most once a day: photos
+// waiting to be saved because they're faved, photos whose retention clock is
+// running, and photos with no clock at all (never put on an observation or
+// removed), which nothing ever expires.
+const logStagingBreakdown = (
+  staged: { name: string; size: number | string }[],
+  favorited: Set<string | undefined>,
+  clocks: Record<string, number>,
+) => {
+  if ( Date.now( ) - breakdownLoggedAt < DAY_MS ) return;
+  breakdownLoggedAt = Date.now( );
+  const MB = 1024 * 1024;
+  const tally: Record<string, { n: number; mb: number }> = {};
+  const add = ( key: string, bytes: number ) => {
+    tally[key] = tally[key] ?? { n: 0, mb: 0 };
+    tally[key].n += 1;
+    tally[key].mb += bytes / MB;
+  };
+  let oldestUnclockedDays = 0;
+  staged.forEach( item => {
+    const bytes = Number( item.size ) || 0;
+    const ext = ( item.name.split( "." ).pop( ) ?? "" ).toLowerCase( );
+    let state = "unclocked";
+    if ( favorited.has( item.name ) ) state = "faved";
+    else if ( clocks[item.name] !== undefined ) state = "clocked";
+    add( state, bytes );
+    add( `${state}.${ext}`, bytes );
+    if ( state === "unclocked" ) {
+      const stagedAt = parseInt( item.name, 10 ) || Date.now( );
+      oldestUnclockedDays = Math.max( oldestUnclockedDays, ( Date.now( ) - stagedAt ) / DAY_MS );
+    }
+  } );
+  const rounded = Object.fromEntries( Object.entries( tally )
+    .map( ( [key, { n, mb }] ) => [key, { n, mb: Math.round( mb ) }] ) );
+  logger.infoWithExtra( "usb_staging_breakdown", {
+    files: staged.length,
+    byState: JSON.stringify( rounded ),
+    oldestUnclockedDays: Math.round( oldestUnclockedDays ),
+  } );
+};
 
 // favoritedUris: device photo URIs on observations the user has faved.
 // unfavoritedUris: those on other observations, or removed from Group Photos.
@@ -192,8 +234,11 @@ export const sweepUsbStaging = async (
     const removed = new Set<string>( );
     const savedUris: string[] = [];
     let saved = 0;
+    let libraryRefused = false;
     for ( const item of staged ) {
       if ( favorited.has( item.name ) ) {
+        // eslint-disable-next-line no-continue
+        if ( libraryRefused ) continue;
         // eslint-disable-next-line no-await-in-loop
         const ok = await enqueuePhotoLibraryWrite(
           ( ) => saveLocalPhotoToLibrary( item.path, cropFor( item ) ),
@@ -207,8 +252,13 @@ export const sweepUsbStaging = async (
           logger.error( "Could not save a faved USB photo to Photos", error );
           return false;
         } );
-        // The library refused; keep the rest staged for the next sweep.
-        if ( !ok ) break;
+        if ( !ok ) {
+          // The library refused; keep the faved ones staged for the next
+          // sweep, but go on expiring the rest rather than stopping here.
+          libraryRefused = true;
+          // eslint-disable-next-line no-continue
+          continue;
+        }
         saved += 1;
         // eslint-disable-next-line no-await-in-loop
         await unlink( item.path ).catch( ( ) => undefined );
@@ -235,6 +285,7 @@ export const sweepUsbStaging = async (
       logger.info( `USB staging: saved ${saved} faved photo(s) to Photos, `
         + `expired ${removed.size - saved}` );
     }
+    logStagingBreakdown( staged.filter( item => !removed.has( item.name ) ), favorited, clocks );
   } catch ( error ) {
     logger.error( "USB staging sweep failed", error );
   } finally {

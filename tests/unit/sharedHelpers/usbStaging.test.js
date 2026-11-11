@@ -61,6 +61,21 @@ describe( "sweepUsbStaging", ( ) => {
     jest.useRealTimers( );
   } );
 
+  it( "goes on expiring photos when Photos refuses to save a faved one", async ( ) => {
+    jest.useFakeTimers( { now: 0 } );
+    CameraRoll.saveAsset.mockRejectedValue( new Error( "denied" ) );
+    // Read in name order, so the faved photo comes before the expired one.
+    mockFiles = ["1_FAVED.JPG", "2_EXPIRED.JPG"];
+    await sweepUsbStaging( [uri( "1_FAVED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
+
+    jest.setSystemTime( 4 * DAY_MS );
+    await sweepUsbStaging( [uri( "1_FAVED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
+    expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
+    CameraRoll.saveAsset.mockReset( );
+    CameraRoll.saveAsset.mockResolvedValue( {} );
+    jest.useRealTimers( );
+  } );
+
   it( "saves a faved photo with its import crop when the observation lost it", async ( ) => {
     const { NativeModules } = jest.requireActual( "react-native" );
     const saveCroppedAsset = jest.fn( async ( ) => ( { uri: "ph://CROPPED" } ) );
