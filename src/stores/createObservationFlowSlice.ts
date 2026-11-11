@@ -189,7 +189,7 @@ interface ObservationFlowActions {
   clearRollbackSnapshot: ( ) => void;
   setRollbackSnapshot: ( ) => void;
   setLastLocationPickerState: ( state: LastLocationPickerState | null ) => void;
-  addPendingGroupPhotoDeletionUri: ( uri: string ) => void;
+  addPendingGroupPhotoDeletionUris: ( uris: string[] ) => void;
 }
 
 export type ObservationFlowSlice = ObservationFlowState & ObservationFlowActions;
@@ -413,8 +413,11 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
   setLastLocationPickerState: ( lastLocationPickerState: LastLocationPickerState | null ) => set( {
     lastLocationPickerState,
   } ),
-  addPendingGroupPhotoDeletionUri: ( uri: string ) => set( state => ( {
-    pendingGroupPhotoDeletionUris: [...new Set( [...state.pendingGroupPhotoDeletionUris, uri] )],
+  // One store update for a whole removal, rather than one per photo
+  addPendingGroupPhotoDeletionUris: ( uris: string[] ) => set( state => ( {
+    pendingGroupPhotoDeletionUris: [
+      ...new Set( [...state.pendingGroupPhotoDeletionUris, ...uris] ),
+    ],
   } ) ),
   addCameraRollUris: ( uris: string[] ) => set( state => {
     const savedUris = state.cameraRollUris;

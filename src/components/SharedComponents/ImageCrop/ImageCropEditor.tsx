@@ -76,8 +76,8 @@ const ImageCropEditor = ( ) => {
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
-  const addPendingGroupPhotoDeletionUri = useStore(
-    state => state.addPendingGroupPhotoDeletionUri,
+  const addPendingGroupPhotoDeletionUris = useStore(
+    state => state.addPendingGroupPhotoDeletionUris,
   );
   const setGroupCropResume = useStore( state => state.setGroupCropResume );
 
@@ -562,7 +562,7 @@ const ImageCropEditor = ( ) => {
       if ( groupedPhoto ) {
         const deviceUri = resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto );
         if ( deviceUri ) {
-          addPendingGroupPhotoDeletionUri( deviceUri );
+          addPendingGroupPhotoDeletionUris( [deviceUri] );
           // Same as removing from the Group Photos grid: record it rather than
           // deleting it, so the photo stays hidden from the photo picker and
           // lands in the imported album (removedGroupPhotoUris.ts).
@@ -614,7 +614,7 @@ const ImageCropEditor = ( ) => {
       navigation.goBack( );
     }
   }, [
-    addPendingGroupPhotoDeletionUri,
+    addPendingGroupPhotoDeletionUris,
     context,
     currentObservation,
     deletePhotoFromObservation,

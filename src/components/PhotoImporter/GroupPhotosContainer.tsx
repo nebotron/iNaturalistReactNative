@@ -85,8 +85,8 @@ const GroupPhotosContainer = ( ) => {
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
-  const addPendingGroupPhotoDeletionUri = useStore(
-    state => state.addPendingGroupPhotoDeletionUri,
+  const addPendingGroupPhotoDeletionUris = useStore(
+    state => state.addPendingGroupPhotoDeletionUris,
   );
   const resetMyObsOffsetToRestore = useStore( state => state.resetMyObsOffsetToRestore );
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
@@ -328,9 +328,18 @@ const GroupPhotosContainer = ( ) => {
     }
   };
 
+  // Filing removed photos in the imported album means classifying every
+  // device photo in Realm and writing to the Photos library, which stalled the
+  // grid shortly after each removal. The removed URIs are recorded right away,
+  // so the album can catch up once the user leaves this screen instead.
+  const removedAnyPhotos = useRef( false );
+  useEffect( ( ) => ( ) => {
+    if ( removedAnyPhotos.current ) requestQueuedDeletionAlbumSync( );
+  }, [] );
+
   const removeObservations = ( observations: GroupedPhoto[] ) => {
-    const removedFromGroup: GroupedPhoto[] = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
+    const removedPhotos = new Set( orderedPhotos );
 
     // Record the removed photos' device URIs instead of deleting them. An
     // import no longer deletes anything from the library: every deletion is a
@@ -341,14 +350,19 @@ const GroupPhotosContainer = ( ) => {
     const deviceUrisToDelete = orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( ( uri ): uri is string => !!uri );
-    deviceUrisToDelete.forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
-    addRemovedGroupPhotoUris( deviceUrisToDelete );
-    requestQueuedDeletionAlbumSync( );
+    if ( deviceUrisToDelete.length > 0 ) {
+      addPendingGroupPhotoDeletionUris( deviceUrisToDelete );
+      addRemovedGroupPhotoUris( deviceUrisToDelete );
+      removedAnyPhotos.current = true;
+    }
 
     // No line here: this fires on every photo the user removes (317 times in
     // five days, usually "staged 1"), and what was staged is reported again by
     // the deletion itself, which is where a problem would actually show up.
 
+    // Groups the removal doesn't touch are kept as the same objects, so their
+    // cells don't all re-render as if they held new photos.
+    const removedFromGroup: GroupedPhoto[] = [];
     currentGroupedPhotos( ).forEach( obs => {
       if ( obs.soundUri !== undefined ) {
         if ( !observations.includes( obs ) ) {
@@ -356,12 +370,12 @@ const GroupPhotosContainer = ( ) => {
         }
         return;
       }
-      const filteredGroupedPhotos = obs.photos?.filter(
-        item => !orderedPhotos.includes( item ),
-      ) || [];
-
+      const photos = obs.photos || [];
+      const filteredGroupedPhotos = photos.filter( item => !removedPhotos.has( item ) );
       if ( filteredGroupedPhotos.length > 0 ) {
-        removedFromGroup.push( { photos: filteredGroupedPhotos } );
+        removedFromGroup.push( filteredGroupedPhotos.length === photos.length
+          ? obs
+          : { photos: filteredGroupedPhotos } );
       }
     } );
 
