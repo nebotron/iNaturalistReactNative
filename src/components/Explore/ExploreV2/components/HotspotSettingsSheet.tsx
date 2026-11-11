@@ -1,7 +1,8 @@
 import { Body2, BottomSheet } from "components/SharedComponents";
-import { TextInput, View } from "components/styledComponents";
+import { BottomSheetTextInput, View } from "components/styledComponents";
 import type { TFunction } from "i18next";
 import React, { useState } from "react";
+import { Keyboard, Platform } from "react-native";
 import { useTranslation } from "sharedHooks";
 import type { HotspotSettings } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
@@ -27,15 +28,16 @@ const FIELDS: {
 
 interface FieldProps {
   field: typeof FIELDS[number];
+  onDone: ( ) => void;
 }
 
-const HotspotSettingField = ( { field }: FieldProps ) => {
+const HotspotSettingField = ( { field, onDone }: FieldProps ) => {
   const { t } = useTranslation( );
   const value = useStore( state => state.layout.hotspotSettings[field.key] );
   const setHotspotSetting = useStore( state => state.layout.setHotspotSetting );
   const [text, setText] = useState( String( value ) );
 
-  const onBlur = ( ) => {
+  const commit = ( ) => {
     const parsed = field.decimal
       ? parseFloat( text )
       : parseInt( text, 10 );
@@ -46,18 +48,34 @@ const HotspotSettingField = ( { field }: FieldProps ) => {
     setHotspotSetting( field.key, next );
   };
 
+  // iOS number and decimal pads have no return key, so there would be no Done
+  let keyboardType: "numbers-and-punctuation" | "decimal-pad" | "number-pad" = field.decimal
+    ? "decimal-pad"
+    : "number-pad";
+  if ( Platform.OS === "ios" ) keyboardType = "numbers-and-punctuation";
+
+  // Done commits the value, which changes the search params and so reruns
+  // the hotspot search, and closes the sheet so the new results are visible.
+  const onSubmitEditing = ( ) => {
+    commit( );
+    Keyboard.dismiss( );
+    onDone( );
+  };
+
   return (
     <>
       <Body2 className="mb-2">{field.label( t )}</Body2>
-      <TextInput
+      {/* BottomSheetTextInput lets the sheet rise above the keyboard */}
+      <BottomSheetTextInput
         accessibilityLabel={field.label( t )}
         className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
-        keyboardType={field.decimal
-          ? "decimal-pad"
-          : "number-pad"}
-        onBlur={onBlur}
+        keyboardType={keyboardType}
+        onBlur={commit}
         onChangeText={setText}
+        onSubmitEditing={onSubmitEditing}
         returnKeyType="done"
+        // Typing replaces the value instead of appending to it
+        selectTextOnFocus
         value={text}
       />
     </>
@@ -77,7 +95,9 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
       onPressClose={onPressClose}
     >
       <View className="p-7 pt-2">
-        {FIELDS.map( field => <HotspotSettingField key={field.key} field={field} /> )}
+        {FIELDS.map( field => (
+          <HotspotSettingField key={field.key} field={field} onDone={onPressClose} />
+        ) )}
       </View>
     </BottomSheet>
   );
