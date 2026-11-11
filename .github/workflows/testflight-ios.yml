@@ -43,8 +43,10 @@ on:
         options: [macos-26, macos-26-intel, macos-15]
         default: macos-26
 
+# One run at a time per starting image, so builds on different images can
+# run side by side. Their timestamp build numbers keep uploads distinct.
 concurrency:
-  group: testflight-ios
+  group: testflight-ios-${{ inputs.runner || 'macos-26' }}
   cancel-in-progress: false
 
 jobs:
