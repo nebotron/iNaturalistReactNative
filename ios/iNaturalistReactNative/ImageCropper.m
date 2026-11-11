@@ -2545,6 +2545,26 @@ RCT_EXPORT_METHOD( prepareCropSource
     }
     int writeMs = (int)( ( [NSDate timeIntervalSinceReferenceDate] - writeStarted ) * 1000 );
 
+    // What was drawn, from the header alone (no second decode): draw is most of
+    // a slow prepare, and its cost depends on the format, the bit depth and the
+    // pixel count, none of which the log otherwise says.
+    NSMutableDictionary *source = [NSMutableDictionary dictionary];
+    source[@"bytes"] = @( [[[NSFileManager defaultManager]
+      attributesOfItemAtPath:input error:nil] fileSize] );
+    CGImageSourceRef headerSrc =
+      CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
+    if ( headerSrc ) {
+      NSString *type = (__bridge NSString *)CGImageSourceGetType( headerSrc );
+      if ( type ) source[@"type"] = type;
+      NSDictionary *props =
+        CFBridgingRelease( CGImageSourceCopyPropertiesAtIndex( headerSrc, 0, NULL ) );
+      id depth   = props[(__bridge NSString *)kCGImagePropertyDepth];
+      id profile = props[(__bridge NSString *)kCGImagePropertyProfileName];
+      if ( depth ) source[@"depth"] = depth;
+      if ( profile ) source[@"profile"] = profile;
+      CFRelease( headerSrc );
+    }
+
     // Free the full-resolution pixels and their JPEG as soon as they're on disk,
     // keeping only what detection needs, so the next raw decode has room.
     CGFloat displayLevel = jpegDataMeanLevel( data );
@@ -2569,6 +2589,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"attempts":      @( attempts ),
       @"attemptMs":     attemptMs,
       @"attemptFreeMB": attemptFreeMB,
+      @"source":        source,
       @"stageMs": @{
         @"queue":  @( (int)( ( startedAt - calledAt ) * 1000 ) ),
         @"lock":   @( (int)( ( lockedAt - startedAt ) * 1000 ) ),

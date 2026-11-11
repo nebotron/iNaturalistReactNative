@@ -36,6 +36,7 @@ import {
 import type { PreloadResult } from "sharedHelpers/imageCropPreload";
 import {
   enqueuePreload,
+  PRELOAD_CONCURRENCY,
   PRELOAD_LOOKAHEAD,
   preloadCache,
   releaseCropSource,
@@ -216,7 +217,18 @@ const ImageCropEditor = ( ) => {
   const [cropRequestedAt] = useState( ( ) => ( context === "groupPhotos"
     ? takeCropRequestedAt( )
     : 0 ) );
-  const session = useRef<{ waitMs: number; buffered: number; preloaded: boolean }[]>( [] );
+  // dwellMs is how long the user spent on the photo once it was drawn, and
+  // prepareMs what its preload cost: a run of photos whose dwell is shorter
+  // than their prepare drains the lookahead however deep it is, so the two
+  // side by side say whether the fix is preloading sooner or preparing faster.
+  const session = useRef<{
+    waitMs: number;
+    buffered: number;
+    preloaded: boolean;
+    prepareMs: number | null;
+    dwellMs?: number;
+  }[]>( [] );
+  const decodedAt = useRef( 0 );
   const firstFromTapMs = useRef<number | null>( null );
 
   // Seed state from the preload cache during render, before the first paint of
@@ -255,19 +267,23 @@ const ImageCropEditor = ( ) => {
       return;
     }
     loggedWaitFor.current = imageUri;
-    const totalMs = Date.now( ) - shownAt.current;
+    decodedAt.current = Date.now( );
+    const totalMs = decodedAt.current - shownAt.current;
     if ( !session.current.length && cropRequestedAt ) {
       firstFromTapMs.current = Date.now( ) - cropRequestedAt;
     }
+    const timing = preloadCache.get( imageUri )?.timing;
     session.current.push( {
       waitMs: totalMs,
       buffered: shownBuffered.current,
       preloaded: shownFromCache.current,
+      prepareMs: timing
+        ? timing.exportMs + timing.prepareMs
+        : null,
     } );
     if ( totalMs < SLOW_PHOTO_MS ) {
       return;
     }
-    const timing = preloadCache.get( imageUri )?.timing;
     logger.infoWithExtra( "crop_photo_slow", {
       totalMs,
       decodeMs,
@@ -280,14 +296,43 @@ const ImageCropEditor = ( ) => {
       readyMs: timing
         ? shownAt.current - timing.finishedAt
         : null,
+      // How long before the editor needed it the preload was asked for.
+      // Negative or near zero means the lookahead never reached this photo
+      // (nothing asked for it until it was on screen); well ahead with a
+      // negative readyMs means it was asked for in time but took too long.
+      requestedAheadMs: timing
+        ? shownAt.current - timing.requestedAt
+        : null,
+      // Time it sat in the JS preload queue behind other photos
+      queuedMs: timing?.queuedMs ?? null,
       exportMs: timing?.exportMs ?? null,
       prepareMs: timing?.prepareMs ?? null,
       // Native split of prepareMs: waits (queue, lock) versus work
       stageMs: timing?.stageMs ?? null,
+      // What was decoded (draw is most of a slow prepare, and depends on these)
+      sourceType: timing?.source?.type ?? null,
+      sourceDepth: timing?.source?.depth ?? null,
+      sourceProfile: timing?.source?.profile ?? null,
+      sourceMB: timing?.source?.bytes
+        ? Math.round( timing.source.bytes / 1e5 ) / 10
+        : null,
+      megapixels: imageSize
+        ? Math.round( ( imageSize.w * imageSize.h ) / 1e5 ) / 10
+        : null,
+      concurrency: PRELOAD_CONCURRENCY,
       // Only groupPhotos preloads ahead
       context: context ?? null,
     } );
-  }, [context, cropRequestedAt, imageUri] );
+  }, [context, cropRequestedAt, imageSize, imageUri] );
+
+  // Called whenever the user leaves a photo (crop or delete), to record how
+  // long they looked at it after it was drawn.
+  const noteDwell = useCallback( ( ) => {
+    const last = session.current[session.current.length - 1];
+    if ( last && last.dwellMs === undefined && loggedWaitFor.current === imageUri ) {
+      last.dwellMs = Date.now( ) - decodedAt.current;
+    }
+  }, [imageUri] );
 
   // One line per bulk crop, when the editor closes: how many photos were ready
   // when shown, how long the rest were waited on, and how much lookahead was
@@ -300,6 +345,14 @@ const ImageCropEditor = ( ) => {
       return;
     }
     const waits = photos.map( photo => photo.waitMs );
+    const median = ( values: ( number | null | undefined )[] ) => {
+      const sorted = values
+        .filter( ( v ): v is number => typeof v === "number" )
+        .sort( ( a, b ) => a - b );
+      return sorted.length
+        ? sorted[Math.floor( sorted.length / 2 )]
+        : null;
+    };
     logger.infoWithExtra( "crop_session_summary", {
       photos: photos.length,
       preloaded: photos.filter( photo => photo.preloaded ).length,
@@ -311,9 +364,20 @@ const ImageCropEditor = ( ) => {
       // From the Done (or crop) tap, the copy out of the library included
       firstFromTapMs: firstFromTapMs.current,
       lookahead: PRELOAD_LOOKAHEAD,
-      // waitMs:bufferedAhead per photo, in the order shown
+      concurrency: PRELOAD_CONCURRENCY,
+      // A median dwell under the median prepare (divided by concurrency) means
+      // the user out-crops the preloader and the buffer must eventually drain
+      medianDwellMs: median( photos.map( photo => photo.dwellMs ) ),
+      medianPrepareMs: median( photos.map( photo => photo.prepareMs ) ),
+      // waitMs:bufferedAhead:dwellMs:prepareMs per photo, in the order shown
+      // (an empty field is unknown)
       perPhoto: photos.slice( 0, 300 )
-        .map( photo => `${photo.waitMs}:${photo.buffered}` ).join( "," ),
+        .map( photo => [
+          photo.waitMs,
+          photo.buffered,
+          photo.dwellMs ?? "",
+          photo.prepareMs ?? "",
+        ].join( ":" ) ).join( "," ),
     } );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [] );
@@ -508,6 +572,7 @@ const ImageCropEditor = ( ) => {
   // resets itself when sourceUri changes), so a preloaded next image appears on
   // the next frame.
   const finishOrAdvance = useCallback( ( ) => {
+    noteDwell( );
     if ( pendingImageUris.length ) {
       setImageUri( pendingImageUris[0] );
       setPendingImageUris( uris => uris.slice( 1 ) );
@@ -531,6 +596,7 @@ const ImageCropEditor = ( ) => {
     imageUri,
     markVisited,
     navigation,
+    noteDwell,
     onCropSaved,
     pendingImageUris,
     setGroupCropResume,
