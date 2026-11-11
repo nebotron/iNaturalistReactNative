@@ -140,7 +140,8 @@ const AICamera = ( {
   const [hasTakenPhoto, setHasTakenPhoto] = useState( false );
 
   const userDisabledLocation = aiCameraSettings.locationDisabled;
-  const useLocation = hasLocationPermissions && !userDisabledLocation;
+  // hasLocationPermissions is undefined until permissions have been checked
+  const useLocation = !!hasLocationPermissions && !userDisabledLocation;
   const [locationStatusVisible, setLocationStatusVisible] = useState( false );
 
   const toggleLocation = () => {

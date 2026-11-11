@@ -138,9 +138,13 @@ const FrameProcessorCamera = ( {
   };
 
   const hasUserLocation = userLocation?.latitude != null && userLocation?.longitude != null;
+  // Coerce to a real boolean: the plugin hands options to native as a Nitro
+  // AnyMap, which throws "Cannot convert undefined to any type in variant" on
+  // an undefined value, and useLocation is undefined until location
+  // permissions have been checked.
   const useGeomodel = isDefaultMode
     ? hasUserLocation
-    : ( useLocation && hasUserLocation );
+    : ( !!useLocation && hasUserLocation );
   // The vision-plugin has a function to look up the location of the user in a h3 gridded world
   // unfortunately, I was not able to run this new function in the worklets directly,
   // so we need to do this here before calling the useFrameOutput hook.
