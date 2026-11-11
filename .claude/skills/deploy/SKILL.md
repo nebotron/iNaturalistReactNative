@@ -19,19 +19,25 @@ it through to the upload.
    the new run (`gh run list --workflow testflight-ios.yml -L 1`, or
    `actions_list` / `list_workflow_runs`) and report its URL and head commit.
 
-3. **Wait.** A full run is ~20 minutes with warm caches.
+3. **Wait.** A full run is ~20 minutes with warm caches on Arm; an Intel
+   (`macos-26-intel`) build is slower.
    Check the run's status every 5 minutes until it completes (`send_later` with
    `delay_minutes: 5`, or `ScheduleWakeup` / a background wait) rather than polling
    in a tight loop. `list_workflow_jobs` shows which step is running.
 
 4. **On success**, report it in one line with the build number.
 
-5. **If GitHub can't acquire a runner** — the job stays `queued` and ends
-   `cancelled` with no logs (`get_job_logs` 404s) and no step ever started —
-   that's runner availability, not the code. Don't treat it as a blocker: dispatch
-   a fresh run once per hour (`send_later` with `delay_minutes: 60`) until one
-   gets a runner, then continue from step 3. Tell the user once that you're
-   retrying hourly, and mention billing/spending limits as a possible cause.
+5. **If GitHub can't acquire a runner** — a job stays `queued` ~15 minutes and ends
+   `cancelled` with no steps ("not acquired by Runner of type hosted"). The repo
+   is public, so this is free-runner capacity, not billing; it clusters in US
+   working hours (15:00–22:00 UTC). The workflow handles it itself: jobs
+   `attempt-1`…`attempt-3` try the requested image, `macos-26-intel`, then
+   `macos-15`, each only if the previous one never started. Judge the run by
+   the attempt that started — the run as a whole can read `failure` from an
+   unacquired attempt even though a later one uploaded the build. Only if all
+   three go unacquired, dispatch a fresh run once per hour (`send_later` with
+   `delay_minutes: 60`) until one gets a runner, then continue from step 3.
+   Tell the user once that you're retrying hourly.
 
 6. **On failure**, read the failing step's log (`gh run view <id> --log-failed`, or
    `get_job_logs` with `failed_only`) and fix it.
