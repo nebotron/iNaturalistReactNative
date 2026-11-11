@@ -223,6 +223,16 @@ jobs:
         printf '%s' "$ASC_KEY_BASE64" | base64 --decode \
           > "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
 
+    # Archive reports a rejected key the same way whether Apple refuses the
+    # key or refuses a signing change it asks for, so ask App Store Connect
+    # directly what it thinks of the key and the App IDs' capabilities.
+    - name: Check the API key and App IDs with App Store Connect
+      continue-on-error: true
+      run: |
+        ruby .github/scripts/asc_diagnose.rb \
+          "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8" \
+          com.benhannel.inat.dev com.benhannel.inat.dev.ShareExtensionIOS
+
     # A throwaway keychain holding the reusable certificates, which xcodebuild
     # then finds instead of creating new ones.
     - name: Import the signing certificate
