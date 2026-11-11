@@ -2449,6 +2449,64 @@ RCT_EXPORT_METHOD( createThumbnail
   } );
 }
 
+// The photo decoded now by ImageIO, in whatever pixel format its decoder
+// produces, with its EXIF orientation attached. prepareCropSource draws this
+// rather than the lazy image so its log can split the draw stage into the
+// decode and the conversion into an 8-bit sRGB bitmap: a 32MP 10-bit HDR PQ
+// HEIF (what a Canon writes as .HIF) took ~2s in that stage, against ~0.4s to
+// crop the same file through ImageIO without converting it. info receives the
+// decoded format: bits per component and pixel, colour space, and whether its
+// transfer function is HDR (PQ or HLG).
+//
+// Returns nil, having decoded nothing, unless the header says it is the same
+// picture as expected -- the image UIImage loaded, whose size the crop is
+// expressed in -- so a mismatch costs no second decode.
+static UIImage *eagerlyDecodedImageAtPath(
+  NSString *path, UIImage *expected, NSMutableDictionary *info )
+{
+  CGImageSourceRef src =
+    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  if ( !src ) return nil;
+  size_t             index       = primaryImageIndex( src );
+  UIImageOrientation orientation = orientationForImageSource( src );
+  CGSize             declared    = declaredImageSize( src, index );
+  BOOL sideways = orientation == UIImageOrientationLeft
+    || orientation == UIImageOrientationRight
+    || orientation == UIImageOrientationLeftMirrored
+    || orientation == UIImageOrientationRightMirrored;
+  CGSize oriented = sideways
+    ? CGSizeMake( declared.height, declared.width )
+    : declared;
+  if ( expected.scale != 1
+    || expected.imageOrientation != orientation
+    || !CGSizeEqualToSize( oriented, expected.size ) ) {
+    CFRelease( src );
+    return nil;
+  }
+  CGImageRef cg = CGImageSourceCreateImageAtIndex( src, index,
+    (__bridge CFDictionaryRef)@{
+      (__bridge NSString *)kCGImageSourceShouldCacheImmediately: @YES,
+    } );
+  CFRelease( src );
+  if ( !cg ) return nil;
+  if ( CGImageGetWidth( cg ) != (size_t)declared.width
+    || CGImageGetHeight( cg ) != (size_t)declared.height ) {
+    CGImageRelease( cg );
+    return nil;
+  }
+  info[@"bpc"] = @( CGImageGetBitsPerComponent( cg ) );
+  info[@"bpp"] = @( CGImageGetBitsPerPixel( cg ) );
+  CGColorSpaceRef space = CGImageGetColorSpace( cg );
+  if ( space ) {
+    NSString *name = CFBridgingRelease( CGColorSpaceCopyName( space ) );
+    if ( name ) info[@"space"] = name;
+    info[@"hdr"] = @( CGColorSpaceUsesITUR_2100TF( space ) );
+  }
+  UIImage *image = [UIImage imageWithCGImage:cg scale:1 orientation:orientation];
+  CGImageRelease( cg );
+  return image;
+}
+
 // Everything the crop editor needs from a photo, out of a single decode of it:
 // the pixel dimensions a decoder actually produces, a display-sized JPEG for
 // React Native to draw, and the subject bounds. The editor used to take these
@@ -2478,6 +2536,14 @@ RCT_EXPORT_METHOD( prepareCropSource
 
     __block NSTimeInterval lockedAt = 0;
     __block int       drawMs        = 0;
+    // drawMs split in two where the photo was decoded up front (see
+    // eagerlyDecodedImageAtPath); -1 where it wasn't, and drawMs is both.
+    __block int       decodeMs      = -1;
+    __block int       convertMs     = -1;
+    // Raws keep the lazy decode they have always had: their retries and lock
+    // are tuned to it, and what UIImage loads for them is the embedded preview.
+    BOOL              raw           = isCameraRawFile( input );
+    NSMutableDictionary *decodedInfo = [NSMutableDictionary dictionary];
     __block int       encodeMs      = 0;
     __block BOOL      loaded        = NO;
     __block CGFloat   width         = 0;
@@ -2504,9 +2570,25 @@ RCT_EXPORT_METHOD( prepareCropSource
     // raw a second time -- outside the raw decode lock, alongside the previous
     // photo's crop.
     NSTimeInterval drawStarted = [NSDate timeIntervalSinceReferenceDate];
-    display = rasterizedImage( clampToMaxPixel( image, [maxPixel floatValue] ) );
+    UIImage *drawSource = image;
+    if ( !raw ) {
+      // Only where it is the same picture UIImage loaded, the one width and
+      // height above describe and cropImage crops; otherwise draw as before.
+      UIImage *decoded = eagerlyDecodedImageAtPath( input, image, decodedInfo );
+      decodedInfo[@"eager"] = @( decoded != nil );
+      if ( decoded ) {
+        drawSource = decoded;
+        decodeMs = (int)( ( [NSDate timeIntervalSinceReferenceDate] - drawStarted ) * 1000 );
+      }
+    }
+    NSTimeInterval convertStarted = [NSDate timeIntervalSinceReferenceDate];
+    display = rasterizedImage( clampToMaxPixel( drawSource, [maxPixel floatValue] ) );
+    drawSource = nil;
     NSTimeInterval encodeStarted = [NSDate timeIntervalSinceReferenceDate];
     drawMs  = (int)( ( encodeStarted - drawStarted ) * 1000 );
+    if ( decodeMs >= 0 ) {
+      convertMs = (int)( ( encodeStarted - convertStarted ) * 1000 );
+    }
     NSString *decodeEncodeFailure = nil;
     data    = display
       ? encodedThumbnailData( display, &decodeEncodeFailure )
@@ -2564,6 +2646,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       if ( profile ) source[@"profile"] = profile;
       CFRelease( headerSrc );
     }
+    [source addEntriesFromDictionary:decodedInfo];
 
     // Free the full-resolution pixels and their JPEG as soon as they're on disk,
     // keeping only what detection needs, so the next raw decode has room.
@@ -2593,8 +2676,10 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"stageMs": @{
         @"queue":  @( (int)( ( startedAt - calledAt ) * 1000 ) ),
         @"lock":   @( (int)( ( lockedAt - startedAt ) * 1000 ) ),
-        @"draw":   @( drawMs ),
-        @"encode": @( encodeMs ),
+        @"draw":    @( drawMs ),
+        @"decode":  @( decodeMs ),
+        @"convert": @( convertMs ),
+        @"encode":  @( encodeMs ),
         @"write":  @( writeMs ),
       },
     } );
