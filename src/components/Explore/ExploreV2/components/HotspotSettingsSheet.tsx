@@ -83,6 +83,9 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
   const { t } = useTranslation( );
   const { top, bottom } = useSafeAreaInsets( );
   const { keyboardShown } = useKeyboardInfo( );
+  const bottomPadding = keyboardShown
+    ? 0
+    : bottom;
   const saved = useStore( state => state.layout.hotspotSettings );
   const setHotspotSetting = useStore( state => state.layout.setHotspotSetting );
   // Edits stay here until the sheet closes, so the hotspot search, which
@@ -133,11 +136,7 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
         <View
           className="bg-white rounded-t-3xl overflow-hidden shrink"
           // The home-indicator inset is only needed with the keyboard down
-          style={{
-            paddingBottom: keyboardShown
-              ? 0
-              : bottom,
-          }}
+          style={{ paddingBottom: bottomPadding }}
         >
           <View className="pt-7 pb-3 mx-12">
             <Heading4 className="w-full text-center">
