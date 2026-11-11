@@ -42,17 +42,45 @@ interface Split {
 
 // Within this of the user, a candidate counts as observed nearby
 const NEARBY_KM = 75;
+const EARTH_KM = 6371;
+const RAD = Math.PI / 180;
 
-const kmBetween = ( lat1: number, lng1: number, lat2: number, lng2: number ) => {
-  const rad = Math.PI / 180;
-  const h = Math.sin( ( ( lat2 - lat1 ) * rad ) / 2 ) ** 2
-    + Math.cos( lat1 * rad ) * Math.cos( lat2 * rad )
-    * Math.sin( ( ( lng2 - lng1 ) * rad ) / 2 ) ** 2;
-  return 12742 * Math.asin( Math.min( 1, Math.sqrt( h ) ) );
+const unitVector = ( latitude: number, longitude: number ) => [
+  Math.cos( latitude * RAD ) * Math.cos( longitude * RAD ),
+  Math.cos( latitude * RAD ) * Math.sin( longitude * RAD ),
+  Math.sin( latitude * RAD ),
+];
+
+// Each candidate's points as unit vectors, made the first time a species is
+// looked up, so the search for the nearest is a dot product per point. Points
+// are on a half-degree grid, so their sines and cosines come from a table.
+let gridTrig: { sin: Float64Array; cos: Float64Array } | null = null;
+const vectorCache: Record<string, Float64Array[]> = {};
+const candidateVectors = ( name: string, split: Split ) => {
+  if ( !gridTrig ) {
+    gridTrig = { sin: new Float64Array( 721 ), cos: new Float64Array( 721 ) };
+    for ( let h = -360; h <= 360; h += 1 ) {
+      gridTrig.sin[h + 360] = Math.sin( ( h / 2 ) * RAD );
+      gridTrig.cos[h + 360] = Math.cos( ( h / 2 ) * RAD );
+    }
+  }
+  const { sin, cos } = gridTrig;
+  vectorCache[name] ||= split.taxa.map( ( [, , , points] ) => {
+    const v = new Float64Array( ( points.length / 2 ) * 3 );
+    for ( let i = 0, j = 0; i < points.length; i += 2, j += 3 ) {
+      const lat = points[i] + 360;
+      const lng = points[i + 1] + 360;
+      v[j] = cos[lat] * cos[lng];
+      v[j + 1] = cos[lat] * sin[lng];
+      v[j + 2] = sin[lat];
+    }
+    return v;
+  } );
+  return vectorCache[name];
 };
 
 // The iNaturalist taxon for BirdNET's species `name` at `location`, or null
-// if iNaturalist hasn't split it.
+// if iNaturalist hasn't split it. Offline; run once per Audio ID session.
 export const splitTaxon = (
   name: string,
   location: { latitude: number; longitude: number } | null,
@@ -60,17 +88,21 @@ export const splitTaxon = (
   const split = ( SPLITS as Record<string, Split> )[name];
   if ( !split ) return null;
   if ( !location ) return split.shared;
-  const { latitude, longitude } = location;
-  const nearest = split.taxa.map( ( [taxonId, sciName, commonName, points] ) => {
-    let km = Infinity;
-    for ( let i = 0; i < points.length; i += 2 ) {
-      km = Math.min( km, kmBetween( latitude, longitude, points[i] / 2, points[i + 1] / 2 ) );
+  const [x, y, z] = unitVector( location.latitude, location.longitude );
+  // The nearest point of each candidate has the largest dot product
+  const nearest = candidateVectors( name, split ).map( ( v, c ) => {
+    let dot = -2;
+    for ( let i = 0; i < v.length; i += 3 ) {
+      const d = x * v[i] + y * v[i + 1] + z * v[i + 2];
+      if ( d > dot ) dot = d;
     }
-    return { taxon: [taxonId, sciName, commonName] as SplitTaxon, km };
-  } ).sort( ( a, b ) => a.km - b.km );
-  return nearest[0].km === Infinity || ( nearest.length > 1 && nearest[1].km <= NEARBY_KM )
-    ? split.shared
-    : nearest[0].taxon;
+    return { c, dot };
+  } ).sort( ( a, b ) => b.dot - a.dot );
+  const kmTo = ( dot: number ) => EARTH_KM * Math.acos( Math.min( 1, dot ) );
+  if ( nearest[0].dot === -2
+    || ( nearest.length > 1 && kmTo( nearest[1].dot ) <= NEARBY_KM ) ) return split.shared;
+  const [taxonId, sciName, commonName] = split.taxa[nearest[0].c];
+  return [taxonId, sciName, commonName];
 };
 export interface AudioIdSetup {
   outputs: number[];
