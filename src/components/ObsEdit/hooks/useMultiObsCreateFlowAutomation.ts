@@ -2,7 +2,9 @@ import {
   useIsFocused,
   useNavigation,
   useNavigationState,
+  useRoute,
 } from "@react-navigation/native";
+import type { NoBottomTabStackScreenProps } from "navigation/types";
 import { useEffect } from "react";
 import type { RealmObservation } from "realmModels/types";
 import hasValidCoordinates from "sharedHelpers/hasValidCoordinates";
@@ -18,6 +20,10 @@ const useMultiObsCreateFlowAutomation = ( {
 }: Options ) => {
   const navigation = useNavigation( );
   const isFocused = useIsFocused( );
+  const { params } = useRoute<NoBottomTabStackScreenProps<"ObsEdit">["route"]>( );
+  // A shared sound (e.g. a Voice Memo) arrives as an observation with no
+  // photos; it should open on the new observation, not jump to taxon search.
+  const fromShare = params?.lastScreen === "PhotoSharing";
   const isNewObs = !currentObservation?._created_at;
 
   const isOnSuggestions = useNavigationState( state => {
@@ -47,13 +53,14 @@ const useMultiObsCreateFlowAutomation = ( {
         lastScreen: "ObsEdit",
         hideSkip: false,
       } );
-    } else {
+    } else if ( !fromShare ) {
       navigation.navigate( "SuggestionsTaxonSearch", {
         entryScreen: "ObsEdit",
         lastScreen: "ObsEdit",
       } );
     }
   }, [
+    fromShare,
     hasIdentification,
     hasLocation,
     hasPhotos,

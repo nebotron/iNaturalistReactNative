@@ -9,6 +9,7 @@ jest.unmock( "components/ObsEdit/hooks/useMultiObsCreateFlowAutomation" );
 
 const mockPush = jest.fn( );
 const mockNavigate = jest.fn( );
+let mockRouteParams;
 
 jest.mock( "@react-navigation/native", ( ) => ( {
   ...jest.requireActual( "@react-navigation/native" ),
@@ -18,6 +19,7 @@ jest.mock( "@react-navigation/native", ( ) => ( {
     navigate: mockNavigate,
   } ),
   useNavigationState: jest.fn( ( ) => false ),
+  useRoute: ( ) => ( { params: mockRouteParams } ),
 } ) );
 
 describe( "useMultiObsCreateFlowAutomation", ( ) => {
@@ -31,6 +33,7 @@ describe( "useMultiObsCreateFlowAutomation", ( ) => {
 
   beforeEach( ( ) => {
     jest.clearAllMocks( );
+    mockRouteParams = undefined;
     useStore.getState( ).resetObservationFlowSlice( );
     useStore.setState( {
       observations: [observation, factory( "LocalObservation", { uuid: "obs-2" } )],
@@ -69,5 +72,35 @@ describe( "useMultiObsCreateFlowAutomation", ( ) => {
     } ) );
 
     expect( mockPush ).not.toHaveBeenCalled( );
+  } );
+
+  describe( "without photos", ( ) => {
+    const soundObs = factory( "LocalObservation", {
+      latitude: 1.2,
+      longitude: -122.4,
+      observationPhotos: [],
+      taxon: { id: 48460, rank_level: 100 },
+      uuid: "obs-sound",
+    } );
+
+    it( "opens taxon search", ( ) => {
+      renderHook( () => useMultiObsCreateFlowAutomation( {
+        currentObservation: soundObs,
+        isFetchingLocation: false,
+      } ) );
+
+      expect( mockNavigate ).toHaveBeenCalledWith( "SuggestionsTaxonSearch", expect.anything( ) );
+    } );
+
+    it( "stays on the observation when it came from a share", ( ) => {
+      mockRouteParams = { lastScreen: "PhotoSharing" };
+
+      renderHook( () => useMultiObsCreateFlowAutomation( {
+        currentObservation: soundObs,
+        isFetchingLocation: false,
+      } ) );
+
+      expect( mockNavigate ).not.toHaveBeenCalled( );
+    } );
   } );
 } );
