@@ -1,8 +1,13 @@
-import { Body2, BottomSheet } from "components/SharedComponents";
-import { BottomSheetTextInput, View } from "components/styledComponents";
+import { Body2, Heading4, INatIconButton } from "components/SharedComponents";
+import {
+  KeyboardAvoidingView, Modal, ScrollView, TextInput, View,
+} from "components/styledComponents";
 import type { TFunction } from "i18next";
 import React, { useState } from "react";
+import { Platform, Pressable } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "sharedHooks";
+import useKeyboardInfo from "sharedHooks/useKeyboardInfo";
 import type { HotspotSettings } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 
@@ -54,8 +59,7 @@ const HotspotSettingField = ( {
   return (
     <>
       <Body2 className="mb-2">{field.label( t )}</Body2>
-      {/* BottomSheetTextInput lets the sheet rise above the keyboard */}
-      <BottomSheetTextInput
+      <TextInput
         accessibilityLabel={field.label( t )}
         className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
         keyboardType={field.decimal
@@ -77,6 +81,8 @@ interface Props {
 
 const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
   const { t } = useTranslation( );
+  const { top, bottom } = useSafeAreaInsets( );
+  const { keyboardShown } = useKeyboardInfo( );
   const saved = useStore( state => state.layout.hotspotSettings );
   const setHotspotSetting = useStore( state => state.layout.setHotspotSetting );
   // Edits stay here until the sheet closes, so the hotspot search, which
@@ -99,28 +105,73 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
     onPressClose( );
   };
 
+  // A plain modal rather than the shared bottom sheet: the sheet library
+  // lifts the whole sheet by the keyboard's height, which put the header and
+  // its close button under the status bar and left a blank strip above the
+  // keyboard. Here the header stays put, the fields scroll beneath it, and
+  // the card fits between the status bar and the keyboard.
   return (
-    <BottomSheet
-      headerText={t( "HOTSPOT-SETTINGS" )}
-      keyboardShouldPersistTaps="handled"
-      onPressClose={close}
+    <Modal
+      animationType="slide"
+      onRequestClose={close}
+      transparent
+      visible
     >
-      <View className="p-7 pt-2">
-        {FIELDS.map( field => (
-          <HotspotSettingField
-            key={field.key}
-            field={field}
-            text={drafts[field.key]}
-            onChangeText={text => setDraft( field.key, text )}
-            // Show the value that will be used, e.g. the minimum for one below it
-            onBlur={( ) => setDraft(
-              field.key,
-              String( parseField( field, drafts[field.key], saved[field.key] ) ),
-            )}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios"
+          ? "padding"
+          : undefined}
+        className="flex-1 justify-end bg-black/50"
+        style={{ paddingTop: top + 8 }}
+      >
+        <Pressable
+          accessibilityLabel={t( "Close" )}
+          accessibilityRole="button"
+          className="absolute inset-0"
+          onPress={close}
+        />
+        <View
+          className="bg-white rounded-t-3xl overflow-hidden shrink"
+          // The home-indicator inset is only needed with the keyboard down
+          style={{ paddingBottom: keyboardShown
+            ? 0
+            : bottom }}
+        >
+          <View className="pt-7 pb-3 mx-12">
+            <Heading4 className="w-full text-center">
+              {t( "HOTSPOT-SETTINGS" )}
+            </Heading4>
+          </View>
+          <INatIconButton
+            icon="close"
+            onPress={close}
+            size={19}
+            className="absolute top-3.5 right-3"
+            accessibilityLabel={t( "Close" )}
           />
-        ) )}
-      </View>
-    </BottomSheet>
+          <ScrollView
+            className="grow-0"
+            keyboardShouldPersistTaps="handled"
+          >
+            <View className="px-7 pt-2 pb-2">
+              {FIELDS.map( field => (
+                <HotspotSettingField
+                  key={field.key}
+                  field={field}
+                  text={drafts[field.key]}
+                  onChangeText={text => setDraft( field.key, text )}
+                  // Show the value that will be used, e.g. the minimum for one below it
+                  onBlur={( ) => setDraft(
+                    field.key,
+                    String( parseField( field, drafts[field.key], saved[field.key] ) ),
+                  )}
+                />
+              ) )}
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 };
 
