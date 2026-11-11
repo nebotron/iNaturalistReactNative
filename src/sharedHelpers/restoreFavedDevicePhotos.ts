@@ -1,11 +1,15 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import type Realm from "realm";
 import Photo from "realmModels/Photo";
-import type { RealmObservation, RealmObservationPhoto } from "realmModels/types";
+import type {
+  RealmObservation, RealmObservationPhoto, RealmPhoto,
+} from "realmModels/types";
 import { cropOriginalUriFromPath, savedNormalizedCrop } from "sharedHelpers/cropPhotoMetadata";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import { log } from "sharedHelpers/logger";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { saveLocalPhotoToLibrary } from "sharedHelpers/usbStaging";
@@ -50,25 +54,58 @@ const findObsPhoto = (
     ?.find( op => uris.includes( op.originalDevicePhotoUri ?? "" ) );
 };
 
+const fileExists = async ( uri: string | null | undefined ): Promise<boolean> => (
+  !!uri && exists( stripFilePrefix( uri ) ).catch( ( ) => false )
+);
+
+// What to save for a missing photo, and the crop to apply over it. Synced
+// observations have their photoUploads files swept (clearSyncedMediaForUpload)
+// while Realm keeps the paths, so a local file is only used if it's still
+// there: handing the cropper a deleted crop original failed every save of a
+// cropped, uploaded photo ("Could not render cropped image", 2,071 times in a
+// day) and was retried on every Realm write.
+const restoreSource = async (
+  photo: RealmPhoto,
+): Promise<{ uri: string; crop?: NormalizedCrop } | null> => {
+  // The uncropped original with the crop over it, as the device had it plus
+  // the edit.
+  const original = cropOriginalUriFromPath( photo.cropOriginalLocalFilePath );
+  if ( await fileExists( original ) ) {
+    return { uri: original as string, crop: savedNormalizedCrop( photo ) ?? undefined };
+  }
+  // Else the observation's photo as it is: already cropped, locally or as
+  // uploaded.
+  const local = Photo.getLocalPhotoUri( photo.localFilePath );
+  if ( await fileExists( local ) ) return { uri: local as string };
+  const remote = Photo.displayOriginalPhoto( photo.url );
+  return remote
+    ? { uri: remote }
+    : null;
+};
+
 const restoreOne = async (
   realm: Realm,
   deviceUri: string,
 ): Promise<string | null | undefined> => {
   const photo = findObsPhoto( realm, deviceUri )?.photo;
   // Nothing to save for a photo no longer on any observation.
-  const fallback = photo && Photo.displayCropSourcePhoto( photo );
-  if ( !photo || !fallback ) return null;
-  // The uncropped original with the crop over it, as the device had it plus
-  // the edit; else the observation's photo as it is.
-  const original = cropOriginalUriFromPath( photo.cropOriginalLocalFilePath );
-  const crop = original
-    ? savedNormalizedCrop( photo ) ?? undefined
-    : undefined;
-  const local = await ensureLocalImageForCrop( original || fallback, "original" );
+  const source = photo && await restoreSource( photo );
+  if ( !source ) return null;
+  const local = await ensureLocalImageForCrop( source.uri, "original" );
   return enqueuePhotoLibraryWrite(
-    ( ) => saveLocalPhotoToLibrary( stripFilePrefix( local ), crop ),
+    ( ) => saveLocalPhotoToLibrary( stripFilePrefix( local ), source.crop ),
   );
 };
+
+// A photo whose save keeps failing for its own reasons (an undecodable file, a
+// download that won't come) is tried this many times per launch, not on every
+// Realm write for as long as the app is open.
+const MAX_FAILURES_PER_LAUNCH = 3;
+const failures = new Map<string, number>( );
+
+const isLibraryBusy = ( error: unknown ): boolean => (
+  ( error as { code?: string } | undefined )?.code === "PHOTOS_LIBRARY_BUSY"
+);
 
 // deviceUris: device photos on faved observations.
 // libraryUriFor: the Photos asset each currently maps to.
@@ -95,7 +132,8 @@ export const restoreFavedDevicePhotos = async (
   }
   const saved: string[] = [];
   let failed = false;
-  const missing = candidates.filter( uri => !existing.has( libraryUriFor( uri ) ) );
+  const missing = candidates.filter( uri => !existing.has( libraryUriFor( uri ) )
+    && ( failures.get( uri ) ?? 0 ) < MAX_FAILURES_PER_LAUNCH );
   for ( const deviceUri of missing ) {
     if ( realm.isClosed ) break;
     try {
@@ -106,8 +144,16 @@ export const restoreFavedDevicePhotos = async (
         saved.push( uri );
       }
     } catch ( error ) {
-      logger.error( "Could not put a faved photo back in Photos", error );
       failed = true;
+      // A busy library refused without trying; that's no mark against the photo.
+      if ( !isLibraryBusy( error ) ) {
+        const count = ( failures.get( deviceUri ) ?? 0 ) + 1;
+        failures.set( deviceUri, count );
+        logger.error(
+          `Could not put a faved photo back in Photos (try ${count}/${MAX_FAILURES_PER_LAUNCH})`,
+          error,
+        );
+      }
     }
   }
   if ( saved.length > 0 ) {

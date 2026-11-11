@@ -28,6 +28,11 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
   enqueuePhotoLibraryWrite: task => task( ),
 } ) );
 
+const mockFiles = new Set( );
+jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
+  exists: async path => mockFiles.has( path ),
+} ) );
+
 const mockExisting = jest.fn( );
 NativeModules.ImageCropper = {
   ...NativeModules.ImageCropper,
@@ -60,6 +65,7 @@ describe( "restoreFavedDevicePhotos", ( ) => {
     mockStore.clear( );
     mockSave.mockClear( );
     mockExisting.mockReset( );
+    mockFiles.clear( );
   } );
 
   it( "saves a faved photo missing from Photos back to the library", async ( ) => {
@@ -99,6 +105,68 @@ describe( "restoreFavedDevicePhotos", ( ) => {
     await restoreFavedDevicePhotos( realm, ["ph://GONE"], identity );
 
     expect( mockSave ).not.toHaveBeenCalled( );
+  } );
+
+  it( "saves the crop original with its crop while the file is there", async ( ) => {
+    mockExisting.mockResolvedValue( [] );
+    const { photoUploadPath } = require( "appConstants/paths" );
+    mockFiles.add( `${photoUploadPath}/orig.jpg` );
+    const realm = realmWith( [{
+      originalDevicePhotoUri: "ph://CROPPED",
+      photo: {
+        url: "https://static.inaturalist.org/photos/1/square.jpg",
+        cropOriginalLocalFilePath: "photoUploads/orig.jpg",
+        cropX: 0.1,
+        cropY: 0.2,
+        cropW: 0.5,
+        cropH: 0.6,
+      },
+    }] );
+
+    await restoreFavedDevicePhotos( realm, ["ph://CROPPED"], identity );
+
+    expect( mockSave ).toHaveBeenCalledWith(
+      `${photoUploadPath}/orig.jpg`,
+      expect.objectContaining( { x: 0.1, w: 0.5 } ),
+    );
+  } );
+
+  it( "saves the uploaded photo once synced files were swept", async ( ) => {
+    mockExisting.mockResolvedValue( [] );
+    const realm = realmWith( [{
+      originalDevicePhotoUri: "ph://SWEPT",
+      photo: {
+        url: "https://static.inaturalist.org/photos/1/square.jpg",
+        localFilePath: "photoUploads/cropped.jpg",
+        cropOriginalLocalFilePath: "photoUploads/orig.jpg",
+        cropX: 0.1,
+        cropY: 0.2,
+        cropW: 0.5,
+        cropH: 0.6,
+      },
+    }] );
+
+    await restoreFavedDevicePhotos( realm, ["ph://SWEPT"], identity );
+
+    expect( mockSave ).toHaveBeenCalledWith( "/caches/downloaded.jpg", undefined );
+  } );
+
+  it( "stops trying a photo that keeps failing", async ( ) => {
+    mockExisting.mockResolvedValue( [] );
+    mockSave.mockRejectedValue( new Error( "Could not render cropped image" ) );
+    const realm = realmWith( [{
+      originalDevicePhotoUri: "ph://BROKEN",
+      photo: { url: "https://static.inaturalist.org/photos/1/square.jpg" },
+    }] );
+
+    for ( let i = 0; i < 5; i += 1 ) {
+      // eslint-disable-next-line no-await-in-loop
+      await restoreFavedDevicePhotos( realm, ["ph://BROKEN"], identity );
+    }
+
+    expect( mockSave ).toHaveBeenCalledTimes( 3 );
+    mockSave.mockReset( );
+    mockSave.mockImplementation( async ( ) => "ph://RESTORED" );
   } );
 
   it( "keeps a photo whose save failed for another try", async ( ) => {
