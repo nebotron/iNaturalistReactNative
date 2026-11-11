@@ -2,7 +2,6 @@ import { Body2, BottomSheet } from "components/SharedComponents";
 import { BottomSheetTextInput, View } from "components/styledComponents";
 import type { TFunction } from "i18next";
 import React, { useState } from "react";
-import { Keyboard, Platform } from "react-native";
 import { useTranslation } from "sharedHooks";
 import type { HotspotSettings } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
@@ -26,42 +25,29 @@ const FIELDS: {
   { key: "hotspotBboxPaddingKm", label: t => t( "Hotspot-bbox-padding-km" ), min: 0 },
 ];
 
+type Field = typeof FIELDS[number];
+
+// The value a field's text stands for, or the saved value if it isn't a number
+const parseField = ( field: Field, text: string, saved: number ) => {
+  const parsed = field.decimal
+    ? parseFloat( text )
+    : parseInt( text, 10 );
+  return Number.isNaN( parsed )
+    ? saved
+    : Math.max( field.min, parsed );
+};
+
 interface FieldProps {
-  field: typeof FIELDS[number];
-  onDone: ( ) => void;
+  field: Field;
+  text: string;
+  onChangeText: ( text: string ) => void;
+  onBlur: ( ) => void;
 }
 
-const HotspotSettingField = ( { field, onDone }: FieldProps ) => {
+const HotspotSettingField = ( {
+  field, text, onChangeText, onBlur,
+}: FieldProps ) => {
   const { t } = useTranslation( );
-  const value = useStore( state => state.layout.hotspotSettings[field.key] );
-  const setHotspotSetting = useStore( state => state.layout.setHotspotSetting );
-  const [text, setText] = useState( String( value ) );
-
-  const commit = ( ) => {
-    const parsed = field.decimal
-      ? parseFloat( text )
-      : parseInt( text, 10 );
-    const next = Number.isNaN( parsed )
-      ? value
-      : Math.max( field.min, parsed );
-    setText( String( next ) );
-    setHotspotSetting( field.key, next );
-  };
-
-  // iOS number and decimal pads have no return key, so there would be no Done
-  let keyboardType: "numbers-and-punctuation" | "decimal-pad" | "number-pad" = field.decimal
-    ? "decimal-pad"
-    : "number-pad";
-  if ( Platform.OS === "ios" ) keyboardType = "numbers-and-punctuation";
-
-  // Done commits the value, which changes the search params and so reruns
-  // the hotspot search, and closes the sheet so the new results are visible.
-  const onSubmitEditing = ( ) => {
-    commit( );
-    Keyboard.dismiss( );
-    onDone( );
-  };
-
   return (
     <>
       <Body2 className="mb-2">{field.label( t )}</Body2>
@@ -69,11 +55,11 @@ const HotspotSettingField = ( { field, onDone }: FieldProps ) => {
       <BottomSheetTextInput
         accessibilityLabel={field.label( t )}
         className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
-        keyboardType={keyboardType}
-        onBlur={commit}
-        onChangeText={setText}
-        onSubmitEditing={onSubmitEditing}
-        returnKeyType="done"
+        keyboardType={field.decimal
+          ? "decimal-pad"
+          : "number-pad"}
+        onBlur={onBlur}
+        onChangeText={onChangeText}
         // Typing replaces the value instead of appending to it
         selectTextOnFocus
         value={text}
@@ -88,15 +74,47 @@ interface Props {
 
 const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
   const { t } = useTranslation( );
+  const saved = useStore( state => state.layout.hotspotSettings );
+  const setHotspotSetting = useStore( state => state.layout.setHotspotSetting );
+  // Edits stay here until the sheet closes, so the hotspot search, which
+  // reruns whenever the saved settings change, runs once with all of them.
+  const [drafts, setDrafts] = useState<Record<keyof HotspotSettings, string>>(
+    ( ) => Object.fromEntries(
+      FIELDS.map( field => [field.key, String( saved[field.key] )] ),
+    ) as Record<keyof HotspotSettings, string>,
+  );
+
+  const setDraft = ( key: keyof HotspotSettings, text: string ) => {
+    setDrafts( prev => ( { ...prev, [key]: text } ) );
+  };
+
+  const close = ( ) => {
+    FIELDS.forEach( field => {
+      const next = parseField( field, drafts[field.key], saved[field.key] );
+      if ( next !== saved[field.key] ) setHotspotSetting( field.key, next );
+    } );
+    onPressClose( );
+  };
+
   return (
     <BottomSheet
       headerText={t( "HOTSPOT-SETTINGS" )}
       keyboardShouldPersistTaps="handled"
-      onPressClose={onPressClose}
+      onPressClose={close}
     >
       <View className="p-7 pt-2">
         {FIELDS.map( field => (
-          <HotspotSettingField key={field.key} field={field} onDone={onPressClose} />
+          <HotspotSettingField
+            key={field.key}
+            field={field}
+            text={drafts[field.key]}
+            onChangeText={text => setDraft( field.key, text )}
+            // Show the value that will be used, e.g. the minimum for one below it
+            onBlur={( ) => setDraft(
+              field.key,
+              String( parseField( field, drafts[field.key], saved[field.key] ) ),
+            )}
+          />
         ) )}
       </View>
     </BottomSheet>
