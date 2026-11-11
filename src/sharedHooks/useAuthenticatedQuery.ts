@@ -86,9 +86,11 @@ const useAuthenticatedQuery = <Response>(
     },
     ...queryOptions,
     retry: queryOptions.retry !== false
-      ? reactQueryRetry
+      ? ( failureCount, error ) => reactQueryRetry( failureCount, error, {
+        queryKey,
+      } )
       : false,
-    retryDelay: handleRetryDelay,
+    retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
     // Authenticated queries should not run until we know whether or not the
     // user is signed in; when requireLoggedIn is set, also wait until they are
     // actually signed in so we never call an authenticated endpoint with a
