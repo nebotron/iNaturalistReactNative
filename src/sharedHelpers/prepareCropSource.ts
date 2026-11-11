@@ -20,6 +20,13 @@ const logger = log.extend( "prepareCropSource" );
 // Speed up loading some other way.
 const DISPLAY_MAX_PIXEL = 99999;
 
+export interface PreparedSourceFile {
+  type?: string;
+  depth?: number;
+  profile?: string;
+  bytes?: number;
+}
+
 interface PreparedSource {
   // The file the cropper draws. The crop itself is still applied to the
   // original.
@@ -31,6 +38,9 @@ interface PreparedSource {
   // Native stage durations (queue and lock waits, decode, encode, write,
   // detection), for telling a slow prepare's waiting from its work.
   stageMs?: Record<string, number>;
+  // What the native side decoded: its format, bit depth, colour profile and
+  // file size, which is what a slow draw stage depends on.
+  source?: PreparedSourceFile;
 }
 
 interface ImageCropperModule {
@@ -50,6 +60,7 @@ interface ImageCropperModule {
     attempts: number;
     attemptMs: number[];
     stageMs?: Record<string, number>;
+    source?: PreparedSourceFile;
     // A raw's free memory at each try.
     attemptFreeMB?: number[];
   }>;
@@ -123,6 +134,7 @@ const prepareCropSource = async (
         ...prepared.stageMs,
         ...( prepared.bounds?.detectMs !== undefined && { detect: prepared.bounds.detectMs } ),
       },
+      source: prepared.source,
     };
   }
 

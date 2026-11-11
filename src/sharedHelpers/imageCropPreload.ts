@@ -1,6 +1,7 @@
 import { cropSourcesPath } from "appConstants/paths";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import type { PreparedSourceFile } from "sharedHelpers/prepareCropSource";
 import prepareCropSource from "sharedHelpers/prepareCropSource";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -11,10 +12,18 @@ import { unlink } from "sharedHelpers/util";
 // the editor reports it (crop_photo_slow) rather than leaving the wait as one
 // opaque number.
 interface PreloadTiming {
+  // When the preload was first asked for. Against when the editor showed the
+  // photo, this says whether the lookahead reached it in time at all, as
+  // opposed to reaching it and being too slow.
+  requestedAt: number;
+  // How long it waited in the JS queue (behind other photos' preloads) before
+  // its export started.
+  queuedMs: number;
   exportMs: number;
   prepareMs: number;
   finishedAt: number;
   stageMs?: Record<string, number>;
+  source?: PreparedSourceFile;
 }
 
 export interface PreloadResult {
@@ -43,6 +52,7 @@ async function loadImageData(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
+  requestedAt: number,
 ): Promise<PreloadResult | null> {
   const startedAt = Date.now( );
   const resolvedUri = await ensureLocalImageForCrop( cropSourceUri, "original" );
@@ -60,10 +70,13 @@ async function loadImageData(
     size: prepared.size,
     crop: prepared.crop,
     timing: {
+      requestedAt,
+      queuedMs: startedAt - requestedAt,
       exportMs: exportedAt - startedAt,
       prepareMs: finishedAt - exportedAt,
       finishedAt,
       stageMs: prepared.stageMs,
+      source: prepared.source,
     },
   };
 }
@@ -75,6 +88,7 @@ function preloadImage(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
+  requestedAt: number,
 ): Promise<PreloadResult | null> {
   const cached = preloadCache.get( imageUri );
   if ( cached ) {
@@ -84,7 +98,7 @@ function preloadImage(
   if ( inFlight ) {
     return inFlight;
   }
-  const promise = loadImageData( imageUri, cropSourceUri, existingSavedCrop )
+  const promise = loadImageData( imageUri, cropSourceUri, existingSavedCrop, requestedAt )
     .then( result => {
       if ( result ) {
         preloadCache.set( imageUri, result );
@@ -103,6 +117,7 @@ interface PreloadRequest {
   imageUri: string;
   cropSourceUri: string;
   existingSavedCrop: NormalizedCrop | null;
+  requestedAt: number;
   resolve: ( result: PreloadResult | null ) => void;
 }
 
@@ -111,7 +126,7 @@ interface PreloadRequest {
 // order it was asked for, this many at a time (Settings > Tunable Parameters).
 // The native prepare queue is concurrent, so this is the only limit; camera
 // raws are still decoded one at a time under the native raw decode lock.
-const PRELOAD_CONCURRENCY = getTunable( "cropPreloadConcurrency" );
+export const PRELOAD_CONCURRENCY = getTunable( "cropPreloadConcurrency" );
 const preloadQueue: PreloadRequest[] = [];
 const preloadQueued = new Map<string, Promise<PreloadResult | null>>( );
 let activePreloadCount = 0;
@@ -136,6 +151,7 @@ function startNextPreload( ) {
     request.imageUri,
     request.cropSourceUri,
     request.existingSavedCrop,
+    request.requestedAt,
   ).then( request.resolve, ( ) => request.resolve( null ) ).finally( ( ) => {
     activePreloadCount -= 1;
     // eslint-disable-next-line no-use-before-define
@@ -177,7 +193,7 @@ export function enqueuePreload(
   } );
   preloadQueued.set( imageUri, promise );
   preloadQueue.push( {
-    imageUri, cropSourceUri, existingSavedCrop, resolve,
+    imageUri, cropSourceUri, existingSavedCrop, requestedAt: Date.now( ), resolve,
   } );
   pumpPreloadQueue( );
   return promise;
