@@ -18,7 +18,23 @@ prohibited by BirdNET's terms of use.
 Rebuild and check (from this directory):
 
     python3 build_model.py <repo>     # model, data files, geomodel, audioIdSpecies.json
+    python3 build_splits.py <repo>    # audioIdSplits.json, for species iNaturalist split
     python3 eval_regions.py <repo>    # small accuracy check -> report_regions.json
+
+## Species iNaturalist has split
+
+BirdNET's taxonomy predates some of iNaturalist's splits, and build_model.py
+matches the two by scientific name, so a split species maps to the daughter
+that kept its name: every Marsh Wren became an Eastern Marsh Wren, every
+Warbling Vireo an Eastern Warbling Vireo. `build_splits.py` lists each BirdNET
+species with a committed iNaturalist split whose daughter species BirdNET
+lacks (88 in November 2026), with up to 600 research-grade observation points
+per candidate. The app gives a detection the candidate observed nearest the
+user, or the candidates' nearest common ancestor (usually the genus) without a
+location or where another candidate is observed within 75 km. Two species,
+*Scinax nebulosus* and *Platymantis dorsalis*, had their taxon IDs retired by
+out-of-place splits, so they depend on it. Re-run it whenever iNaturalist
+commits more splits.
 
 ## Accuracy (`report_regions.json`)
 
