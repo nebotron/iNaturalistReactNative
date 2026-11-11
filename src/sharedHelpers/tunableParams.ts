@@ -137,11 +137,19 @@ export const getTunable = ( key: TunableKey ): number => {
 };
 
 export const setTunable = ( key: TunableKey, value: number ) => {
-  storage.set( key, clampTunable( key, value ) );
+  const clamped = clampTunable( key, value );
+  // Entering the default value is the same as clearing the override
+  if ( clamped === TUNABLE_PARAMS[key].default ) {
+    storage.delete( key );
+  } else {
+    storage.set( key, clamped );
+  }
 };
 
 export const resetTunable = ( key: TunableKey ) => storage.delete( key );
 
 export const resetAllTunables = ( ) => storage.clearAll( );
 
-export const isTunableOverridden = ( key: TunableKey ) => readOverride( key ) !== undefined;
+export const isTunableOverridden = ( key: TunableKey ) => (
+  getTunable( key ) !== TUNABLE_PARAMS[key].default
+);
