@@ -140,6 +140,9 @@ const ObsGridItem = ( {
     <ObsImagePreview
       key={observation.uuid}
       autoDetectSubject={explore && !isOwnObs}
+      // Every grid photo can be pinched to zoom, the user's own included;
+      // theirs start whole and keep whatever framing they pinch to.
+      zoomable
       fitImage={!explore || isOwnObs}
       source={{
         uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),

@@ -5,6 +5,7 @@ import React, { useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { PixelRatio } from "react-native";
 import { log } from "sharedHelpers/logger";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useDeviceImageThumbnail, {
   invalidateDeviceImageThumbnail,
   isGeneratedThumbnailUri,
@@ -37,6 +38,12 @@ interface Props {
   testID?: string;
   // Badges and overlays, absolutely positioned over the image
   children?: ReactNode;
+  // Makes the cell pinchable: it draws zoomSourceUri (the photo's untouched
+  // original) framed to zoomCrop, and reports a pinch's framing of it through
+  // onZoomCropChange.
+  zoomSourceUri?: string;
+  zoomCrop?: NormalizedCrop | null;
+  onZoomCropChange?: ( crop: NormalizedCrop ) => void;
 }
 
 // A single square device-photo cell, shared by every grid that renders photos
@@ -58,10 +65,19 @@ const DevicePhotoImage = ( {
   accessibilityLabel,
   testID,
   children,
+  zoomSourceUri,
+  zoomCrop,
+  onZoomCropChange,
 }: Props ) => {
+  const zoomable = !!onZoomCropChange && !!zoomSourceUri;
+  // What the cell draws. A pinchable cell draws the original, since the crop
+  // it reports is applied to the original.
+  const imageUri = zoomable
+    ? zoomSourceUri
+    : uri;
   const thumbMaxPixel = thumbnailMaxPixel
     ?? PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
-  const thumbnailUri = useDeviceImageThumbnail( uri, thumbMaxPixel );
+  const thumbnailUri = useDeviceImageThumbnail( imageUri, thumbMaxPixel );
   // A thumbnail that won't decode is a file, not a state of the photo: nothing
   // downstream can tell it from a cell still waiting, so the cell sat on the
   // placeholder (the iconic-taxon leaf) or on a black square for as long as
@@ -69,16 +85,19 @@ const DevicePhotoImage = ( {
   // thumbnail stands for, and throw the bad file away so the next request
   // regenerates it.
   const [showOriginal, setShowOriginal] = useState( false );
-  const [prevUri, setPrevUri] = useState( uri );
-  if ( prevUri !== uri ) {
+  const [prevUri, setPrevUri] = useState( imageUri );
+  if ( prevUri !== imageUri ) {
     // Recycled onto a different photo
-    setPrevUri( uri );
+    setPrevUri( imageUri );
     setShowOriginal( false );
   }
 
-  const preferredUri = thumbnailUri ?? fallbackUri;
+  // fallbackUri stands in for uri, which a pinchable cell isn't drawing
+  const preferredUri = thumbnailUri ?? ( zoomable
+    ? undefined
+    : fallbackUri );
   const displayUri = showOriginal
-    ? uri
+    ? imageUri
     : preferredUri;
   const source = displayUri
     ? { uri: displayUri }
@@ -92,8 +111,8 @@ const DevicePhotoImage = ( {
       return;
     }
     setShowOriginal( true );
-    invalidateDeviceImageThumbnail( displayUri, uri ?? displayUri );
-  }, [displayUri, uri] );
+    invalidateDeviceImageThumbnail( displayUri, imageUri ?? displayUri );
+  }, [displayUri, imageUri] );
 
   const image = (
     <View className="relative">
@@ -107,6 +126,12 @@ const DevicePhotoImage = ( {
         hideGradientOverlay
         squareCorners
         style={style}
+        zoomCrop={zoomable
+          ? zoomCrop
+          : undefined}
+        onZoomCropChange={zoomable
+          ? onZoomCropChange
+          : undefined}
       />
       {children}
     </View>

@@ -1,4 +1,5 @@
 import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
+import { applyGroupPhotosPinchCrop } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import {
   ActivityIndicator,
@@ -163,6 +164,11 @@ const GroupPhotoImage = ( {
       style={style}
       obsPhotosCount={mediaCount}
       onPress={handlePress}
+      // Two fingers pinch and pan the photo; the framing it's left at becomes
+      // its crop, exactly as if it had been saved in the crop editor.
+      zoomSourceUri={photo.image.cropOriginalUri || photo.image.uri}
+      zoomCrop={photo.image.crop}
+      onZoomCropChange={crop => applyGroupPhotosPinchCrop( photo.image.uri, crop )}
       testID={`GroupPhotos.${photo.image.uri}`}
     >
       {photo.isDuplicateUpload && (

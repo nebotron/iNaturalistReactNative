@@ -6,6 +6,7 @@ import React, {
   useCallback, useState,
 } from "react";
 import type { LayoutChangeEvent } from "react-native";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 
 import ObsImageZoomable from "./ObsImageZoomable";
@@ -25,6 +26,15 @@ interface Props {
     uri: string;
   };
   white?: boolean;
+  // Lets a two-finger pinch zoom and pan the photo even without subject
+  // detection; the photo starts whole (or at a framing the user logged
+  // earlier) and a pinch is logged as its framing.
+  zoomable?: boolean;
+  // Hands the framing to the caller instead: the photo starts at zoomCrop
+  // and a pinch reports its new framing through onZoomCropChange rather than
+  // logging it (Group Photos, which crops the file itself).
+  zoomCrop?: NormalizedCrop | null;
+  onZoomCropChange?: ( crop: NormalizedCrop ) => void;
 }
 
 const CLASS_NAMES = [
@@ -44,34 +54,49 @@ const ObsImage = ( {
   uri,
   white = false,
   iconicTaxonIconSize,
+  zoomable = false,
+  zoomCrop,
+  onZoomCropChange,
 }: Props ) => {
   const [containerSize, setContainerSize] = useState<number | null>(
     initialContainerSize ?? null,
   );
+
+  const cropControlled = !!onZoomCropChange;
+  const zoomEnabled = autoDetectSubject || zoomable || cropControlled;
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );
   }, [] );
 
   const detection = useSubjectDetectionForUri(
-    autoDetectSubject && uri?.uri
+    zoomEnabled && !cropControlled && uri?.uri
       ? uri.uri
       : undefined,
+    // Without autoDetectSubject the detector never runs; only a crop the user
+    // framed by hand is honored.
+    { loggedCropOnly: !autoDetectSubject },
   );
 
   const displayUri = uri?.uri;
 
-  // Once subject detection resolves and the tile is measured, render the
-  // photo through the shared image-zoom engine so a two-finger gesture zooms
-  // and pans it exactly like the crop editor, MediaViewer and IDing game.
+  // Once the tile is measured (and, with autoDetectSubject, subject detection
+  // resolves) render the photo through the shared image-zoom engine so a
+  // two-finger gesture zooms and pans it exactly like the crop editor,
+  // MediaViewer and IDing game. A zoomable photo without detection starts out
+  // whole and picks up a hand-framed crop when it resolves.
   const showZoomable = Boolean(
-    autoDetectSubject && detection && containerSize && uri?.uri,
+    ( autoDetectSubject
+      ? detection
+      : zoomable || cropControlled )
+    && containerSize
+    && uri?.uri,
   );
 
   return (
     <View
       className={classNames( CLASS_NAMES, "relative overflow-hidden" )}
-      onLayout={autoDetectSubject
+      onLayout={zoomEnabled
         ? handleLayout
         : undefined}
     >
@@ -104,14 +129,19 @@ const ObsImage = ( {
             : "cover"}
         />
       ) }
-      { showZoomable && detection && displayUri && containerSize && (
+      { showZoomable && displayUri && containerSize && (
         <ObsImageZoomable
           key={uri?.uri}
           uri={displayUri}
-          logUri={uri.uri}
-          imageWidth={detection.imageWidth}
-          imageHeight={detection.imageHeight}
-          initialCrop={detection.crop}
+          logUri={cropControlled
+            ? undefined
+            : uri.uri}
+          imageWidth={detection?.imageWidth}
+          imageHeight={detection?.imageHeight}
+          initialCrop={cropControlled
+            ? zoomCrop
+            : detection?.crop}
+          onCropChange={onZoomCropChange}
           size={containerSize}
         />
       ) }
