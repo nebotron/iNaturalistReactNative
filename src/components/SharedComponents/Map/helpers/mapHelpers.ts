@@ -45,14 +45,6 @@ export function calculateZoom( width: number, delta: number ) {
   return Math.log2( 360 * ( width / 256 / delta ) ) + 1;
 }
 
-// Kind of the inverse of calculateZoom. Probably not actually accurate for
-// longitude, but works for our purposes
-export function zoomToDeltas( zoom: number, screenWidth: number, screenHeight: number ) {
-  const longitudeDelta = screenWidth / 256 / ( 2 ** zoom / 360 );
-  const latitudeDelta = screenHeight / 256 / ( 2 ** zoom / 360 );
-  return [latitudeDelta, longitudeDelta];
-}
-
 // Adapted from
 // https://github.com/inaturalist/inaturalist/blob/main/app/assets/javascripts/inaturalist/map3.js.erb#L1500
 export function obscurationCellForLatLng( lat: number, lng: number ) {
@@ -100,6 +92,38 @@ export function latitudeDeltaToMeters(
   latitude: number,
 ): number {
   return latitudeDelta * metersPerDegreeLatitude( latitude );
+}
+
+function metersPerDegreeLongitude( latitude: number ): number {
+  const phi = ( latitude * Math.PI ) / 180;
+
+  return (
+    111412.84 * Math.cos( phi )
+    - 93.5 * Math.cos( 3 * phi )
+    + 0.118 * Math.cos( 5 * phi )
+  );
+}
+
+// Deltas for a viewport widthMeters wide at the given latitude, with the
+// height following the view's aspect ratio
+export function regionForViewportWidth(
+  latitude: number,
+  widthMeters: number,
+  viewWidth: number,
+  viewHeight: number,
+): { latitudeDelta: number; longitudeDelta: number } {
+  const heightMeters = viewWidth > 0
+    ? widthMeters * ( viewHeight / viewWidth )
+    : widthMeters;
+  // Near the poles a degree of longitude shrinks toward zero
+  const longitudeDelta = Math.min(
+    widthMeters / Math.max( metersPerDegreeLongitude( latitude ), 1 ),
+    360,
+  );
+  return {
+    latitudeDelta: metersToLatitudeDelta( heightMeters, latitude ),
+    longitudeDelta,
+  };
 }
 
 // Width in degrees of a bounding box, measured eastward from swlng to nelng.

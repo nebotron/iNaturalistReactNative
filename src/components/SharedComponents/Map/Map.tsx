@@ -34,8 +34,8 @@ import {
   metersToLatitudeDelta,
   OBSCURATION_CELL_SIZE,
   obscurationCellForLatLng,
+  regionForViewportWidth,
   TILE_URL,
-  zoomToDeltas,
 } from "./helpers/mapHelpers";
 import LocationIndicator from "./LocationIndicator";
 import ObscuredLocationIndicator from "./ObscuredLocationIndicator";
@@ -47,7 +47,8 @@ import SwitchMapTypeButton from "./SwitchMapTypeButton";
 cssInterop( MapView, { className: "style" } );
 
 const NEARBY_DIM_M = 50_000;
-const CURRENT_LOCATION_ZOOM_LEVEL = 20; // target zoom level when user hits current location btn
+// width of the viewport when the user hits the current location button
+const CURRENT_LOCATION_VIEWPORT_WIDTH_M = 3_000;
 const MIN_ZOOM_LEVEL = 0; // default in react-native-maps, for Google Maps only
 const MIN_CENTER_COORDINATE_DISTANCE = 5;
 
@@ -214,6 +215,14 @@ const Map = ( {
   // gesture. This state is always null in iOS.
   const [androidAnimateRegion, setAndroidAnimateRegion] = useState<Region|null>( null );
 
+  // Measured size of the map, which isn't always the size of the screen
+  const [mapSize, setMapSize] = useState<{ width: number; height: number } | null>( null );
+  const handleMapLayout = ( event: LayoutChangeEvent ) => {
+    const { width, height } = event.nativeEvent.layout;
+    setMapSize( { width, height } );
+    onMapLayout?.( event );
+  };
+
   const animateToRegion = ( newRegion: Region ) => {
     mapViewRef.current?.animateToRegion( newRegion );
     if ( Platform.OS === "android" ) {
@@ -304,21 +313,14 @@ const Map = ( {
       onCurrentLocationPress( );
     }
     if ( userLocation && mapViewRef?.current ) {
-      // Zoom level based on location accuracy.
-      let latitudeDelta = metersToLatitudeDelta( userLocation.accuracy, userLocation.latitude );
-      // Intentional use of latitudeDelta here because longitudeDelta is harder to calculate
-      let longitudeDelta = metersToLatitudeDelta( userLocation.accuracy, userLocation.latitude );
-      // If this map redefines the level we want to zoom into when the user
-      // wants to see their current location, choose which ever is more
-      // zoomed out, the configured zoom level or the zoom level based on the
-      // coordinate accuracy
-      const [configuredLatitudeDelta, configuredLongitudeDelta] = zoomToDeltas(
-        CURRENT_LOCATION_ZOOM_LEVEL,
-        screenWidth,
-        screenHeight,
+      // Show a viewport CURRENT_LOCATION_VIEWPORT_WIDTH_M wide, with the
+      // height following the map's aspect ratio
+      const { latitudeDelta, longitudeDelta } = regionForViewportWidth(
+        userLocation.latitude,
+        CURRENT_LOCATION_VIEWPORT_WIDTH_M,
+        mapSize?.width || screenWidth,
+        mapSize?.height || screenHeight,
       );
-      latitudeDelta = Math.max( latitudeDelta, configuredLatitudeDelta );
-      longitudeDelta = Math.max( longitudeDelta, configuredLongitudeDelta );
 
       animateToRegion( {
         latitude: userLocation.latitude,
@@ -330,6 +332,7 @@ const Map = ( {
   }, [
     onCurrentLocationPress,
     hasPermissions,
+    mapSize,
     requestPermissions,
     screenHeight,
     screenWidth,
@@ -543,7 +546,7 @@ const Map = ( {
       style={mapContainerStyle}
       testID="MapView"
       className={mapContainerClass}
-      onLayout={onMapLayout}
+      onLayout={handleMapLayout}
     >
       {renderDebugZoomLevel( )}
       <MapView

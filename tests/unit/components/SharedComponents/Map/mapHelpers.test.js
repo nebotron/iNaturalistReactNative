@@ -7,6 +7,7 @@ import {
   hasValidMapCoordinates,
   regionForAccuracy,
   regionForObservationLocation,
+  regionForViewportWidth,
   regionFromBounds,
 } from "components/SharedComponents/Map/helpers/mapHelpers";
 import distanceInMeters from "sharedHelpers/geoDistance";
@@ -285,5 +286,21 @@ describe( "getMapRegion", ( ) => {
 
     expect( region.longitudeDelta ).toBeCloseTo( 18.38 * 1.4 );
     expect( region.longitude ).toBeCloseTo( 175 );
+  } );
+} );
+
+describe( "regionForViewportWidth", ( ) => {
+  it( "spans the requested width east to west", ( ) => {
+    const latitude = 47.6062;
+    const { longitudeDelta } = regionForViewportWidth( latitude, 3000, 400, 800 );
+    const width = distanceInMeters( latitude, 0, latitude, longitudeDelta );
+    expect( Math.abs( width - 3000 ) ).toBeLessThan( 30 );
+  } );
+
+  it( "matches the view's aspect ratio north to south", ( ) => {
+    const latitude = 47.6062;
+    const { latitudeDelta } = regionForViewportWidth( latitude, 3000, 400, 800 );
+    const height = distanceInMeters( latitude, 0, latitude + latitudeDelta, 0 );
+    expect( Math.abs( height - 6000 ) ).toBeLessThan( 60 );
   } );
 } );
