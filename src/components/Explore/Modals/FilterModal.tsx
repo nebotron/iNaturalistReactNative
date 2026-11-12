@@ -42,6 +42,7 @@ import {
 } from "providers/ExploreContext";
 import React, { useState } from "react";
 import type { RealmTaxon } from "realmModels/types";
+import { formatObsFieldDate, parseDateForPicker } from "sharedHelpers/dateAndTime";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import type { LocationPermissionCallbacks } from "sharedHooks/useLocationPermission";
 import { getShadow } from "styles/global";
@@ -564,14 +565,14 @@ const FilterModal = ( {
   const updateObservedExact = date => {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.EXACT_DATE,
-      newObservedOn: date.toISOString().split( "T" )[0],
+      newObservedOn: formatObsFieldDate( date ),
     } );
   };
 
   const updateObservedStart = date => {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.DATE_RANGE,
-      newD1: date.toISOString().split( "T" )[0],
+      newD1: formatObsFieldDate( date ),
       newD2: d2,
     } );
   };
@@ -580,7 +581,7 @@ const FilterModal = ( {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.DATE_RANGE,
       newD1: d1,
-      newD2: date.toISOString().split( "T" )[0],
+      newD2: formatObsFieldDate( date ),
     } );
   };
 
@@ -617,7 +618,7 @@ const FilterModal = ( {
   const updateUploadedStart = date => {
     updateDateUploaded( {
       newDateUploaded: DATE_UPLOADED.DATE_RANGE,
-      newD1: date.toISOString().split( "T" )[0],
+      newD1: formatObsFieldDate( date ),
       newD2: createdD2,
     } );
   };
@@ -626,7 +627,7 @@ const FilterModal = ( {
     updateDateUploaded( {
       newDateUploaded: DATE_UPLOADED.DATE_RANGE,
       newD1: createdD1,
-      newD2: date.toISOString().split( "T" )[0],
+      newD2: formatObsFieldDate( date ),
     } );
   };
 
@@ -964,6 +965,7 @@ const FilterModal = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
+                  date={parseDateForPicker( observedOn )}
                   isDateTimePickerVisible={openSheet === OBSERVED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedExact( date )}
@@ -1012,11 +1014,13 @@ const FilterModal = ( {
                   </View>
                 )}
                 <DateTimePicker
+                  date={parseDateForPicker( d1 )}
                   isDateTimePickerVisible={openSheet === OBSERVED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedStart( date )}
                 />
                 <DateTimePicker
+                  date={parseDateForPicker( d2 )}
                   isDateTimePickerVisible={openSheet === OBSERVED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedEnd( date )}
@@ -1060,11 +1064,12 @@ const FilterModal = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
+                  date={parseDateForPicker( createdOn )}
                   isDateTimePickerVisible={openSheet === UPLOADED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateDateUploaded( {
                     newDateUploaded: DATE_UPLOADED.EXACT_DATE,
-                    newD1: date.toISOString().split( "T" )[0],
+                    newD1: formatObsFieldDate( date ),
                   } )}
                 />
               </View>
@@ -1111,11 +1116,13 @@ const FilterModal = ( {
                   </View>
                 )}
                 <DateTimePicker
+                  date={parseDateForPicker( createdD1 )}
                   isDateTimePickerVisible={openSheet === UPLOADED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedStart( date )}
                 />
                 <DateTimePicker
+                  date={parseDateForPicker( createdD2 )}
                   isDateTimePickerVisible={openSheet === UPLOADED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedEnd( date )}

@@ -33,6 +33,9 @@ const DatePicker = ( {
   toggleDateTimePicker,
 }: Props ) => {
   const [isTimeVisible, setisTimeVisible] = React.useState( false );
+  // In the two-step iOS datetime flow, the day chosen in the first step, so
+  // the time step opens on (and returns) that day instead of today
+  const [pickedDay, setPickedDay] = React.useState<Date | null>( null );
   const [isDismissing, setIsDismissing] = React.useState( false );
   const dismissTimer = React.useRef<ReturnType<typeof setTimeout> | null>( null );
   const maxDateForTimePicker = new Date( );
@@ -46,6 +49,7 @@ const DatePicker = ( {
   // so this is where the quiet period starts.
   const _toggleDateTimePicker = ( ) => {
     setisTimeVisible( false );
+    setPickedDay( null );
     setIsDismissing( true );
     if ( dismissTimer.current ) clearTimeout( dismissTimer.current );
     dismissTimer.current = setTimeout( ( ) => setIsDismissing( false ), DISMISS_MS );
@@ -88,6 +92,7 @@ const DatePicker = ( {
           onDatePicked( selectedDate );
           _toggleDateTimePicker( );
         }}
+        date={pickedDay || date || new Date( )}
       />
     );
   }
@@ -107,6 +112,7 @@ const DatePicker = ( {
           _toggleDateTimePicker( );
         }}
         maximumDate={maxDateForTimePicker}
+        date={date || new Date( )}
       />
     );
   }
@@ -124,6 +130,7 @@ const DatePicker = ( {
       onCancel={_toggleDateTimePicker}
       onConfirm={selectedDate => {
         if ( mode === "datetime" ) {
+          setPickedDay( selectedDate );
           setisTimeVisible( true );
         } else {
           onDatePicked( selectedDate );

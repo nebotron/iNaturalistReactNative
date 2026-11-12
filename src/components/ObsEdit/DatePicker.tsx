@@ -6,6 +6,7 @@ import {
   formatISONoSeconds,
   formatLongDate,
   formatLongDatetime,
+  parseDateForPicker,
 } from "sharedHelpers/dateAndTime";
 import useTranslation from "sharedHooks/useTranslation";
 
@@ -46,9 +47,12 @@ const DatePicker = ( { currentObservation, updateObservationKeys }: Props ) => {
     return formatLongDate( observationDate, i18n, opts );
   };
 
-  const observationDateForPicker = observationDate
-    ? new Date( observationDate )
-    : new Date( );
+  const observationDateForPicker = parseDateForPicker(
+    observationDate
+      ? String( observationDate )
+      : null,
+    currentObservation?.observed_time_zone,
+  );
 
   return (
     <>

@@ -80,7 +80,7 @@ import {
   zhCN,
   zhTW,
 } from "date-fns/locale";
-import { formatInTimeZone } from "date-fns-tz";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import type { i18n as i18next } from "i18next";
 import { log } from "sharedHelpers/logger";
 
@@ -544,6 +544,38 @@ function formatObsFieldDatetime( date: Date ): string {
   );
 }
 
+// Turns a stored date/time string into the Date a picker should open on, so
+// the picker shows the value the user sees rather than today. Handles
+// "yyyy-MM-dd", "yyyy-MM-dd HH:mm", "HH:mm" and ISO 8601 strings. With a time
+// zone, a string carrying an offset is shown as wall time in that zone;
+// without one, any offset is dropped and the literal time is used, matching
+// how formatDateString displays it.
+function parseDateForPicker(
+  value?: string | null,
+  timeZone?: string | null,
+): Date | undefined {
+  let parsed: Date | undefined;
+  if ( !value ) return parsed;
+  const timeOnly = value.match( /^(\d{1,2}):(\d{2})/ );
+  if ( timeOnly ) {
+    const date = new Date( );
+    date.setHours( Number( timeOnly[1] ), Number( timeOnly[2] ), 0, 0 );
+    return date;
+  }
+  if ( timeZone ) {
+    try {
+      parsed = toZonedTime( parseISO( value ), timeZone );
+    } catch {
+      return parsed;
+    }
+  } else {
+    parsed = parseISO( value.replace( /([+-]\d\d:?\d\d|Z)$/, "" ) );
+  }
+  return parsed && isValidDate( parsed )
+    ? parsed
+    : undefined;
+}
+
 // The previous, current, and next month (1-12), wrapping around the year
 // boundary, e.g. January -> [12, 1, 2]
 function getMonthsAroundDate( date: Date = new Date( ) ): number[] {
@@ -567,4 +599,5 @@ export {
   formatProjectsApiDatetimeLong,
   getMonthsAroundDate,
   getNowISO,
+  parseDateForPicker,
 };

@@ -11,7 +11,7 @@ import {
 import { View } from "components/styledComponents";
 import type { DATE_OBSERVED, DATE_UPLOADED } from "providers/ExploreContext";
 import React, { useState } from "react";
-import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
+import { formatObsFieldDate, parseDateForPicker } from "sharedHelpers/dateAndTime";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -87,6 +87,7 @@ const DateFilterSection = <TMode extends DateFilterMode>( {
             accessibilityLabel={t( "Change-date" )}
           />
           <DateTimePicker
+            date={parseDateForPicker( exactDate )}
             isDateTimePickerVisible={openSheet === "exact"}
             toggleDateTimePicker={closeSheet}
             onDatePicked={date => onChangeExactDate( toISODate( date ) )}
@@ -131,11 +132,13 @@ const DateFilterSection = <TMode extends DateFilterMode>( {
             </View>
           )}
           <DateTimePicker
+            date={parseDateForPicker( rangeStart )}
             isDateTimePickerVisible={openSheet === "start"}
             toggleDateTimePicker={closeSheet}
             onDatePicked={date => onChangeRangeStart( toISODate( date ) )}
           />
           <DateTimePicker
+            date={parseDateForPicker( rangeEnd )}
             isDateTimePickerVisible={openSheet === "end"}
             toggleDateTimePicker={closeSheet}
             onDatePicked={date => onChangeRangeEnd( toISODate( date ) )}

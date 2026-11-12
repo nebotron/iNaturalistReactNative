@@ -17,6 +17,7 @@ import {
   formatProjectsApiDatetimeLong,
   getMonthsAroundDate,
   getNowISO,
+  parseDateForPicker,
 } from "sharedHelpers/dateAndTime";
 
 const remoteObservation = factory( "RemoteObservation", {
@@ -278,5 +279,41 @@ describe( "getMonthsAroundDate", ( ) => {
 
   it( "wraps around the end of the year", ( ) => {
     expect( getMonthsAroundDate( new Date( 2026, 11, 31 ) ) ).toEqual( [11, 12, 1] );
+  } );
+} );
+
+describe( "parseDateForPicker", ( ) => {
+  it( "returns undefined for a missing or unparseable value", ( ) => {
+    expect( parseDateForPicker( null ) ).toBeUndefined( );
+    expect( parseDateForPicker( "" ) ).toBeUndefined( );
+    expect( parseDateForPicker( "not a date" ) ).toBeUndefined( );
+  } );
+
+  it( "parses a date-only string as local midnight on that day", ( ) => {
+    expect( parseDateForPicker( "2024-05-01" ) ).toEqual( new Date( 2024, 4, 1 ) );
+  } );
+
+  it( "parses date and time with a space or T separator", ( ) => {
+    expect( parseDateForPicker( "2024-05-01 10:30" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+    expect( parseDateForPicker( "2024-05-01T10:30" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+  } );
+
+  it( "uses the literal time when there is no time zone", ( ) => {
+    expect( parseDateForPicker( "2024-05-01T10:30:00-07:00" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+  } );
+
+  it( "uses wall time in the given time zone", ( ) => {
+    expect( parseDateForPicker( "2024-05-01T17:30:00Z", "America/Los_Angeles" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+  } );
+
+  it( "puts a time-only value on today", ( ) => {
+    const parsed = parseDateForPicker( "08:15" );
+    const expected = new Date( );
+    expected.setHours( 8, 15, 0, 0 );
+    expect( parsed ).toEqual( expected );
   } );
 } );
