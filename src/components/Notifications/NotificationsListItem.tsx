@@ -1,5 +1,4 @@
 import { useNavigation } from "@react-navigation/native";
-import type { InfiniteData } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { markObservationUpdatesViewed } from "api/observations";
 import classnames from "classnames";
@@ -8,6 +7,9 @@ import { Pressable, View } from "components/styledComponents";
 import React, { useEffect, useState } from "react";
 import { useAuthenticatedMutation, useLayoutPrefs } from "sharedHooks";
 import type { Notification } from "sharedHooks/useInfiniteNotificationsScroll";
+import {
+  markObservationNotificationsViewedLocally,
+} from "sharedHooks/useUnviewedNotificationsCount";
 import { OBS_DETAILS_TAB } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 
@@ -54,20 +56,7 @@ const NotificationsListItem = ( { notification }: Props ) => {
       )}
       onPress={( ) => {
         setLocalViewed( true );
-        // The server marks every update on the observation viewed, so clear
-        // them all here too, in every notifications list
-        queryClient.setQueriesData<InfiniteData<Notification[]>>(
-          { queryKey: ["useInfiniteNotificationsScroll"] },
-          data => data && {
-            ...data,
-            pages: data.pages.map( page => page.map( n => (
-              n.resource_uuid === notification.resource_uuid
-                ? { ...n, viewed: true }
-                : n
-            ) ) ),
-          },
-        );
-        setObservationMarkedAsViewedAt( new Date( ) );
+        markObservationNotificationsViewedLocally( queryClient, notification.resource_uuid );
         if ( !notification.viewed ) {
           markViewed( { id: notification.resource_uuid } );
         }

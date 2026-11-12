@@ -1,3 +1,4 @@
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchUnviewedObservationUpdatesCount } from "api/observations";
 import type { ApiObservationsUpdatesParams, ApiOpts } from "api/types";
@@ -11,6 +12,7 @@ import useStore from "stores/useStore";
 
 import useAuthenticatedQuery from "./useAuthenticatedQuery";
 import useCurrentUser from "./useCurrentUser";
+import type { Notification } from "./useInfiniteNotificationsScroll";
 import {
   fetchNotificationsPage,
   getNotificationsQueryKey,
@@ -21,6 +23,55 @@ const { useRealm } = RealmContext;
 const TAB_PARAMS: Record<"owner" | "following", ApiObservationsUpdatesParams> = {
   owner: { observations_by: "owner" },
   following: { observations_by: "following" },
+};
+
+const NOTIFICATIONS_COUNT_KEY = "notificationsCount";
+
+// The server marks every update on an observation viewed at once. Mirror that
+// in the cached notification lists and take the same updates off the cached
+// unviewed counts, so the green highlights and the red dots on the tab bar and
+// tab headers clear together instead of the dots waiting on a refetch.
+export const markObservationNotificationsViewedLocally = (
+  queryClient: QueryClient,
+  resourceUuid: string,
+) => {
+  const cleared: Record<string, Set<number>> = { owner: new Set( ), following: new Set( ) };
+  queryClient.getQueriesData<InfiniteData<Notification[]>>(
+    { queryKey: ["useInfiniteNotificationsScroll"] },
+  ).forEach( ( [queryKey, data] ) => {
+    const tab = JSON.parse( String( queryKey[1] ) ).observations_by;
+    data?.pages.flat( ).forEach( n => {
+      if ( n.resource_uuid === resourceUuid && !n.viewed ) cleared[tab]?.add( n.id );
+    } );
+  } );
+
+  queryClient.setQueriesData<InfiniteData<Notification[]>>(
+    { queryKey: ["useInfiniteNotificationsScroll"] },
+    data => data && {
+      ...data,
+      pages: data.pages.map( page => page.map( n => (
+        n.resource_uuid === resourceUuid
+          ? { ...n, viewed: true }
+          : n
+      ) ) ),
+    },
+  );
+
+  Object.entries( cleared ).forEach( ( [tab, ids] ) => {
+    if ( ids.size === 0 ) return;
+    const queryKey = [NOTIFICATIONS_COUNT_KEY, tab];
+    // A count request already in flight started before this observation was
+    // marked viewed, and would put the stale number back when it lands
+    // (cancelling reverts it asynchronously, so write only after that)
+    queryClient.cancelQueries( { queryKey } ).then( ( ) => {
+      queryClient.setQueryData<number>(
+        queryKey,
+        count => ( typeof count === "number"
+          ? Math.max( 0, count - ids.size )
+          : count ),
+      );
+    } );
+  } );
 };
 
 const useUnviewedNotificationsCount = () => {
@@ -59,7 +110,7 @@ const useUnviewedNotificationsCount = () => {
   }, [queryClient, realm, currentUser] );
 
   const { data: ownerUnviewedCount, refetch: refetchOwner } = useAuthenticatedQuery(
-    ["notificationsCount", "owner"],
+    [NOTIFICATIONS_COUNT_KEY, "owner"],
     ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
       { observations_by: "owner" },
       optsWithAuth,
@@ -68,7 +119,7 @@ const useUnviewedNotificationsCount = () => {
   );
 
   const { data: followingUnviewedCount, refetch: refetchFollowing } = useAuthenticatedQuery(
-    ["notificationsCount", "following"],
+    [NOTIFICATIONS_COUNT_KEY, "following"],
     ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
       { observations_by: "following" },
       optsWithAuth,
