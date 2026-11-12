@@ -18,8 +18,9 @@ on:
 jobs:
   testflight:
     runs-on: ${{ inputs.runner }}
-    # Kill the task if not finished after 120 minutes
-    timeout-minutes: 120
+    # Kill the task if not finished after 120 minutes. An Intel runner's
+    # archive takes ~80-90 minutes without a warm ccache, so give it longer.
+    timeout-minutes: ${{ contains( inputs.runner, 'intel' ) && 180 || 120 }}
     env:
       TEAM_ID: DVURLJZFH6
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
