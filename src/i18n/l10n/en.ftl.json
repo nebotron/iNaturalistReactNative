@@ -1259,8 +1259,6 @@
   "Tunable-audioIdCallPeakRange-description": "When a call's peak is below the call logit, how far below its peak a moment can be and still count as part of it.",
   "Tunable-audioIdDimAfterSeconds": "Audio ID dim after (seconds)",
   "Tunable-audioIdDimAfterSeconds-description": "Seconds without a touch before the Audio ID screen dims.",
-  "Tunable-audioIdFlashSeconds": "Audio ID alert duration (seconds)",
-  "Tunable-audioIdFlashSeconds-description": "Seconds the screen brightens when a new species is heard.",
   "Tunable-audioIdMinCallSeconds": "Audio ID minimum call length (seconds)",
   "Tunable-audioIdMinCallSeconds-description": "Shortest a found call is trimmed to, in seconds.",
   "Tunable-audioIdNewCallGapSeconds": "Audio ID new call gap (seconds)",

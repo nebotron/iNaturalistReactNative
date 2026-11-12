@@ -2098,10 +2098,6 @@ Tunable-audioIdDimAfterSeconds = Audio ID dim after (seconds)
 # Description of a tunable parameter in settings
 Tunable-audioIdDimAfterSeconds-description = Seconds without a touch before the Audio ID screen dims.
 # Label for a tunable parameter in settings
-Tunable-audioIdFlashSeconds = Audio ID alert duration (seconds)
-# Description of a tunable parameter in settings
-Tunable-audioIdFlashSeconds-description = Seconds the screen brightens when a new species is heard.
-# Label for a tunable parameter in settings
 Tunable-audioIdMinCallSeconds = Audio ID minimum call length (seconds)
 # Description of a tunable parameter in settings
 Tunable-audioIdMinCallSeconds-description = Shortest a found call is trimmed to, in seconds.

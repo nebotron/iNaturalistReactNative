@@ -14,7 +14,7 @@ import React, {
 import { Trans } from "react-i18next";
 import type { ViewProps } from "react-native";
 import {
-  AppState, Linking, Modal, requireNativeComponent,
+  AppState, Linking, Modal, requireNativeComponent, StatusBar,
 } from "react-native";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
@@ -400,12 +400,15 @@ const AudioId = ( ) => {
 
         <View className="h-20" />
       </ScrollView>
-      {/* Covers the header and tab bar too; a touch only wakes it */}
-      <Modal transparent visible={dimmed} animationType="fade">
+      {/* Pure black over everything, header, tab bar and status bar included,
+        so OLED pixels switch off. Opaque, so iOS stops compositing the screen
+        beneath it. A touch only wakes it. */}
+      <Modal visible={dimmed} animationType="fade">
+        {dimmed && <StatusBar hidden />}
         <Pressable
           accessibilityRole="button"
           accessibilityHint={t( "Brightens-the-screen" )}
-          className="flex-1 bg-black/95"
+          className="flex-1 bg-black"
           onPress={noteActivity}
         />
       </Modal>
