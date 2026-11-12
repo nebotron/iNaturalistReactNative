@@ -194,11 +194,17 @@ const SoundContainer = ( {
       playBackState.currentPosition > 0
       && playBackState.currentPosition < playBackState.duration
     ) {
+      // Resume where the playhead stopped, as on the Audio ID clip screen: the
+      // player's last reported position can be up to 100 ms behind it, which
+      // pulled the playhead back on every resume.
+      const resumeAt = durationMs.current > 0
+        ? Math.min( position, 0.999 ) * durationMs.current
+        : playBackState.currentPosition;
       // player.resumePlayer() doesn't work if another sound was played after
       // this one was paused, so if we swiped away, we re-init the player and
       // seek to the previous position
       if ( swipedAway ) {
-        playSound( playBackState.currentPosition );
+        playSound( resumeAt );
       } else {
         // If we haven't swiped away, we can use resumePlayer, which also
         // seems to not cause the progress to jump back to 0 and then to the
@@ -207,7 +213,7 @@ const SoundContainer = ( {
         // resumePlayer seemed to make slider stop when audio kept playing
         // when toggle was pressed repeatedly
         // occasionally jumps back to 0, havent been able to repicate consistently.
-        playSound( playBackState.currentPosition );
+        playSound( resumeAt );
       }
     } else {
       playSound( );
@@ -217,6 +223,7 @@ const SoundContainer = ( {
     playBackState.duration,
     playing,
     playSound,
+    position,
     swipedAway,
     stopSound] );
 

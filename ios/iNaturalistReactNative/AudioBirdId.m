@@ -213,6 +213,48 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   return image;
 }
 
+// The sound in the file at `url` as AB_SR mono, as the model and spectrograms
+// take it, or nil and an error.
+static AVAudioPCMBuffer *ABReadMono( NSURL *url, NSError **error )
+{
+  AVAudioFile *file = [[AVAudioFile alloc] initForReading:url error:error];
+  AVAudioPCMBuffer *buffer = file
+    ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                    frameCapacity:(AVAudioFrameCount)file.length]
+    : nil;
+  if ( !buffer || ![file readIntoBuffer:buffer error:error] ) return nil;
+  AVAudioFormat *format = buffer.format;
+  if ( format.sampleRate == AB_SR && format.channelCount == 1 ) return buffer;
+  AVAudioFormat *mono = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
+                                                         sampleRate:AB_SR channels:1
+                                                        interleaved:NO];
+  AVAudioConverter *converter = [[AVAudioConverter alloc] initFromFormat:format toFormat:mono];
+  converter.downmix = YES;
+  AVAudioPCMBuffer *out = [[AVAudioPCMBuffer alloc] initWithPCMFormat:mono
+    // In doubles: frameLength * AB_SR in 32 bits wraps past about 3 s of audio.
+    frameCapacity:(AVAudioFrameCount)ceil( (double)buffer.frameLength * AB_SR
+                                           / format.sampleRate ) + 32];
+  __block BOOL fed = NO;
+  NSError *convertError = nil;
+  [converter convertToBuffer:out error:&convertError
+          withInputFromBlock:^AVAudioBuffer *( AVAudioPacketCount n,
+                                               AVAudioConverterInputStatus *status ) {
+    *status = fed ? AVAudioConverterInputStatus_EndOfStream
+                  : AVAudioConverterInputStatus_HaveData;
+    if ( fed ) return nil;
+    fed = YES;
+    return buffer;
+  }];
+  if ( convertError || out.frameLength == 0 ) {
+    if ( error ) {
+      *error = convertError ?: [NSError errorWithDomain:@"AudioBirdId" code:0
+        userInfo:@{ NSLocalizedDescriptionKey: @"Could not convert the sound" }];
+    }
+    return nil;
+  }
+  return out;
+}
+
 @interface AudioBirdId : RCTEventEmitter <RCTBridgeModule, UNUserNotificationCenterDelegate>
 @end
 
@@ -732,39 +774,12 @@ RCT_EXPORT_METHOD( scoreSound:( NSString * )uri
   }
   NSString *name = [NSUUID UUID].UUIDString;
   [self withLocalSound:uri name:name done:^( NSURL *source, NSError *error ) {
-    AVAudioFile *file = source ? [[AVAudioFile alloc] initForReading:source error:&error] : nil;
-    AVAudioPCMBuffer *buffer = file
-      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
-                                      frameCapacity:(AVAudioFrameCount)file.length]
-      : nil;
-    if ( !buffer || ![file readIntoBuffer:buffer error:&error] ) {
+    AVAudioPCMBuffer *out = source ? ABReadMono( source, &error ) : nil;
+    if ( !out ) {
       reject( @"sound", error.localizedDescription ?: @"Could not read the sound", error );
       return;
     }
-    AVAudioFormat *mono = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
-                                                           sampleRate:AB_SR channels:1
-                                                          interleaved:NO];
-    AVAudioConverter *converter = [[AVAudioConverter alloc] initFromFormat:buffer.format
-                                                                  toFormat:mono];
-    converter.downmix = YES;
-    AVAudioPCMBuffer *out = [[AVAudioPCMBuffer alloc] initWithPCMFormat:mono
-      frameCapacity:(AVAudioFrameCount)ceil( buffer.frameLength * AB_SR
-                                             / buffer.format.sampleRate ) + 32];
-    __block BOOL fed = NO;
-    [converter convertToBuffer:out error:&error
-            withInputFromBlock:^AVAudioBuffer *( AVAudioPacketCount n,
-                                                 AVAudioConverterInputStatus *status ) {
-      *status = fed ? AVAudioConverterInputStatus_EndOfStream
-                    : AVAudioConverterInputStatus_HaveData;
-      if ( fed ) return nil;
-      fed = YES;
-      return buffer;
-    }];
     NSInteger n = out.frameLength;
-    if ( error || n == 0 ) {
-      reject( @"sound", error.localizedDescription ?: @"Could not convert the sound", error );
-      return;
-    }
     NSInteger length = MAX( n, (NSInteger)AB_WIN );
     float *samples = (float *)calloc( length, sizeof( float ) );
     memcpy( samples, out.floatChannelData[0], n * sizeof( float ) );
@@ -1622,7 +1637,7 @@ RCT_EXPORT_MODULE( )
 
 @end
 
-// Draws the whole of the clip at `path` (32 kHz mono, as Audio ID saves them)
+// Draws the whole of the sound at `path`, at 32 kHz mono like Audio ID clips,
 // as a spectrogram stretched to the view's width.
 @interface AudioClipSpectrogramView : UIView
 @property ( nonatomic, copy ) NSString *path;
@@ -1638,13 +1653,10 @@ RCT_EXPORT_MODULE( )
   self.layer.contents = nil;
   __weak AudioClipSpectrogramView *weakSelf = self;
   dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
-    AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path] error:nil];
-    AVAudioPCMBuffer *buffer = file
-      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
-                                      frameCapacity:(AVAudioFrameCount)file.length]
-      : nil;
-    if ( !buffer || ![file readIntoBuffer:buffer error:nil]
-         || buffer.frameLength < AB_SPEC_N ) return;
+    // Observation sounds are usually 44.1 or 48 kHz; at their own rate the
+    // bins and columns would cover other frequencies and times than a clip's.
+    AVAudioPCMBuffer *buffer = ABReadMono( [NSURL fileURLWithPath:path], nil );
+    if ( !buffer || buffer.frameLength < AB_SPEC_N ) return;
     NSInteger width = ( buffer.frameLength - AB_SPEC_N ) / AB_SPEC_HOP + 1;
     uint8_t *levels = malloc( width * AB_SPEC_H );
     float noise[AB_SPEC_H];
