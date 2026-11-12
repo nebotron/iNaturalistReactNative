@@ -2535,6 +2535,60 @@ static UIImage *eagerlyDecodedImageAtPath(
   return image;
 }
 
+// How much memory one prepare of a large photo can take at its peak: a 32MP
+// 10-bit HDR HEIF is decoded, converted to 8-bit sRGB (through intermediate
+// buffers larger than either end) into a ~130MB bitmap, and JPEG-encoded at
+// full size. Two of these at once, beside the previous photo's crop and the
+// Group Photos thumbnails, is the likeliest reason the app died mid bulk crop
+// on Nov 12 with no error logged: bulk-crop days peaked at 3.1-3.3GB, and one
+// of them had two foreground memory-limit exits. source.freeMB and
+// stageMs.memWait in crop_photo_slow show how close a prepare came.
+static const uint64_t kPrepareReserveMB = 768;
+
+// Prepares are concurrent (cropPreloadConcurrency in JS), but one only starts
+// beside others while there is room for it and for what those still running
+// may yet allocate. The first never waits, so a bulk crop always progresses.
+static NSCondition *prepareSlots( void )
+{
+  static NSCondition    *condition;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{ condition = [[NSCondition alloc] init]; } );
+  return condition;
+}
+static int runningPrepares = 0;
+
+// Blocks until this prepare may run. Returns the free memory it started with;
+// waitedMs gets how long it waited for room.
+static uint64_t acquirePrepareSlot( int *waitedMs )
+{
+  NSCondition   *slots   = prepareSlots( );
+  NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
+  [slots lock];
+  uint64_t available = freeMB( );
+  while ( runningPrepares > 0
+    && available < (uint64_t)( runningPrepares + 1 ) * kPrepareReserveMB ) {
+    // Memory also comes back without a prepare finishing (a crop's write, the
+    // grid's thumbnails), so look again now and then rather than only on signal.
+    [slots waitUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.2]];
+    available = freeMB( );
+  }
+  runningPrepares += 1;
+  [slots unlock];
+  *waitedMs = (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 );
+  return available;
+}
+
+// Paired with acquirePrepareSlot through __attribute__((cleanup)), so every
+// return out of a prepare gives its slot back.
+static void releasePrepareSlot( uint64_t *unused )
+{
+  NSCondition *slots = prepareSlots( );
+  [slots lock];
+  runningPrepares -= 1;
+  [slots broadcast];
+  [slots unlock];
+}
+
 // Everything the crop editor needs from a photo, out of a single decode of it:
 // the pixel dimensions a decoder actually produces, a display-sized JPEG for
 // React Native to draw, and the subject bounds. The editor used to take these
@@ -2558,6 +2612,9 @@ RCT_EXPORT_METHOD( prepareCropSource
   // raw decode lock, or the decode, encode and write themselves.
   NSTimeInterval calledAt = [NSDate timeIntervalSinceReferenceDate];
   dispatch_async( cropPrepareQueue( ), ^{
+    int memWaitMs = 0;
+    __attribute__( ( cleanup( releasePrepareSlot ) ) ) uint64_t startFreeMB =
+      acquirePrepareSlot( &memWaitMs );
     NSTimeInterval startedAt = [NSDate timeIntervalSinceReferenceDate];
     NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
     NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
@@ -2675,6 +2732,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       CFRelease( headerSrc );
     }
     [source addEntriesFromDictionary:decodedInfo];
+    source[@"freeMB"] = @( startFreeMB );
 
     // Free the full-resolution pixels and their JPEG as soon as they're on disk,
     // keeping only what detection needs, so the next raw decode has room.
@@ -2703,6 +2761,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"source":        source,
       @"stageMs": @{
         @"queue":  @( (int)( ( startedAt - calledAt ) * 1000 ) ),
+        @"memWait": @( memWaitMs ),
         @"lock":   @( (int)( ( lockedAt - startedAt ) * 1000 ) ),
         @"draw":    @( drawMs ),
         @"decode":  @( decodeMs ),

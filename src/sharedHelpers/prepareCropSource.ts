@@ -33,6 +33,9 @@ export interface PreparedSourceFile {
   space?: string;
   hdr?: boolean;
   eager?: boolean;
+  // Memory iOS would still let the app allocate when this prepare started,
+  // after waiting (stageMs.memWait) for room beside other running prepares.
+  freeMB?: number;
 }
 
 interface PreparedSource {
