@@ -33,6 +33,7 @@ import {
   useMyObservations,
 } from "providers/MyObservationsContext";
 import React, { useCallback, useMemo } from "react";
+import { Alert } from "react-native";
 import Photo from "realmModels/Photo";
 import type {
   RealmObservation,
@@ -581,7 +582,9 @@ const MyObservationsSimple = ( {
     return renderOfflineNotice( );
   };
 
-  function showOfflineAlert( ) { }
+  function showOfflineAlert( ) {
+    Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
+  }
 
   const handleSpeciesSortConfirm = ( optionId: SPECIES_SORT ) => {
     if ( currentUser && !isConnected ) {

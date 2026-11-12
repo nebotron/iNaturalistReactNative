@@ -63,7 +63,9 @@ enum MenuModalState {
 
 const feedbackLogger = log.extend( "feedback" );
 
-function showOfflineAlert( _t: ( _: string ) => string ) { }
+function showOfflineAlert( t: ( _: string ) => string ) {
+  Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
+}
 
 const getDeviceMetricsForFeedback = async () => {
   const freeDiskBytes = await DeviceInfo.getFreeDiskStorage();
