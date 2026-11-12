@@ -292,6 +292,27 @@ jobs:
           echo '```'
         } | tee -a "$GITHUB_STEP_SUMMARY"
 
+    # MetricKit's CPU and disk-write exception stacks give the app's own frames
+    # as offsets into the stripped binary. The dSYM's function table, demangled
+    # and gzipped, is a few MB rather than the dSYM's hundreds, and is all
+    # scripts/power_report.py --symbols needs to name them. Never fails the
+    # upload: a build without it is only harder to profile.
+    - name: Save the symbol table for MetricKit stacks
+      continue-on-error: true
+      run: |
+        set -o pipefail
+        DWARF="$ARCHIVE_PATH/dSYMs/iNaturalistReactNative.app.dSYM/Contents/Resources/DWARF/iNaturalistReactNative"
+        mkdir -p "$RUNNER_TEMP/symbols"
+        xcrun nm -n -U "$DWARF" | c++filt | xcrun swift-demangle --simplified \
+          | gzip -9 > "$RUNNER_TEMP/symbols/$BUILD_NUMBER.txt.gz"
+    - name: Upload the symbol table
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: symbols-${{ env.BUILD_NUMBER }}
+        path: ${{ runner.temp }}/symbols/${{ env.BUILD_NUMBER }}.txt.gz
+        retention-days: 90
+
     # destination=upload has the export sign the IPA and send it to App Store
     # Connect itself, saving the separate altool upload's repackaging pass.
     # uploadSymbols is off to keep the upload small, so TestFlight crash

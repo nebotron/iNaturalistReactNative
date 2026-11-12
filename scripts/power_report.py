@@ -13,12 +13,22 @@ Usage:
   python3 scripts/power_report.py                # everything in the log
   python3 scripts/power_report.py --days 7       # payloads from the last week
   python3 scripts/power_report.py --file log.json  # an app_log.py --dump file
+  python3 scripts/power_report.py --symbols DIR  # name the app's own frames
+
+MetricKit stacks give the app's own frames as offsets into the binary, which
+is stripped, so they mean nothing on their own (or name whatever exported
+symbol happens to precede them). Each TestFlight build saves a symbol table as
+the workflow artifact `symbols-<build number>` (testflight-ios-build.yml);
+unzip it into DIR (default scripts/.symbols) and those frames get their names.
 """
 
 from __future__ import annotations
 
 import argparse
+import bisect
+import gzip
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -117,15 +127,66 @@ def print_signposts( entries: list[dict] ) -> None:
     print()
 
 
-def print_exceptions( entries: list[dict], message: str, amount: str, unit: str ) -> None:
+APP_BINARY = "iNaturalistReactNative"
+# Where an arm64 iOS executable's __TEXT segment starts, which the symbol
+# table's addresses include and MetricKit's offsets don't
+TEXT_BASE = 0x100000000
+APP_FRAME = re.compile( rf"^(\s*){APP_BINARY}\b.*\(?\+0x([0-9a-f]+)\)?\s*$" )
+
+
+class Symbols:
+    """Function start addresses and names from `nm -n` output, for one build."""
+
+    def __init__( self, path: Path ):
+        opener = gzip.open if path.suffix == ".gz" else open
+        self.addresses: list[int] = []
+        self.names: list[str] = []
+        with opener( path, "rt", errors="replace" ) as f:
+            for line in f:
+                parts = line.rstrip( "\n" ).split( " ", 2 )
+                if len( parts ) < 3 or parts[1] not in ( "t", "T" ):
+                    continue
+                self.addresses.append( int( parts[0], 16 ) )
+                self.names.append( parts[2] )
+
+    def name( self, offset: int ) -> str | None:
+        i = bisect.bisect_right( self.addresses, TEXT_BASE + offset ) - 1
+        if i < 0:
+            return None
+        return f"{self.names[i]} +{TEXT_BASE + offset - self.addresses[i]}"
+
+
+def load_symbols( directory: Path | None, build: str | None ) -> Symbols | None:
+    if not directory or not build:
+        return None
+    for candidate in ( directory / f"{build}.txt.gz", directory / f"{build}.txt",
+                       directory / f"symbols-{build}" / f"{build}.txt.gz" ):
+        if candidate.exists():
+            return Symbols( candidate )
+    return None
+
+
+def symbolicate( line: str, symbols: Symbols | None ) -> str:
+    match = APP_FRAME.match( line )
+    if not symbols or not match:
+        return line
+    name = symbols.name( int( match.group( 2 ), 16 ) )
+    return f"{match.group( 1 )}{APP_BINARY} {name}" if name else line
+
+
+def print_exceptions( entries: list[dict], message: str, amount: str, unit: str,
+                      symbols_dir: Path | None = None ) -> None:
     found = [e for e in entries if e.get( "message" ) == message]
     print( f"{message}: {len( found )}" )
     for e in found[-5:]:
-        print( f"  {e.get( 'from', '' )[:16]} build {e.get( 'appBuild' )} "
-               f"{e.get( amount )} {unit}" )
+        build = e.get( "appBuild" )
+        symbols = load_symbols( symbols_dir, build )
+        print( f"  {e.get( 'from', '' )[:16]} build {build} "
+               f"{e.get( amount )} {unit}"
+               + ( "" if symbols or not symbols_dir else "  (no symbols for this build)" ) )
         frames = [line for line in str( e.get( "stack", "" ) ).splitlines() if line.strip()]
         for line in frames[:12]:
-            print( f"    {line}" )
+            print( f"    {symbolicate( line, symbols )}" )
     print()
 
 
@@ -134,7 +195,10 @@ def main() -> None:
                                       formatter_class=argparse.RawDescriptionHelpFormatter )
     parser.add_argument( "--days", type=int, help="only payloads that start in the last N days" )
     parser.add_argument( "--file", help="read entries from an app_log.py --dump file" )
+    parser.add_argument( "--symbols", type=Path, default=Path( __file__ ).parent / ".symbols",
+                         help="directory of <build>.txt.gz symbol tables (default scripts/.symbols)" )
     args = parser.parse_args()
+    symbols_dir = args.symbols if args.symbols.is_dir() else None
 
     if args.file:
         entries = json.loads( Path( args.file ).read_text() )
@@ -149,8 +213,8 @@ def main() -> None:
 
     print_daily( [e for e in entries if e.get( "message" ) == "metrickit_daily"] )
     print_signposts( [e for e in entries if e.get( "message" ) == "metrickit_signpost"] )
-    print_exceptions( entries, "metrickit_disk_write_exception", "writesMB", "MB" )
-    print_exceptions( entries, "metrickit_cpu_exception", "cpuSeconds", "CPU s" )
+    print_exceptions( entries, "metrickit_disk_write_exception", "writesMB", "MB", symbols_dir )
+    print_exceptions( entries, "metrickit_cpu_exception", "cpuSeconds", "CPU s", symbols_dir )
 
 
 if __name__ == "__main__":
