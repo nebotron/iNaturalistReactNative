@@ -245,6 +245,10 @@ const AudioId = ( ) => {
     listening, error, current, setup, setSeen, start,
     stop,
   } = useWhileBright( useAudioIdSession, state => state );
+  // Start listening when the screen opens; a no-op if already listening
+  useEffect( ( ) => {
+    useAudioIdSession.getState( ).start( );
+  }, [] );
   const dimmed = useScreenDimmed( );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
