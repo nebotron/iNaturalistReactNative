@@ -4,12 +4,19 @@ const makeRealm = observations => ( {
   objects: ( ) => observations,
 } );
 
-const makeObservation = ( { faved, deviceUris = [], uuid } ) => ( {
+const makeObservation = ( {
+  faved, deviceUris = [], uuid, uploadedUris = [],
+} ) => ( {
   uuid,
   votes: faved
     ? [{ vote_scope: null }]
     : [],
-  observationPhotos: deviceUris.map( uri => ( { originalDevicePhotoUri: uri } ) ),
+  observationPhotos: deviceUris.map( uri => ( {
+    originalDevicePhotoUri: uri,
+    _synced_at: uploadedUris.includes( uri )
+      ? new Date( )
+      : null,
+  } ) ),
 } );
 
 const makeCache = entries => new Map(
@@ -32,6 +39,20 @@ describe( "classifyDevicePhotoUris", ( ) => {
     ] );
 
     expect( classifyDevicePhotoUris( realm ).unfavorited ).toEqual( ["ph://DELETE"] );
+  } );
+
+  it( "lists uploaded photos, faved or not, as uploaded or removed", ( ) => {
+    const realm = makeRealm( [
+      makeObservation( {
+        faved: false, deviceUris: ["ph://UP", "ph://PENDING"], uploadedUris: ["ph://UP"],
+      } ),
+      makeObservation( {
+        faved: true, deviceUris: ["ph://FAVED_UP"], uploadedUris: ["ph://FAVED_UP"],
+      } ),
+    ] );
+
+    expect( classifyDevicePhotoUris( realm ).uploadedOrRemoved )
+      .toEqual( ["ph://UP", "ph://FAVED_UP"] );
   } );
 
   it( "trusts the cache over stale Realm votes", ( ) => {

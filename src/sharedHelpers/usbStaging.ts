@@ -16,9 +16,9 @@ const logger = log.extend( "usbStaging" );
 
 // Photos copied off a USB drive land here instead of in the Photos library, so
 // the ones the user doesn't fave never need deleting from it. A staged photo
-// is deleted usbStagingRetentionDays after it was first seen on an observation
-// (faved or not) or removed in the photo picker, Group Photos or the cropper.
-// One the user never imports or removes is kept indefinitely. A photo on a
+// is deleted usbStagingRetentionDays after its upload to iNaturalist finished
+// (faved or not) or it was removed in the photo picker, Group Photos or the
+// cropper. One never uploaded or removed is kept indefinitely. A photo on a
 // faved observation is also saved to Photos (into an album the user moves to
 // their Shared Library) as soon as the observation is faved, and is never
 // deleted before that save succeeds. Staged names are "<stagedAtMs>_<file
@@ -29,9 +29,12 @@ const SHARED_LIBRARY_ALBUM_TITLE = "→ Shared Library";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OFFERED_KEY = "offeredNames";
-// Staged name → when its retention clock started.
-const CLOCK_KEY = "clockStartedAt";
+// Staged name → when its retention clock started. Renamed when the clock
+// moved from "first on an observation" to "upload finished", so no photo keeps
+// a clock started before its upload.
+const CLOCK_KEY = "uploadedOrRemovedAt";
 const store = new MMKV( { id: "usb-staging" } );
+store.delete( "clockStartedAt" );
 
 const getOffered = ( ): string[] => JSON.parse( store.getString( OFFERED_KEY ) ?? "[]" );
 const setOffered = ( names: string[] ) => store.set( OFFERED_KEY, JSON.stringify( names ) );
@@ -159,7 +162,7 @@ let breakdownLoggedAt = 0;
 
 // What is holding the staging folder's space, at most once a day: photos
 // whose retention clock is running, and photos kept indefinitely because they
-// were never imported or removed.
+// were never uploaded or removed.
 const logStagingBreakdown = (
   staged: { name: string; size: number | string }[],
   clocks: Record<string, number>,
@@ -191,14 +194,15 @@ const logStagingBreakdown = (
 };
 
 // favoritedUris: device photo URIs on observations the user has faved.
-// unfavoritedUris: those on other observations, or removed in the photo
-// picker, Group Photos or the cropper.
+// uploadedOrRemovedUris: device photos whose upload to iNaturalist finished,
+// faved or not, or removed in the photo picker, Group Photos or the cropper.
+// Their retention clock starts the first time a sweep sees them here.
 // onSavedToPhotos: the library URIs of faved photos just saved to Photos, which
 // are new assets the photo picker would otherwise offer again.
 // crops: device photo URI → its crop on the observation.
 export const sweepUsbStaging = async (
   favoritedUris: string[],
-  unfavoritedUris: string[],
+  uploadedOrRemovedUris: string[],
   onSavedToPhotos?: ( uris: string[] ) => void,
   crops: Record<string, NormalizedCrop> = {},
 ) => {
@@ -220,9 +224,7 @@ export const sweepUsbStaging = async (
     const stagedNames = new Set( staged.map( item => item.name ) );
     const clocks = Object.fromEntries( Object.entries( getClocks( ) )
       .filter( ( [name] ) => stagedNames.has( name ) ) );
-    // Imported or removed: faved or not, the clock starts the first time a
-    // sweep sees it so.
-    [...favoritedUris, ...unfavoritedUris].forEach( uri => {
+    uploadedOrRemovedUris.forEach( uri => {
       const name = stagedNameFromUri( uri );
       if ( name && stagedNames.has( name ) && clocks[name] === undefined ) {
         clocks[name] = Date.now( );

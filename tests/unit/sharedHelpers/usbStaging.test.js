@@ -36,35 +36,45 @@ describe( "sweepUsbStaging", ( ) => {
   beforeEach( ( ) => { jest.useFakeTimers( { now: 0 } ); } );
   afterEach( ( ) => { jest.useRealTimers( ); } );
 
-  it( "saves a faved photo to the Shared Library album once, then expires it", async ( ) => {
+  it( "saves a faved photo once, and expires it three days after it uploads", async ( ) => {
+    const faved = uri( "1_FAVED.JPG" );
     mockFiles = ["1_FAVED.JPG"];
-    await sweepUsbStaging( [uri( "1_FAVED.JPG" )], [] );
+    // Faved before its upload finished: saved to Photos, but no clock yet.
+    await sweepUsbStaging( [faved], [] );
     expect( CameraRoll.saveAsset ).toHaveBeenCalledWith(
       "file:///docs/usbStaging/1_FAVED.JPG",
       { type: "photo", album: "→ Shared Library" },
     );
-    // Kept like any other imported photo until its three days are up.
+    jest.setSystemTime( 10 * DAY_MS );
+    await sweepUsbStaging( [faved], [] );
     expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
 
-    jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [uri( "1_FAVED.JPG" )], [] );
+    // Uploaded at day 10.
+    await sweepUsbStaging( [faved], [faved] );
+    jest.setSystemTime( 12 * DAY_MS );
+    await sweepUsbStaging( [faved], [faved] );
+    expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
+
+    jest.setSystemTime( 14 * DAY_MS );
+    await sweepUsbStaging( [faved], [faved] );
     expect( CameraRoll.saveAsset ).toHaveBeenCalledTimes( 1 );
     expect( mockFiles ).toEqual( [] );
   } );
 
-  it( "expires imported and removed photos three days on, and keeps the rest", async ( ) => {
-    mockFiles = ["1_ON_OBS.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"];
-    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" ), uri( "1_REMOVED.JPG" )] );
+  it( "expires uploaded and removed photos three days on, and keeps the rest", async ( ) => {
+    mockFiles = ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"];
+    const expirable = [uri( "1_UPLOADED.JPG" ), uri( "1_REMOVED.JPG" )];
+    await sweepUsbStaging( [], expirable );
 
     jest.setSystemTime( 2 * DAY_MS );
-    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" ), uri( "1_REMOVED.JPG" )] );
-    expect( mockFiles ).toEqual( ["1_ON_OBS.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"] );
+    await sweepUsbStaging( [], expirable );
+    expect( mockFiles ).toEqual( ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"] );
 
     jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" ), uri( "1_REMOVED.JPG" )] );
+    await sweepUsbStaging( [], expirable );
     expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
 
-    // Never imported or removed: kept indefinitely.
+    // Never uploaded or removed: kept indefinitely.
     jest.setSystemTime( 400 * DAY_MS );
     await sweepUsbStaging( [], [] );
     expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
