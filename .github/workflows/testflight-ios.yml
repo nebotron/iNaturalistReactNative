@@ -26,21 +26,23 @@
 # certificate to revoke").
 #
 # Runner fallback: during US working hours the free macOS pools often have
-# no machine for this repo, and after ~15 minutes queued the job ends
-# "not acquired by Runner of type hosted" with no steps run. Each attempt
-# below runs only if the one before it never got a runner, trying the Intel
-# pool (separate hardware, same Xcode; slower, with its own caches) and
-# then macos-15. A build that started
-# and failed is not retried, and cancelling the run stops the chain.
+# no machine for this repo. A macos-26 runner either turns up within seconds
+# or not for 5-15 minutes, so when a macos-26 build hasn't got a runner 30
+# seconds after it was queued, the `fallback` job dispatches a new run on
+# macos-26-intel (separate hardware, same Xcode; slower, with its own caches)
+# and cancels this one. Separately, if the first attempt ends "not acquired
+# by Runner of type hosted" after ~15 minutes queued with no steps run,
+# attempt-2 tries the other image. A build that started and failed is not
+# retried, and cancelling the run stops the chain.
 ##
 name: TestFlight iOS
 on:
   workflow_dispatch:
     inputs:
       runner:
-        description: macOS runner image to try first; others are tried if it gets no runner.
+        description: macOS runner image to try first; the other is tried if it gets no runner.
         type: choice
-        options: [macos-26, macos-26-intel, macos-15]
+        options: [macos-26, macos-26-intel]
         default: macos-26
 
 # One run at a time per starting image, so builds on different images can
@@ -56,6 +58,45 @@ jobs:
     with:
       runner: ${{ inputs.runner || 'macos-26' }}
 
+  # Watches attempt-1 on macos-26 and moves the build to macos-26-intel if no
+  # runner picks it up within 30 seconds of being queued.
+  fallback:
+    if: ${{ ( inputs.runner || 'macos-26' ) == 'macos-26' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Move to macos-26-intel if macos-26 has no runner after 30 seconds
+        run: |
+          jobs_url="actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs"
+          while true; do
+            job=$( gh api "$jobs_url" \
+              --jq '[.jobs[] | select(.name | startswith("attempt-1"))][0]' )
+            if [ -z "$job" ] || [ "$job" = "null" ]; then
+              # attempt-1's job is created moments after the run; wait for it
+              sleep 2
+              continue
+            fi
+            status=$( jq -r .status <<< "$job" )
+            if [ "$status" != "queued" ] && [ "$status" != "waiting" ]; then
+              echo "attempt-1 got a runner ($status)."
+              exit 0
+            fi
+            created=$( date -d "$( jq -r .created_at <<< "$job" )" +%s )
+            if [ $(( $( date +%s ) - created )) -ge 30 ]; then
+              break
+            fi
+            sleep 3
+          done
+          echo "No macos-26 runner after 30 seconds; moving the build to macos-26-intel."
+          gh workflow run testflight-ios.yml --ref "${{ github.ref_name }}" \
+            -f runner=macos-26-intel
+          gh run cancel ${{ github.run_id }}
+
   attempt-2:
     needs: attempt-1
     if: ${{ !cancelled() && needs.attempt-1.result != 'success' && needs.attempt-1.outputs.started != 'true' }}
@@ -63,12 +104,3 @@ jobs:
     secrets: inherit
     with:
       runner: ${{ inputs.runner == 'macos-26-intel' && 'macos-26' || 'macos-26-intel' }}
-
-  attempt-3:
-    needs: attempt-2
-    if: ${{ !cancelled() && needs.attempt-2.result != 'success' && needs.attempt-2.result != 'skipped' && needs.attempt-2.outputs.started != 'true' }}
-    uses: ./.github/workflows/testflight-ios-build.yml
-    secrets: inherit
-    with:
-      runner: ${{ inputs.runner == 'macos-15' && 'macos-26' || 'macos-15' }}
-

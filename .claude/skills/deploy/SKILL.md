@@ -30,12 +30,16 @@ it through to the upload.
 5. **If GitHub can't acquire a runner** — a job stays `queued` ~15 minutes and ends
    `cancelled` with no steps ("not acquired by Runner of type hosted"). The repo
    is public, so this is free-runner capacity, not billing; it clusters in US
-   working hours (15:00–22:00 UTC). The workflow handles it itself: jobs
-   `attempt-1`…`attempt-3` try the requested image, `macos-26-intel`, then
-   `macos-15`, each only if the previous one never started. Judge the run by
-   the attempt that started — the run as a whole can read `failure` from an
-   unacquired attempt even though a later one uploaded the build. Only if all
-   three go unacquired, dispatch a fresh run once per hour (`send_later` with
+   working hours (15:00–22:00 UTC). The workflow handles it itself. On
+   `macos-26`, the `fallback` job waits 30 seconds for `attempt-1` to get a
+   runner; if it hasn't, it dispatches a new run with `runner=macos-26-intel`
+   and cancels the original. So when a run ends `cancelled` with `fallback`
+   having run, follow the newer run on the same commit (`list_workflow_runs`)
+   instead. Within a run, `attempt-2` tries the other image only if
+   `attempt-1` never started after ~15 minutes. Judge the run by the attempt
+   that started — the run as a whole can read `failure` from an unacquired
+   attempt even though a later one uploaded the build. Only if both go
+   unacquired, dispatch a fresh run once per hour (`send_later` with
    `delay_minutes: 60`) until one gets a runner, then continue from step 3.
    Tell the user once that you're retrying hourly.
 
