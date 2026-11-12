@@ -1,6 +1,5 @@
 import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
 import { applyGroupPhotosPinchCrop } from "components/PhotoImporter/helpers/groupPhotoCrops";
-import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import {
   ActivityIndicator,
   Carousel,
@@ -145,21 +144,7 @@ const GroupPhotoImage = ( {
   const renderPhoto = useCallback( ( photo: PhotoItem ) => (
     <DevicePhotoImage
       uri={photo.image.uri}
-      // A cropped photo must always show its crop, so fall back to the cropped
-      // file (image.uri already points at the baked crop) until the thumbnail
-      // is ready rather than flashing a placeholder. Large uncropped originals
-      // keep waiting on the thumbnail so scrolling doesn't decode them
-      // full-resolution.
-      fallbackUri={photo.image.crop
-        ? photo.image.uri
-        : undefined}
       cellWidth={cellWidth}
-      // The same size the whole import is prefetched at, so a photo reached by
-      // scrolling shows the thumbnail that was already warmed for it rather
-      // than generating a second file at a different size.
-      thumbnailMaxPixel={cellWidth > 0
-        ? groupPhotoThumbnailMaxPixel( cellWidth )
-        : undefined}
       fitImage
       style={style}
       obsPhotosCount={mediaCount}
@@ -188,7 +173,8 @@ const GroupPhotoImage = ( {
   );
 
   // A photo the import is still copying shows the device library's own
-  // thumbnail, so the grid is populated from the moment it opens. Nothing can
+  // thumbnail, so the grid is populated from the moment it opens; there is no
+  // local file to draw at full resolution until the copy lands. Nothing can
   // be done to it yet — combining, cropping and removing all act on a file
   // that doesn't exist — so it draws no buttons and doesn't respond to a tap.
   if ( isPending ) {
@@ -197,9 +183,6 @@ const GroupPhotoImage = ( {
         <DevicePhotoImage
           uri={firstPhoto?.image.uri}
           cellWidth={cellWidth}
-          thumbnailMaxPixel={cellWidth > 0
-            ? groupPhotoThumbnailMaxPixel( cellWidth )
-            : undefined}
           fitImage
           style={style}
           testID={`GroupPhotos.pending.${mediaUri}`}

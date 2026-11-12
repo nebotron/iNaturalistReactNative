@@ -16,11 +16,6 @@ const logger = log.extend( "DevicePhotoImage" );
 interface Props {
   // Device photo library uri (ph:// on iOS) or a local file:// path
   uri?: string;
-  // Shown until the thumbnail is ready, for photos whose original must always
-  // be visible (e.g. a baked crop). Left undefined, the cell shows a
-  // placeholder rather than decoding a full-resolution original while
-  // scrolling.
-  fallbackUri?: string;
   // Laid-out width of the cell, used to size the generated thumbnail
   cellWidth: number;
   // Overrides the thumbnail size derived from cellWidth, so a grid that
@@ -53,7 +48,6 @@ interface Props {
 // those grids scrolling; see useDeviceImageThumbnail for the scheduling.
 const DevicePhotoImage = ( {
   uri,
-  fallbackUri,
   cellWidth,
   thumbnailMaxPixel,
   fitImage,
@@ -70,14 +64,20 @@ const DevicePhotoImage = ( {
   onZoomCropChange,
 }: Props ) => {
   const zoomable = !!onZoomCropChange && !!zoomSourceUri;
-  // What the cell draws. A pinchable cell draws the original, since the crop
-  // it reports is applied to the original.
+  // What the cell draws. A pinchable cell draws the original, at full
+  // resolution rather than as a thumbnail, since the crop it reports is
+  // applied to the original.
   const imageUri = zoomable
     ? zoomSourceUri
     : uri;
   const thumbMaxPixel = thumbnailMaxPixel
     ?? PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
-  const thumbnailUri = useDeviceImageThumbnail( imageUri, thumbMaxPixel );
+  const thumbnailUri = useDeviceImageThumbnail(
+    zoomable
+      ? undefined
+      : imageUri,
+    thumbMaxPixel,
+  );
   // A thumbnail that won't decode is a file, not a state of the photo: nothing
   // downstream can tell it from a cell still waiting, so the cell sat on the
   // placeholder (the iconic-taxon leaf) or on a black square for as long as
@@ -92,13 +92,9 @@ const DevicePhotoImage = ( {
     setShowOriginal( false );
   }
 
-  // fallbackUri stands in for uri, which a pinchable cell isn't drawing
-  const preferredUri = thumbnailUri ?? ( zoomable
-    ? undefined
-    : fallbackUri );
-  const displayUri = showOriginal
+  const displayUri = showOriginal || zoomable
     ? imageUri
-    : preferredUri;
+    : thumbnailUri;
   const source = displayUri
     ? { uri: displayUri }
     : undefined;

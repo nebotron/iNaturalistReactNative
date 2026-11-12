@@ -17,6 +17,8 @@ const MAX_SCALE = 100;
 
 interface Props {
   uri: string;
+  // Decode the local file at full resolution rather than at the tile's size
+  fullResolution?: boolean;
   // Where a pinch is logged as this photo's framing. Left out, the caller
   // handles the new framing itself through onCropChange.
   logUri?: string;
@@ -74,6 +76,7 @@ const frameCropTransform = (
 // required to pan or zoom.
 const ObsImageZoomable = ( {
   uri,
+  fullResolution,
   logUri,
   imageWidth: knownImageWidth,
   imageHeight: knownImageHeight,
@@ -160,6 +163,7 @@ const ObsImageZoomable = ( {
     <SharedZoomableImage
       ref={zoomRef}
       uri={uri}
+      fullResolution={fullResolution}
       style={{ width: size, height: size }}
       // scale 1 renders the whole image contained (letterboxed) in the square, so
       // allowing pinch down to 1 lets the user shrink the photo until it fully fits.

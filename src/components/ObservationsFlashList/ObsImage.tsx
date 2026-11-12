@@ -133,6 +133,8 @@ const ObsImage = ( {
         <ObsImageZoomable
           key={uri?.uri}
           uri={displayUri}
+          // Group Photos frames the file itself, so it's drawn at full resolution
+          fullResolution={cropControlled}
           logUri={cropControlled
             ? undefined
             : uri.uri}
