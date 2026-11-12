@@ -108,7 +108,7 @@ export const SaveOfflineButton = ( { getQueryParams, disabled }: SaveProps ) => 
     <View className="px-4 mb-7">
       <Button
         text={progress === null
-          ? t( "DOWNLOAD-RESULTS-FOR-OFFLINE-USE" )
+          ? t( "DOWNLOAD-RESULTS" )
           : t( "Downloading-X-observations", { count: progress } )}
         disabled={disabled || progress !== null}
         loading={progress !== null}

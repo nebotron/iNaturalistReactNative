@@ -335,7 +335,7 @@
   "Dont-have-an-account": "<0>Don't have an account? </0><1>Sign up</1>",
   "DOWNLOAD": "DOWNLOAD",
   "Download-for-offline-use": "Download for offline use",
-  "DOWNLOAD-RESULTS-FOR-OFFLINE-USE": "DOWNLOAD RESULTS FOR OFFLINE USE",
+  "DOWNLOAD-RESULTS": "DOWNLOAD RESULTS",
   "Downloading-X-observations": "Downloading { $count }…",
   "Drive-time-limit": "Max drive: { $hours ->\n  [0] { $minutes } min\n *[other] { $hours } h { $minutes } min\n}",
   "Drive-time-limit-short": "{ $hours ->\n  [0] { $minutes } min\n *[other] { $hours } h { $minutes } min\n}",

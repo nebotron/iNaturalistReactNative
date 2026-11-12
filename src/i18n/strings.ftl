@@ -629,7 +629,7 @@ DOWNLOAD = DOWNLOAD
 # Button and dialog title to download the current Explore results for offline use
 Download-for-offline-use = Download for offline use
 # Button on the search screen that downloads the search's results for offline use
-DOWNLOAD-RESULTS-FOR-OFFLINE-USE = DOWNLOAD RESULTS FOR OFFLINE USE
+DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
 # Maximum total driving time chosen for planning a route through wildlife hotspots
