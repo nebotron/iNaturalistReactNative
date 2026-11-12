@@ -433,8 +433,6 @@ export type BaseTabStackParamList = {
     published_at: string;
     title: string;
   };
-  // From UserProfile: { userId }
-  WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   AudioId: undefined;
   // `saved` lists the clips saved by hand instead of one species' detections
   AudioIdHistory: { taxonId: number } | { saved: true };

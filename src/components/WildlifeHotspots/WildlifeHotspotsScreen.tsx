@@ -10,12 +10,10 @@ import {
   Button,
   INatIcon,
   INatIconButton,
-  ViewWrapper,
 } from "components/SharedComponents";
 import Map from "components/SharedComponents/Map/Map";
 import { TextInput, View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
-import type { TabStackScreenProps } from "navigation/types";
 import type { ExploreV2State } from "providers/ExploreV2Context";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import React, {
@@ -237,18 +235,13 @@ const AddressInput = ( {
   );
 };
 
-type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
-  // When embedded inline as an Explore view (rather than navigated to as its
-  // own screen), the filter params are passed directly and the screen skips
-  // its own safe-area wrapper since the host already provides one.
-  embedded?: boolean;
+// Shown as the Hotspots view inside Explore, which supplies the safe area
+interface Props {
   filterParams?: Record<string, unknown>;
   // Explore filters the observation-count links carry over, with the location
   // replaced by the hotspot
-  exploreState?: object;
-  // Same, for Explore V2
   exploreV2State?: ExploreV2State;
-};
+}
 
 // Used only until the hidden measurement view below reports the real height.
 const FALLBACK_HOTSPOT_CARD_HEIGHT = 200;
@@ -266,7 +259,7 @@ const styles = StyleSheet.create( {
 } );
 
 const WildlifeHotspotsScreen = ( {
-  route, embedded, filterParams: filterParamsProp, exploreState, exploreV2State,
+  filterParams: filterParamsProp, exploreV2State,
 }: Props ) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
@@ -288,7 +281,7 @@ const WildlifeHotspotsScreen = ( {
   // embedded Explore view passes a new object every render). It's a dependency
   // of the findHotspots effect below, which sets state, so a new reference each
   // render would loop ("Maximum update depth exceeded").
-  const rawFilterParams = filterParamsProp ?? route?.params?.filterParams;
+  const rawFilterParams = filterParamsProp;
   const filterParamsKey = JSON.stringify( rawFilterParams ?? {} );
   const filterParams = useMemo(
     () => rawFilterParams ?? {},
@@ -675,7 +668,6 @@ const WildlifeHotspotsScreen = ( {
     const replaceSubject = taxon && ( !subject || subject.type === "taxon" );
     const v2Filters = exploreV2State?.filters;
     navigation.navigate( "Explore", {
-      exploreState,
       ...( exploreV2State && {
         subject: replaceSubject
           ? { type: "taxon", taxon }
@@ -711,7 +703,7 @@ const WildlifeHotspotsScreen = ( {
       radius: Math.max( 0.1, Math.ceil( hotspot.area.radiusKm * 100 ) / 100 ),
       worldwide: false,
     } );
-  }, [navigation, exploreState, exploreV2State, setExploreView] );
+  }, [navigation, exploreV2State, setExploreView] );
 
   const handleSpeciesCountPress = useCallback(
     ( hotspot: Hotspot, species: HotspotSpecies ) => openHotspotInExplore( hotspot, species ),
@@ -885,9 +877,7 @@ const WildlifeHotspotsScreen = ( {
       {/* Stop inputs */}
       <View
         // Embedded under the Explore header, which already pads its bottom
-        className={`bg-white px-3 pb-2 border-b border-lightGray ${embedded
-          ? ""
-          : "pt-2"}`}
+        className="bg-white px-3 pb-2 border-b border-lightGray"
         style={styles.stopInputsContainer}
       >
         {stopsExpanded
@@ -1208,20 +1198,11 @@ const WildlifeHotspotsScreen = ( {
     <HotspotSettingsSheet onPressClose={() => setShowSettingsSheet( false )} />
   );
 
-  if ( embedded ) {
-    return (
-      <View className="flex-1" testID="WildlifeHotspotsScreen">
-        {content}
-        {settingsSheet}
-      </View>
-    );
-  }
-
   return (
-    <ViewWrapper testID="WildlifeHotspotsScreen">
+    <View className="flex-1" testID="WildlifeHotspotsScreen">
       {content}
       {settingsSheet}
-    </ViewWrapper>
+    </View>
   );
 };
 
