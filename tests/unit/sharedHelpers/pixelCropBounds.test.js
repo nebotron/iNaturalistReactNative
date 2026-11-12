@@ -191,6 +191,7 @@ describe( "cropImageFile bounds", ( ) => {
       50,
       "/tmp/output/test-crop-id.jpg",
       1,
+      2048,
     );
 
     cropImage.mockClear( );
@@ -215,6 +216,7 @@ describe( "cropImageFile bounds", ( ) => {
       2048,
       "/tmp/output/test-crop-id.jpg",
       1,
+      2048,
     );
   } );
 

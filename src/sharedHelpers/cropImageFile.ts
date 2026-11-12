@@ -32,14 +32,18 @@ interface ImageCropperModule {
     // Gain multiplied into each channel before the one encode, as the CSS
     // brightness() filter on the slider preview does. 1 leaves pixels as is.
     brightness: number,
+    // Longest side of what is written; a larger crop is scaled down with a
+    // high-quality filter before the one encode. 0 keeps the crop's own size.
+    maxPixel: number,
   ) => Promise<CropResult>;
 }
 
 // Below this, a written crop is dark enough to be worth a line in the log.
 const DARK_OUTPUT_LEVEL = 24;
 
-// A crop within a few pixels of this is written at exactly this size, so it
-// isn't resampled on upload.
+// A crop within a few pixels of this is written at exactly this size, and a
+// larger one is scaled down to it in the same native pass, so the upload copy
+// is the crop file itself: one JPEG encode, never a second one on upload.
 const UPLOAD_MAX_SIDE = getTunable( "uploadMaxDimension" );
 
 const { ImageCropper } = NativeModules as {
@@ -80,6 +84,7 @@ const cropImageFile = async (
       pixelCrop.height,
       outputPath,
       brightness,
+      UPLOAD_MAX_SIDE,
     );
     const croppedPath = result.path;
     // A crop that turned out black reached the grid with no error behind it.

@@ -1,5 +1,6 @@
 import { read, stat } from "@dr.pogodin/react-native-fs";
 import * as Exify from "@lodev09/react-native-exify";
+import { NativeModules, Platform } from "react-native";
 import type { Box, SliceReader } from "sharedHelpers/cr3Metadata";
 import {
   boxes,
@@ -170,6 +171,17 @@ export async function copyFocusDistance( sourceUri: string, destinationUri: stri
   try {
     const distance = await readFocusDistanceFromFile( sourceUri );
     if ( distance === null ) return;
+    // iOS rewrites only the metadata; Exify decodes and re-encodes the photo,
+    // which costs the upload copy another lossy JPEG generation.
+    const writeSubjectDistance = ( NativeModules as {
+      ImageCropper?: {
+        writeSubjectDistance?: ( path: string, distance: number ) => Promise<boolean>;
+      };
+    } ).ImageCropper?.writeSubjectDistance;
+    if ( Platform.OS === "ios" && writeSubjectDistance ) {
+      await writeSubjectDistance( stripFilePrefix( destinationUri ), distance );
+      return;
+    }
     await Exify.write( exifUri( destinationUri ), { SubjectDistance: distance } );
   } catch ( error ) {
     logger.warn( "Could not copy the focus distance into a photo", error );

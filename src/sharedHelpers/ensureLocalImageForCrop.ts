@@ -1,10 +1,9 @@
 import {
-  copyAssetsFileIOS, downloadFile, exists, mkdir, moveFile, stat,
+  copyAssetsFileIOS, copyFile, downloadFile, exists, mkdir, moveFile, stat,
   unlink,
 } from "@dr.pogodin/react-native-fs";
 import { cropSourcesPath } from "appConstants/paths";
 import { NativeModules, Platform } from "react-native";
-import resizeImage from "sharedHelpers/resizeImage";
 
 // A source is released once its crop is done (releaseCropSource); one never
 // cropped is swept an hour after it was last written.
@@ -166,11 +165,14 @@ const ensureLocalImageForCrop = async (
     const destPath = `${cropSourcesPath}/${urlToFilename( uri )}`;
     const cached = await getCachedOrNull( destPath );
     if ( cached ) return cached;
-    return resizeImage( uri, {
-      width: 99999,
-      outputPath: cropSourcesPath,
-      imageOptions: { mode: "contain", onlyScaleDown: true },
+    // The photo's own bytes, copied through the content resolver. Running it
+    // through the resizer at full size re-encoded it -- one more lossy JPEG
+    // generation before the crop -- and wrote it under a name of the
+    // resizer's choosing, so this cache never hit.
+    await writeAtomically( destPath, async tmpPath => {
+      await copyFile( uri, tmpPath );
     } );
+    return `file://${destPath}`;
   }
 
   if ( uri.startsWith( "/" ) ) {

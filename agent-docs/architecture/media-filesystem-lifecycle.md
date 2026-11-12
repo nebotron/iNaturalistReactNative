@@ -6,7 +6,7 @@ Photos and sounds are stored on disk under `DocumentDirectoryPath` (from `@dr.po
 
 Key design points:
 
-- **Photos:** `Photo.resizeImageForUpload()` creates a max-2048px JPEG copy in `photoUploadPath`. Realm `Photo.localFilePath` points at that copy for display and upload.
+- **Photos:** `Photo.resizeImageForUpload()` creates a max-2048px JPEG copy in `photoUploadPath` (or reuses a crop that is already one). Realm `Photo.localFilePath` points at that copy for display and upload.
 - **Sounds:** `Sound.moveFromCacheToDocumentDirectory()` moves the recorder cache file into `soundUploadPath` (no copy).
 - **Cleanup:** Deferred startup tasks wipe staging dirs and orphan synced media; see [Cache Cleanup](#cache-cleanup-deferred-startup).
 
@@ -110,7 +110,8 @@ Staging dirs are cleared on every deferred startup (see below).
 
 - **Display:** `Photo.getLocalPhotoUri(localFilePath)` normalizes stored paths to `file://${photoUploadPath}/${filename}` so photos remain accessible after app updates.
 - **Upload:** `prepareMediaForUpload` → `ObservationPhoto.mapPhotoForUpload` → `Photo.getLocalPhotoUri` → `FileUpload`.
-- **Resize:** `Photo.resizeImageForUpload` uses `resizeImage` with max width 2048, JPEG, quality 100, `onlyScaleDown: true`. On iOS, `ph://` asset URIs use `copyAssetsFileIOS` instead of the resizer.
+- **Resize:** `Photo.resizeImageForUpload` caps the longest side at `uploadMaxDimension` (2048). On iOS it calls `ImageCropper.resizeForUpload`, which copies an upright JPEG already within the cap byte-for-byte (every crop, since `cropImage` scales to the cap in the same pass), and otherwise downsamples through ImageIO and encodes once at full quality, keeping the photo's colour space (Display P3 included). Android, and iOS when the native method fails, use `resizeImage` (JPEG, quality 100, `onlyScaleDown: true`).
+- **Image quality rules:** every decode/encode costs a JPEG generation, so new code must not re-encode a file it could copy, must draw in the source's colour space (`drawingColorSpaceFor` in `ImageCropper.m`) rather than device RGB, and must write metadata losslessly (`ImageCropper.writeSubjectDistance` uses `CGImageDestinationCopyImageSource`; `Exify.write` on iOS re-encodes the whole image). iNaturalist keeps embedded ICC profiles, so wide-gamut uploads display correctly.
 
 ### Transient `originalPhotoUri`
 

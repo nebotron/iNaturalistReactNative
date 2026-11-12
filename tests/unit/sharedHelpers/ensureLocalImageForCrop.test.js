@@ -3,8 +3,10 @@ import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 
 const mockFiles = new Set( );
 const mockCopyAssets = jest.fn( async ( _uri, path ) => { mockFiles.add( path ); } );
+const mockCopyFile = jest.fn( async ( _uri, path ) => { mockFiles.add( path ); } );
 jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
   copyAssetsFileIOS: ( ...args ) => mockCopyAssets( ...args ),
+  copyFile: ( ...args ) => mockCopyFile( ...args ),
   downloadFile: jest.fn( ),
   exists: async path => mockFiles.has( path ),
   mkdir: async ( ) => {},
@@ -71,5 +73,38 @@ describe( "ensureLocalImageForCrop with a Photos library asset", ( ) => {
     const uri = await ensureLocalImageForCrop( "ph://ASSET-3", "original" );
     expect( uri ).toMatch( /\.jpg$/ );
     expect( mockCopyAssets ).toHaveBeenCalledTimes( 1 );
+  } );
+} );
+
+describe( "ensureLocalImageForCrop with an Android content:// photo", ( ) => {
+  const originalOS = Platform.OS;
+  const uri = "content://media/external/images/media/42";
+
+  beforeAll( ( ) => {
+    Platform.OS = "android";
+  } );
+
+  afterAll( ( ) => {
+    Platform.OS = originalOS;
+  } );
+
+  beforeEach( ( ) => {
+    mockFiles.clear( );
+    mockCopyFile.mockClear( );
+  } );
+
+  it( "copies the photo's own bytes rather than re-encoding them", async ( ) => {
+    const local = await ensureLocalImageForCrop( uri );
+
+    expect( mockCopyFile ).toHaveBeenCalledWith( uri, expect.any( String ) );
+    expect( local ).toMatch( /^file:\/\// );
+  } );
+
+  it( "reuses the copy it already made", async ( ) => {
+    const first = await ensureLocalImageForCrop( uri );
+    const second = await ensureLocalImageForCrop( uri );
+
+    expect( second ).toBe( first );
+    expect( mockCopyFile ).toHaveBeenCalledTimes( 1 );
   } );
 } );

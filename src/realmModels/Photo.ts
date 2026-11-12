@@ -15,6 +15,7 @@ import {
 } from "sharedHelpers/cropPhotoMetadata";
 import { copyFocusDistance } from "sharedHelpers/focusDistance";
 import { log } from "sharedHelpers/logger";
+import { isWithinUploadSize, resizeNativelyForUpload } from "sharedHelpers/nativeUploadResize";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import resizeImage from "sharedHelpers/resizeImage";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
@@ -140,14 +141,15 @@ class Photo extends Realm.Object {
       uriForResize = `file://${uriForResize}`;
     }
 
-    const resized = await resizeImage( uriForResize, {
-      width,
-      outputPath: photoUploadPath,
-      imageOptions: {
-        mode: "contain",
-        onlyScaleDown: true,
-      },
-    } );
+    const resized = await resizeNativelyForUpload( uriForResize )
+      ?? await resizeImage( uriForResize, {
+        width,
+        outputPath: photoUploadPath,
+        imageOptions: {
+          mode: "contain",
+          onlyScaleDown: true,
+        },
+      } );
     await copyFocusDistance( uriForResize, resized );
     return resized;
   }
@@ -173,6 +175,9 @@ class Photo extends Realm.Object {
     }
     // Only re-resize when we know the file is genuinely too big.
     if ( !Number.isFinite( size ) || size <= UPLOAD_MAX_BYTES ) return uri;
+    // A detailed photo at the upload size can pass the byte limit on its own;
+    // resizing it would only re-encode it, losing quality without shrinking it.
+    if ( await isWithinUploadSize( uri ) ) return uri;
 
     // Debug, not info: an oversized original being resized before upload is the
     // normal path for this camera, not an event — it was 105 remote log writes

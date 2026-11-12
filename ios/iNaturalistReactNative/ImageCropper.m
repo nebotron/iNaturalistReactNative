@@ -1,3 +1,4 @@
+#import <Accelerate/Accelerate.h>
 #import <AVFoundation/AVFoundation.h>
 #import <os/proc.h>
 #import <CoreImage/CoreImage.h>
@@ -722,6 +723,96 @@ static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger widt
   metadata[tiffKey] = tiff;
 }
 
+// ─── Colour and resampling ───────────────────────────────────────────────────
+
+// The colour space an 8-bit RGB bitmap of image should be drawn in: the
+// image's own, so a Display P3 photo keeps the greens, reds and violets that
+// sRGB can't hold (iNaturalist keeps the embedded profile, and browsers honour
+// it), or Display P3 for a source an 8-bit SDR bitmap can't take as is -- an
+// HDR (PQ/HLG) or extended-range space, grey, or no image at all. The caller
+// releases it.
+static CGColorSpaceRef drawingColorSpaceFor( CGImageRef image ) CF_RETURNS_RETAINED;
+static CGColorSpaceRef drawingColorSpaceFor( CGImageRef image )
+{
+  CGColorSpaceRef space = image ? CGImageGetColorSpace( image ) : NULL;
+  if ( space
+    && CGColorSpaceGetModel( space ) == kCGColorSpaceModelRGB
+    && !CGColorSpaceUsesITUR_2100TF( space )
+    && !CGColorSpaceUsesExtendedRange( space ) ) {
+    return CGColorSpaceRetain( space );
+  }
+  return CGColorSpaceCreateWithName( kCGColorSpaceDisplayP3 );
+}
+
+// image scaled so its longest side is at most maxPixel, by vImage's
+// high-quality (Lanczos) resampling, in the colour space drawingColorSpaceFor
+// picks. Drawing into a smaller bitmap instead resamples with a much shorter
+// filter, which softens fine detail -- hairs, venation, scales -- and can alias
+// it. Returns image itself, retained, when it already fits or maxPixel is 0;
+// NULL on failure. The caller releases it.
+static CGImageRef downscaledImage( CGImageRef image, CGFloat maxPixel ) CF_RETURNS_RETAINED;
+static CGImageRef downscaledImage( CGImageRef image, CGFloat maxPixel )
+{
+  if ( !image ) return NULL;
+  size_t  width   = CGImageGetWidth( image );
+  size_t  height  = CGImageGetHeight( image );
+  CGFloat longest = MAX( width, height );
+  if ( maxPixel <= 0 || longest <= maxPixel ) return CGImageRetain( image );
+
+  CGFloat scale        = maxPixel / longest;
+  size_t  targetWidth  = MAX( (size_t)1, (size_t)llround( width * scale ) );
+  size_t  targetHeight = MAX( (size_t)1, (size_t)llround( height * scale ) );
+
+  CGColorSpaceRef       space  = drawingColorSpaceFor( image );
+  vImage_CGImageFormat  format = {
+    .bitsPerComponent = 8,
+    .bitsPerPixel     = 32,
+    .colorSpace       = space,
+    .bitmapInfo       = (CGBitmapInfo)kCGImageAlphaNoneSkipLast | kCGBitmapByteOrderDefault,
+    .version          = 0,
+    .decode           = NULL,
+    .renderingIntent  = kCGRenderingIntentDefault,
+  };
+  vImage_Buffer source      = { 0 };
+  vImage_Buffer destination = { 0 };
+  CGImageRef    scaled      = NULL;
+  // vImage only for an image already in the space it is scaled in. An HDR
+  // source goes through the draw below, which tone-maps it to SDR the way
+  // every other 8-bit draw of it in this file does.
+  CGColorSpaceRef own = CGImageGetColorSpace( image );
+  BOOL sameSpace = own && CFEqual( own, space );
+  if ( sameSpace
+    && vImageBuffer_InitWithCGImage( &source, &format, NULL, image, kvImageNoFlags )
+       == kvImageNoError ) {
+    if ( vImageBuffer_Init( &destination, targetHeight, targetWidth, 32, kvImageNoFlags )
+         == kvImageNoError ) {
+      if ( vImageScale_ARGB8888( &source, &destination, NULL, kvImageHighQualityResampling )
+           == kvImageNoError ) {
+        scaled = vImageCreateCGImageFromBuffer(
+          &destination, &format, NULL, NULL, kvImageNoFlags, NULL );
+      }
+      free( destination.data );
+    }
+    free( source.data );
+  }
+  // vImage works on a copy of the whole crop (128MB for a full-frame 32MP
+  // raw); when that can't be had, or the source is HDR, a high-interpolation
+  // draw needs only the output bitmap.
+  if ( !scaled ) {
+    CGContextRef ctx = CGBitmapContextCreate(
+      NULL, targetWidth, targetHeight, 8, 0, space,
+      (CGBitmapInfo)kCGImageAlphaNoneSkipLast | kCGBitmapByteOrderDefault );
+    if ( ctx ) {
+      CGContextSetInterpolationQuality( ctx, kCGInterpolationHigh );
+      CGContextDrawImage( ctx, CGRectMake( 0, 0, targetWidth, targetHeight ), image );
+      scaled = CGBitmapContextCreateImage( ctx );
+      CGContextRelease( ctx );
+    }
+  }
+  CGColorSpaceRelease( space );
+  return scaled;
+}
+
 // Defined further down, with the thumbnail encode they were written for.
 static BOOL     jpegDataIsDecodable( NSData *data );
 static BOOL     jpegDataIsBlack( NSData *data );
@@ -991,7 +1082,9 @@ static CGImageRef brightenedImage( CGImageRef image, float k )
 {
   size_t W = CGImageGetWidth( image );
   size_t H = CGImageGetHeight( image );
-  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  // In the image's own colour space: device RGB here clipped a wide-gamut
+  // photo to sRGB whenever the brightness slider was touched.
+  CGColorSpaceRef cs  = drawingColorSpaceFor( image );
   CGContextRef    bmp = CGBitmapContextCreate(
     NULL, W, H, 8, 4 * W, cs, kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
   CGColorSpaceRelease( cs );
@@ -1003,11 +1096,13 @@ static CGImageRef brightenedImage( CGImageRef image, float k )
   return adjusted;
 }
 
-// JPEG of cropRect (display coordinates) of image, with the source's
-// metadata and brightness gain applied before the one encode, or nil if the
-// decode put no pixels there.
+// JPEG of cropRect (display coordinates) of image, scaled down to maxPixel on
+// its longest side (0 keeps the crop's own size), with the source's metadata
+// and brightness gain applied before the one encode, or nil if the decode put
+// no pixels there. Scaling here, rather than leaving it to the upload resizer,
+// is what makes a cropped photo's upload copy one JPEG encode instead of two.
 static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *srcMeta,
-                                float brightness )
+                                float brightness, CGFloat maxPixel )
 {
   CGImageRef croppedRef = NULL;
   if ( image.imageOrientation == UIImageOrientationUp ) {
@@ -1034,6 +1129,11 @@ static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *s
                   image.size.width, image.size.height ) );
     if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
   }
+  if ( croppedRef ) {
+    CGImageRef scaled = downscaledImage( croppedRef, maxPixel );
+    CGImageRelease( croppedRef );
+    croppedRef = scaled;
+  }
   if ( croppedRef && brightness != 1.0f ) {
     // A lazy decode that put no pixels there draws as black here, which the
     // encode below refuses like any other black frame.
@@ -1045,8 +1145,8 @@ static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *s
   NSData *data = croppedRef
     ? jpegDataFromCroppedImage( croppedRef,
                                 srcMeta,
-                                (NSInteger)cropRect.size.width,
-                                (NSInteger)cropRect.size.height )
+                                (NSInteger)CGImageGetWidth( croppedRef ),
+                                (NSInteger)CGImageGetHeight( croppedRef ) )
     : nil;
   if ( croppedRef ) CGImageRelease( croppedRef );
   return data;
@@ -1128,7 +1228,8 @@ RCT_EXPORT_METHOD( cropImage
                   : ( nonnull NSNumber * )width height
                   : ( nonnull NSNumber * )height outputPath
                   : ( NSString * )outputPath brightness
-                  : ( nonnull NSNumber * )brightness resolver
+                  : ( nonnull NSNumber * )brightness maxPixel
+                  : ( nonnull NSNumber * )maxPixel resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -1157,7 +1258,8 @@ RCT_EXPORT_METHOD( cropImage
       input, attemptMs, attemptFreeMB, ^BOOL {
     image = [UIImage imageWithContentsOfFile:input];
     if ( !image ) return YES;
-    data = croppedJpegData( image, cropRect, srcMeta, [brightness floatValue] );
+    data = croppedJpegData( image, cropRect, srcMeta, [brightness floatValue],
+                            [maxPixel doubleValue] );
     return data != nil;
     } );
     if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
@@ -2207,23 +2309,30 @@ static UIImage *drawnOverSentinel( UIImage *image, size_t width, size_t height, 
 {
   if ( width < 1 || height < 1 ) return nil;
 
-  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
+  // The image's own colour space rather than device RGB, which clipped every
+  // wide-gamut photo to sRGB on the way through.
+  CGColorSpaceRef space = drawingColorSpaceFor( image.CGImage );
   // No alpha channel, so the JPEG encoder gets an opaque bitmap and every
   // pixel is the four bytes bitmapIsBlank steps through.
   CGContextRef ctx = CGBitmapContextCreate(
     NULL, width, height, 8, 0, space,
     kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little
   );
-  CGColorSpaceRelease( space );
-  if ( !ctx ) return nil;
-
-  CGContextSetRGBFillColor(
-    ctx,
+  // The sentinel is given in the bitmap's own space, so it lands as exactly
+  // the bytes bitmapIsBlank looks for whatever that space is; a device RGB
+  // colour would be converted on the way in.
+  const CGFloat sentinel[4] = {
     kRasterizeSentinel[0] / 255.0,
     kRasterizeSentinel[1] / 255.0,
     kRasterizeSentinel[2] / 255.0,
-    1
-  );
+    1,
+  };
+  CGColorRef fill = ctx ? CGColorCreate( space, sentinel ) : NULL;
+  CGColorSpaceRelease( space );
+  if ( !ctx ) return nil;
+
+  CGContextSetFillColorWithColor( ctx, fill );
+  CGColorRelease( fill );
   CGContextFillRect( ctx, CGRectMake( 0, 0, width, height ) );
   // drawInRect: is what bakes the image's EXIF orientation in, and it expects
   // UIKit's top-left origin rather than the bitmap context's bottom-left one.
@@ -2878,19 +2987,38 @@ RCT_EXPORT_METHOD( decodeRawToJpeg
   }
 
   // Scaled before rendering, so the render never materializes the whole
-  // 32-megapixel frame.
+  // 32-megapixel frame. Lanczos rather than an affine transform, whose
+  // bilinear sampling softened and aliased fine detail at this 3-4x reduction.
   CGRect  extent = decoded.extent;
   CGFloat longest = MAX( extent.size.width, extent.size.height );
   CGFloat scale = ( longest > [maxPixel floatValue] && longest > 0 )
     ? [maxPixel floatValue] / longest
     : 1.0;
   if ( scale < 1.0 ) {
-    decoded = [decoded imageByApplyingTransform:CGAffineTransformMakeScale( scale, scale )];
-    extent = decoded.extent;
+    // Clamped first, so the filter's taps past the frame read edge pixels
+    // rather than transparency, which would darken a thin border.
+    CGRect scaledExtent = CGRectMake(
+      round( extent.origin.x * scale ), round( extent.origin.y * scale ),
+      round( extent.size.width * scale ), round( extent.size.height * scale ) );
+    decoded = [[[decoded imageByClampingToExtent]
+      imageByApplyingFilter:@"CILanczosScaleTransform"
+        withInputParameters:@{
+          kCIInputScaleKey:       @( scale ),
+          kCIInputAspectRatioKey: @( 1.0 ),
+        }]
+      imageByCroppingToRect:scaledExtent];
+    extent = scaledExtent;
   }
 
-  CIContext  *context = [CIContext contextWithOptions:nil];
-  CGImageRef  cg      = [context createCGImage:decoded fromRect:extent];
+  // Rendered into Display P3 rather than the context's sRGB default: a raw
+  // holds far more gamut than sRGB, and iNaturalist keeps the embedded profile.
+  CIContext       *context = [CIContext contextWithOptions:nil];
+  CGColorSpaceRef  p3      = CGColorSpaceCreateWithName( kCGColorSpaceDisplayP3 );
+  CGImageRef       cg      = [context createCGImage:decoded
+                                          fromRect:extent
+                                            format:kCIFormatRGBA8
+                                        colorSpace:p3];
+  CGColorSpaceRelease( p3 );
   if ( !cg ) {
     resolve( @{ @"decoded": @NO, @"reason": @"raw render produced no image" } );
     return;
@@ -2927,6 +3055,194 @@ RCT_EXPORT_METHOD( decodeRawToJpeg
     @"width":      @( width ),
     @"height":     @( height ),
     @"ms":         @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+  } );
+}
+
+// Writes the upload copy of a photo: at most maxPixel on its longest side,
+// orientation applied, metadata kept, colour space kept. A JPEG that is
+// already upright and small enough -- every crop the cropper writes -- is used
+// as it is, with no decode or encode at all: its bytes are copied to
+// outputPath. Anything else
+// is downsampled by ImageIO and encoded once at full quality. Resolves
+// { path, reencoded, width, height }.
+//
+// This replaces the image resizer library for iOS uploads, which always
+// redrew and re-encoded (so a crop was compressed twice), drew into an 8-bit
+// sRGB context that clipped wide-gamut colour, and resampled by a plain draw.
+RCT_EXPORT_METHOD( resizeForUpload
+                  : ( NSString * )inputPath maxPixel
+                  : ( nonnull NSNumber * )maxPixel outputPath
+                  : ( NSString * )outputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( cropWriteQueue( ), ^{
+    NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSURL    *url    = [NSURL fileURLWithPath:input];
+    CGFloat   limit  = [maxPixel doubleValue];
+
+    CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
+    if ( !src ) { reject( @"RESIZE_FAILED", @"No image source for file", nil ); return; }
+    size_t        index = primaryImageIndex( src );
+    NSString     *type  = [(__bridge NSString *)CGImageSourceGetType( src ) copy];
+    NSDictionary *props = (__bridge_transfer NSDictionary *)
+      CGImageSourceCopyPropertiesAtIndex( src, index, NULL );
+    CFRelease( src );
+    CGFloat   width       = [props[(__bridge NSString *)kCGImagePropertyPixelWidth] doubleValue];
+    CGFloat   height      = [props[(__bridge NSString *)kCGImagePropertyPixelHeight] doubleValue];
+    NSInteger orientation = [props[(__bridge NSString *)kCGImagePropertyOrientation] integerValue];
+    CGFloat   longest     = MAX( width, height );
+
+    NSFileManager *files = [NSFileManager defaultManager];
+    [files createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+     withIntermediateDirectories:YES attributes:nil error:nil];
+
+    // Already what an upload needs: copying the bytes loses nothing, where a
+    // re-encode at even full quality loses a little more every time.
+    if ( [type isEqualToString:@"public.jpeg"] && orientation <= 1
+      && longest > 0 && longest <= limit ) {
+      // Always a copy, never the input itself: the upload copy belongs to its
+      // Photo alone, and deleting it must not take anything else's file.
+      [files removeItemAtPath:output error:nil];
+      NSError *copyError = nil;
+      if ( ![files copyItemAtPath:input toPath:output error:&copyError] ) {
+        reject( @"RESIZE_FAILED", [NSString stringWithFormat:
+          @"Could not copy the photo (freeDiskMB=%llu): %@", freeDiskMB( ),
+          copyError.localizedDescription], nil );
+        return;
+      }
+      resolve( @{
+        @"path": output, @"reencoded": @NO, @"width": @( width ), @"height": @( height ),
+      } );
+      return;
+    }
+
+    __block NSData   *data      = nil;
+    __block NSInteger outWidth  = 0;
+    __block NSInteger outHeight = 0;
+    int attempts = withRawDecodeRetries( input, nil, nil, ^BOOL {
+      @autoreleasepool {
+        CGImageSourceRef source = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
+        if ( !source ) return NO;
+        // ImageIO's own downsample: it scales in the decoder with a proper
+        // filter and hands back the photo in its own colour space.
+        NSMutableDictionary *options = [@{
+          (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+          (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:   @YES,
+          (__bridge NSString *)kCGImageSourceShouldCacheImmediately:          @YES,
+          (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:
+            @( longest > 0 ? MIN( limit, longest ) : limit ),
+        } mutableCopy];
+        // A 10-bit HDR photo is tone-mapped to SDR by the decoder, as the
+        // cropper's display copy is: an 8-bit JPEG can't carry PQ.
+        if ( @available( iOS 17.0, * ) ) {
+          if ( [props[(__bridge NSString *)kCGImagePropertyDepth] intValue] > 8 ) {
+            options[(__bridge NSString *)kCGImageSourceDecodeRequest] =
+              (__bridge NSString *)kCGImageSourceDecodeToSDR;
+          }
+        }
+        CGImageRef thumb = CGImageSourceCreateThumbnailAtIndex(
+          source, index, (__bridge CFDictionaryRef)options );
+        CFRelease( source );
+        if ( !thumb ) return NO;
+
+        // Something an 8-bit JPEG can't hold as is (HDR, extended range,
+        // deeper than 8 bits) is drawn into an 8-bit wide-gamut bitmap first.
+        CGColorSpaceRef thumbSpace = CGImageGetColorSpace( thumb );
+        BOOL needsDraw = CGImageGetBitsPerComponent( thumb ) > 8
+          || !thumbSpace
+          || CGColorSpaceUsesITUR_2100TF( thumbSpace )
+          || CGColorSpaceUsesExtendedRange( thumbSpace );
+        CGImageRef encodable = thumb;
+        if ( needsDraw ) {
+          UIImage *drawn = rasterizedImage( [UIImage imageWithCGImage:thumb] );
+          CGImageRelease( thumb );
+          if ( !drawn.CGImage ) return NO;
+          encodable = CGImageRetain( drawn.CGImage );
+        }
+        outWidth  = (NSInteger)CGImageGetWidth( encodable );
+        outHeight = (NSInteger)CGImageGetHeight( encodable );
+        data = jpegDataFromCroppedImage( encodable, props, outWidth, outHeight );
+        CGImageRelease( encodable );
+        return data != nil;
+      }
+    } );
+    if ( !data ) {
+      reject( @"RESIZE_FAILED", [NSString stringWithFormat:
+        @"Could not resize the photo (type=%@, %.0fx%.0f, attempts=%d)",
+        type ?: @"unknown", width, height, attempts], nil );
+      return;
+    }
+    NSError *writeError = nil;
+    if ( ![data writeToFile:output options:NSDataWritingAtomic error:&writeError] ) {
+      reject( @"RESIZE_FAILED", [NSString stringWithFormat:
+        @"Could not write the resized photo (freeDiskMB=%llu): %@", freeDiskMB( ),
+        writeError.localizedDescription], nil );
+      return;
+    }
+    resolve( @{
+      @"path": output, @"reencoded": @YES, @"width": @( outWidth ), @"height": @( outHeight ),
+    } );
+  } );
+}
+
+// Sets Exif SubjectDistance (metres) on a file without touching its pixels:
+// ImageIO copies the compressed image data across and only rewrites the
+// metadata. Writing it through react-native-exify instead decoded the photo
+// and encoded it again, one more lossy generation on every Canon upload copy.
+RCT_EXPORT_METHOD( writeSubjectDistance
+                  : ( NSString * )inputPath distance
+                  : ( nonnull NSNumber * )distance resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( cropWriteQueue( ), ^{
+    NSString *path = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSURL    *url  = [NSURL fileURLWithPath:path];
+    CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
+    if ( !src ) { reject( @"EXIF_WRITE_FAILED", @"No image source for file", nil ); return; }
+    CFStringRef type = CGImageSourceGetType( src );
+
+    CGMutableImageMetadataRef metadata = CGImageMetadataCreateMutable( );
+    CGImageMetadataSetValueMatchingImageProperty(
+      metadata, kCGImagePropertyExifDictionary, kCGImagePropertyExifSubjectDistance,
+      (__bridge CFNumberRef)distance );
+
+    NSString *tmp = [path stringByAppendingFormat:@".%@.tmp", [NSUUID UUID].UUIDString];
+    CGImageDestinationRef dest = type
+      ? CGImageDestinationCreateWithURL(
+          (__bridge CFURLRef)[NSURL fileURLWithPath:tmp], type, 1, nil )
+      : NULL;
+    BOOL copied = NO;
+    if ( dest ) {
+      NSDictionary *options = @{
+        (__bridge NSString *)kCGImageDestinationMetadata:      (__bridge id)metadata,
+        (__bridge NSString *)kCGImageDestinationMergeMetadata: @YES,
+      };
+      copied = CGImageDestinationCopyImageSource(
+        dest, src, (__bridge CFDictionaryRef)options, NULL );
+      CFRelease( dest );
+    }
+    CFRelease( metadata );
+    CFRelease( src );
+
+    NSFileManager *files = [NSFileManager defaultManager];
+    NSError       *moveError = nil;
+    if ( !copied
+      || ![files replaceItemAtURL:url
+                    withItemAtURL:[NSURL fileURLWithPath:tmp]
+                   backupItemName:nil
+                          options:0
+                 resultingItemURL:nil
+                            error:&moveError] ) {
+      [files removeItemAtPath:tmp error:nil];
+      reject( @"EXIF_WRITE_FAILED", copied
+        ? moveError.localizedDescription
+        : @"Could not copy the image with new metadata", nil );
+      return;
+    }
+    resolve( @YES );
   } );
 }
 
@@ -3751,8 +4067,9 @@ RCT_EXPORT_METHOD( saveCroppedAsset
         CGRect rect = CGRectIntegral( CGRectMake(
           [crop[@"x"] doubleValue] * w, [crop[@"y"] doubleValue] * h,
           [crop[@"w"] doubleValue] * w, [crop[@"h"] doubleValue] * h ) );
+        // Full size: this is the render Photos shows over the kept original.
         data = croppedJpegData( image, CGRectIntersection( rect, CGRectMake( 0, 0, w, h ) ),
-                                srcMeta, 1.0f );
+                                srcMeta, 1.0f, 0 );
         return data != nil;
       }
     } );
