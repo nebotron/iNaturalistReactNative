@@ -3,11 +3,9 @@ import {
   aliasPreload,
   enqueuePreload,
   preloadCache,
+  promotePreloads,
 } from "sharedHelpers/imageCropPreload";
-import {
-  preloadPickerPhoto,
-  releasePickerPreloads,
-} from "sharedHelpers/pickerCropPreload";
+import { preloadPickerPhoto } from "sharedHelpers/pickerCropPreload";
 
 const mockUnlink = jest.fn( async ( ) => {} );
 jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
@@ -28,6 +26,9 @@ const mockExportOriginal = jest.fn( );
 const mockExportCurrentVersion = jest.fn( );
 
 const flush = ( ) => new Promise( resolve => { setTimeout( resolve, 0 ); } );
+
+// The order photos were prepared in, by the file each was prepared from
+const preparedOrder = ( ) => mockPrepare.mock.calls.map( ( [imageUri] ) => imageUri );
 
 describe( "pickerCropPreload", ( ) => {
   const originalOS = Platform.OS;
@@ -59,10 +60,6 @@ describe( "pickerCropPreload", ( ) => {
     };
   } );
 
-  afterEach( ( ) => {
-    releasePickerPreloads( );
-  } );
-
   it( "prepares a library photo from its original bytes, not its edited version", async ( ) => {
     preloadPickerPhoto( "ph://ASSET-1/L0/001", "IMG_0001.HEIC" );
     const result = await enqueuePreload( "ph://ASSET-1/L0/001", "ph://ASSET-1/L0/001", null );
@@ -75,7 +72,6 @@ describe( "pickerCropPreload", ( ) => {
   it( "hands the prepare to the imported copy and drops the scratch export", async ( ) => {
     preloadPickerPhoto( "ph://ASSET-2", "IMG_0002.JPG" );
     await enqueuePreload( "ph://ASSET-2", "ph://ASSET-2", null );
-    releasePickerPreloads( new Set( ["ph://ASSET-2"] ) );
     aliasPreload( "ph://ASSET-2", "file:///photoLibraryPhotos/IMG_0002.JPG" );
     const imported = await enqueuePreload(
       "file:///photoLibraryPhotos/IMG_0002.JPG",
@@ -90,27 +86,6 @@ describe( "pickerCropPreload", ( ) => {
     expect( preloadCache.has( "ph://ASSET-2" ) ).toBe( false );
   } );
 
-  it( "drops queued and finished preloads of photos that weren't imported", async ( ) => {
-    // The first holds the queue's only slot, so the second stays queued
-    let finishFirst;
-    mockExportOriginal.mockImplementationOnce( ( ) => new Promise( resolve => {
-      finishFirst = resolve;
-    } ) );
-    preloadPickerPhoto( "ph://ASSET-3", "a.jpg" );
-    preloadPickerPhoto( "ph://ASSET-4", "b.jpg" );
-    await flush( );
-    releasePickerPreloads( );
-    finishFirst( {} );
-    await flush( );
-    await flush( );
-    await flush( );
-    // The queued one never started
-    expect( mockExportOriginal ).toHaveBeenCalledTimes( 1 );
-    // The running one finished, then had its files removed
-    expect( preloadCache.has( "ph://ASSET-3" ) ).toBe( false );
-    expect( mockUnlink ).toHaveBeenCalledWith( expect.stringMatching( /picker_ASSET_3\.jpg$/ ) );
-  } );
-
   it( "prepares a staged SD card photo from its own file, with no export", async ( ) => {
     preloadPickerPhoto( "file:///usbStaging/1_IMG.JPG", "1_IMG.JPG" );
     const result = await enqueuePreload(
@@ -122,14 +97,43 @@ describe( "pickerCropPreload", ( ) => {
     expect( result.localUri ).toBe( "file:///usbStaging/1_IMG.JPG" );
   } );
 
-  it( "leaves a prepare something else started alone", async ( ) => {
-    await enqueuePreload( "file:///usbStaging/2_IMG.JPG", "file:///usbStaging/2_IMG.JPG", null );
+  it( "keeps a prepare nobody picked, for a later batch", async ( ) => {
     preloadPickerPhoto( "file:///usbStaging/2_IMG.JPG", "2_IMG.JPG" );
-    releasePickerPreloads( );
     await flush( );
     await flush( );
     expect( preloadCache.has( "file:///usbStaging/2_IMG.JPG" ) ).toBe( true );
     expect( mockUnlink ).not.toHaveBeenCalled( );
+  } );
+
+  it( "runs a photo a crop is waiting on before ones prepared ahead", async ( ) => {
+    // The first holds the queue's only slot, so the rest queue behind it
+    let finishFirst;
+    mockPrepare.mockImplementationOnce( ( imageUri, resolvedUri ) => new Promise( resolve => {
+      finishFirst = ( ) => resolve( {
+        displayUri: `${resolvedUri}.display.jpg`,
+        size: { w: 1, h: 1 },
+        crop: {
+          x: 0, y: 0, w: 1, h: 1,
+        },
+      } );
+    } ) );
+    preloadPickerPhoto( "file:///usbStaging/A.JPG", "A.JPG" );
+    preloadPickerPhoto( "file:///usbStaging/B.JPG", "B.JPG" );
+    preloadPickerPhoto( "file:///usbStaging/C.JPG", "C.JPG" );
+    const cropping = enqueuePreload( "file:///imported/D.JPG", "file:///imported/D.JPG", null );
+    promotePreloads( ["file:///usbStaging/C.JPG"] );
+    await flush( );
+    finishFirst( );
+    await cropping;
+    await flush( );
+    await flush( );
+    expect( preparedOrder( ) ).toEqual( [
+      "file:///usbStaging/A.JPG",
+      // Picked, so promoted ahead of the one prepared in case
+      "file:///usbStaging/C.JPG",
+      "file:///imported/D.JPG",
+      "file:///usbStaging/B.JPG",
+    ] );
   } );
 
   it( "doesn't treat a mis-prefixed file path as a library asset", ( ) => {

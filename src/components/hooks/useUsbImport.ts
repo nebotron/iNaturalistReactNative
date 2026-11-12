@@ -10,9 +10,9 @@ import {
   beginBackgroundUsbImportTask,
   endBackgroundUsbImportTask,
 } from "sharedHelpers/backgroundExecution";
-import { enqueuePreload, PRELOAD_LOOKAHEAD } from "sharedHelpers/imageCropPreload";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
+import { PICKER_PRELOAD_COUNT } from "sharedHelpers/pickerCropPreload";
 import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import { stagedPathFor } from "sharedHelpers/usbStaging";
 import {
@@ -342,13 +342,12 @@ const useUsbImport = ( ) => {
             SAVE_TIMEOUT_MS,
           );
           savedPaths.push( relativePath );
-          // The drive is listed newest first, the order the cropper shows
-          // photos in, so start preparing the ones it opens on as soon as they
-          // land rather than after the user picks them (PhotoLibrary carries
-          // the preload over to the copy Done makes, via aliasPreload).
-          if ( savedPaths.length <= PRELOAD_LOOKAHEAD + 1 ) {
-            const stagedUri = `file://${stagedPath}`;
-            enqueuePreload( stagedUri, stagedUri, null ).catch( ( ) => undefined );
+          // The drive is listed newest first, so the photos the picker opens
+          // on land first: prepare them as they land, by the same path a
+          // finished batch takes (PhotoLibrary carries each prepare over to
+          // the copy Done makes, via aliasPreload).
+          if ( savedPaths.length <= PICKER_PRELOAD_COUNT ) {
+            preloadNewestPickerPhotos( realm );
           }
           // Mark imported immediately, not after the whole batch: if the app
           // is killed mid-loop, photos already saved to this point must not
@@ -517,10 +516,6 @@ const useUsbImport = ( ) => {
       progress.setPhase( failed > 0 || abandonReason
         ? "error"
         : "done" );
-      // The card's newest photos are already being prepared (above); this adds
-      // any library photos the picker shows above them, so it opens on photos
-      // that are all prepared.
-      if ( savedPaths.length > 0 ) preloadNewestPickerPhotos( realm );
       notifyUsbImportFinished(
         i18next.t( "USB-import-complete" ),
         deletedFromDevice > 0

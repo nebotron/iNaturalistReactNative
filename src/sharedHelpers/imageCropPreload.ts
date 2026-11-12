@@ -133,6 +133,9 @@ interface PreloadRequest {
   existingSavedCrop: NormalizedCrop | null;
   requestedAt: number;
   exportSource?: PreloadExport;
+  // Prepared ahead of any crop (pickerCropPreload): only started when nothing
+  // a crop is waiting on is queued.
+  background: boolean;
   resolve: ( result: PreloadResult | null ) => void;
 }
 
@@ -147,7 +150,8 @@ const preloadQueued = new Map<string, Promise<PreloadResult | null>>( );
 let activePreloadCount = 0;
 
 function startNextPreload( ) {
-  const request = preloadQueue.shift( )!;
+  const foreground = preloadQueue.findIndex( queued => !queued.background );
+  const [request] = preloadQueue.splice( Math.max( foreground, 0 ), 1 );
   preloadQueued.delete( request.imageUri );
   // May have been resolved or started directly (e.g. the user advanced to it)
   // since it was enqueued; don't waste a slot on already-done/running work.
@@ -186,11 +190,16 @@ function pumpPreloadQueue( ) {
 // the cache) can await its turn in the queue. Already cached, in-flight, or
 // queued URIs reuse the existing work so callers can re-enqueue freely (e.g.
 // on every navigation.replace) without piling up duplicate loads.
+// A background preload (photos prepared before they are picked) runs only when
+// nothing else is queued; asking for one in the foreground promotes it.
 export function enqueuePreload(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
-  exportSource?: PreloadExport,
+  { exportSource, background = false }: {
+    exportSource?: PreloadExport;
+    background?: boolean;
+  } = {},
 ): Promise<PreloadResult | null> {
   const cached = preloadCache.get( imageUri );
   if ( cached ) {
@@ -202,6 +211,8 @@ export function enqueuePreload(
   }
   const queued = preloadQueued.get( imageUri );
   if ( queued ) {
+    // eslint-disable-next-line no-use-before-define
+    if ( !background ) promotePreloads( [imageUri] );
     return queued;
   }
   let resolve: ( result: PreloadResult | null ) => void = ( ) => {};
@@ -210,27 +221,25 @@ export function enqueuePreload(
   } );
   preloadQueued.set( imageUri, promise );
   preloadQueue.push( {
-    imageUri, cropSourceUri, existingSavedCrop, requestedAt: Date.now( ), exportSource, resolve,
+    imageUri,
+    cropSourceUri,
+    existingSavedCrop,
+    requestedAt: Date.now( ),
+    exportSource,
+    background,
+    resolve,
   } );
   pumpPreloadQueue( );
   return promise;
 }
 
-// A preload already finished or running for this URI, without starting one.
-export function existingPreload( imageUri: string ): Promise<PreloadResult | null> | null {
-  const cached = preloadCache.get( imageUri );
-  if ( cached ) return Promise.resolve( cached );
-  return preloadInFlight.get( imageUri ) ?? null;
-}
-
-// Takes a preload that hasn't started yet out of the queue, so it can't hold
-// up a photo the user is actually waiting on. Its promise resolves null.
-export function dequeuePreload( imageUri: string ) {
-  const index = preloadQueue.findIndex( request => request.imageUri === imageUri );
-  if ( index < 0 ) return;
-  const [request] = preloadQueue.splice( index, 1 );
-  preloadQueued.delete( imageUri );
-  request.resolve( null );
+// Background preloads of photos the user has now picked, which the cropper is
+// about to wait on, move into the foreground, in the order they were queued.
+export function promotePreloads( imageUris: Iterable<string> ) {
+  const uris = new Set( imageUris );
+  preloadQueue.forEach( request => {
+    if ( uris.has( request.imageUri ) ) request.background = false;
+  } );
 }
 
 // A photo the import copied to a new uri (a USB-staged photo copied into the
