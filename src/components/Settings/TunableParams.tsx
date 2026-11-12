@@ -222,10 +222,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-cropPreloadConcurrency" ),
     t( "Tunable-cropPreloadConcurrency-description" ),
   ],
-  pickerPreloadCount: [
-    t( "Tunable-pickerPreloadCount" ),
-    t( "Tunable-pickerPreloadCount-description" ),
-  ],
   cropSourcesCacheMb: [
     t( "Tunable-cropSourcesCacheMb" ),
     t( "Tunable-cropSourcesCacheMb-description" ),

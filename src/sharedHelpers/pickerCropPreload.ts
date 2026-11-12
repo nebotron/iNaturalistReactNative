@@ -2,7 +2,6 @@ import { mkdir } from "@dr.pogodin/react-native-fs";
 import { cropSourcesPath } from "appConstants/paths";
 import { NativeModules, Platform } from "react-native";
 import { enqueuePreload } from "sharedHelpers/imageCropPreload";
-import { getTunable } from "sharedHelpers/tunableParams";
 
 // The first photo of a bulk crop can't be preloaded once Done is tapped: the
 // cropper opens at once and waits for the photo's copy out of the library and
@@ -14,9 +13,9 @@ import { getTunable } from "sharedHelpers/tunableParams";
 //
 // They are queued in the background, behind anything a crop is waiting on,
 // so they are never discarded to make way for one: Done promotes the picked
-// ones, and the rest keep their prepares for a later batch. Their files are
-// swept with the other crop sources at the next launch.
-export const PICKER_PRELOAD_COUNT = getTunable( "pickerPreloadCount" );
+// ones, and the rest keep their prepares for a later batch, across restarts,
+// until the media cache lifetime runs out (imageCropPreload). How many is the
+// same PRELOAD_LOOKAHEAD the cropper and Group Photos keep prepared.
 
 const exporter = ( ) => ( NativeModules as {
   ImageCropper?: {

@@ -1,3 +1,4 @@
+import { startKeepingCropPreloads } from "components/SharedComponents/ImageCrop/keepCropPreloads";
 import { navigationRef } from "navigation/navigationUtils";
 import { useEffect, useRef } from "react";
 import { useOnboardingShown } from "sharedHelpers/installData";
@@ -9,6 +10,12 @@ import useStore from "stores/useStore";
 const useResumeGroupPhotos = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const resumedRef = useRef( false );
+
+  // The current bulk crop's next photos and Group Photos' first ones stay
+  // prepared for cropping, so resuming either doesn't wait on a prepare. The
+  // keeper follows the store, so it picks up the saved progress once that has
+  // been read back, and the preloads themselves are kept across restarts.
+  useEffect( ( ) => startKeepingCropPreloads( ), [] );
 
   useEffect( ( ) => {
     // Don't jump into a deep screen before the user has finished onboarding.

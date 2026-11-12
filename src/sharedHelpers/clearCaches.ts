@@ -15,6 +15,7 @@ import {
   videoLibraryPath,
 } from "appConstants/paths";
 import { CROP_SOURCE_TTL_MS } from "sharedHelpers/ensureLocalImageForCrop";
+import { persistedPreloadFileNames } from "sharedHelpers/persistedPreloads";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import removeSyncedFilesFromDirectory from "sharedHelpers/removeSyncedFilesFromDirectory";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -202,9 +203,13 @@ const clearExpiredDeviceThumbnails = ( ) => clearExpiredFilesByTtl( deviceThumbn
 
 // Drop the least recently written files until the directory is back under
 // maxBytes.
-const trimDirectoryToSize = async ( dir: string, maxBytes: number ) => {
+const trimDirectoryToSize = async (
+  dir: string,
+  maxBytes: number,
+  shouldClear: ( name: string ) => boolean = ( ) => true,
+) => {
   if ( !( await exists( dir ) ) ) return;
-  const files = ( await readDir( dir ) ).filter( f => f.isFile( ) );
+  const files = ( await readDir( dir ) ).filter( f => f.isFile( ) && shouldClear( f.name ) );
   let total = files.reduce( ( sum, f ) => sum + ( Number( f.size ) || 0 ), 0 );
   if ( total <= maxBytes ) return;
   const oldestFirst = files.sort(
@@ -218,9 +223,14 @@ const trimDirectoryToSize = async ( dir: string, maxBytes: number ) => {
   await Promise.all( toDelete.map( file => unlink( file.path ) ) );
 };
 
+// Files a kept preload still uses are left alone: they are what lets a photo
+// prepared before the app restarted skip its prepare (imageCropPreload drops
+// the preload, and so frees them, once it is used or goes stale).
 const clearExpiredCropSources = async ( ) => {
-  await clearExpiredFilesByTtl( cropSourcesPath, CROP_SOURCE_TTL_MS );
-  await trimDirectoryToSize( cropSourcesPath, CROP_SOURCES_MAX_BYTES );
+  const kept = persistedPreloadFileNames( );
+  const unused = ( name: string ) => !kept.has( name );
+  await clearExpiredFilesByTtl( cropSourcesPath, CROP_SOURCE_TTL_MS, unused );
+  await trimDirectoryToSize( cropSourcesPath, CROP_SOURCES_MAX_BYTES, unused );
 };
 
 // Nuke is meant to sweep this down to 150MB, but on device it grew from 0.5GB

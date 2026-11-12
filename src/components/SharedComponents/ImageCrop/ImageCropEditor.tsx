@@ -11,6 +11,7 @@ import findGroupedPhotoByDisplayUri
   from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import { isCroppable } from "components/SharedComponents/ImageCrop/groupCropResume";
 import ImageCropView from "components/SharedComponents/ImageCrop/ImageCropView";
+import { preloadGroupedPhoto } from "components/SharedComponents/ImageCrop/keepCropPreloads";
 import { View } from "components/styledComponents";
 import cloneDeep from "lodash/cloneDeep";
 import type { SharedStackParamList } from "navigation/types";
@@ -582,15 +583,14 @@ const ImageCropEditor = ( ) => {
     // enqueuePreload dedupes against its cache, its in-flight loads and its
     // queue, so re-enqueueing on every re-run costs nothing.
     const preload = ( uri: string ) => {
-      const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
-      const cropSourceUri = groupedPhoto?.image.cropOriginalUri || uri;
-      const existingSavedCrop = groupedPhoto?.image.crop ?? null;
-      enqueuePreload( uri, cropSourceUri, existingSavedCrop ).then( syncWarmUris, ( ) => {} );
+      preloadGroupedPhoto( uri, groupedPhotos ).then( syncWarmUris, ( ) => {} );
     };
     syncWarmUris( );
     preload( upcomingUris[0] );
+    // The next PRELOAD_LOOKAHEAD in all, as keepCropPreloads keeps them while
+    // this screen is closed
     const handle = InteractionManager.runAfterInteractions( ( ) => {
-      upcomingUris.slice( 1, PRELOAD_LOOKAHEAD + 1 ).forEach( preload );
+      upcomingUris.slice( 1, PRELOAD_LOOKAHEAD ).forEach( preload );
     } );
     return ( ) => {
       cancelled = true;

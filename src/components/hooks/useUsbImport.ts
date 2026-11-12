@@ -10,9 +10,9 @@ import {
   beginBackgroundUsbImportTask,
   endBackgroundUsbImportTask,
 } from "sharedHelpers/backgroundExecution";
+import { PRELOAD_LOOKAHEAD } from "sharedHelpers/imageCropPreload";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
-import { PICKER_PRELOAD_COUNT } from "sharedHelpers/pickerCropPreload";
 import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import { stagedPathFor } from "sharedHelpers/usbStaging";
 import {
@@ -346,7 +346,7 @@ const useUsbImport = ( ) => {
           // on land first: prepare them as they land, by the same path a
           // finished batch takes (PhotoLibrary carries each prepare over to
           // the copy Done makes, via aliasPreload).
-          if ( savedPaths.length <= PICKER_PRELOAD_COUNT ) {
+          if ( savedPaths.length <= PRELOAD_LOOKAHEAD ) {
             preloadNewestPickerPhotos( realm );
           }
           // Mark imported immediately, not after the whole batch: if the app

@@ -9,12 +9,13 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { groupCropResumeParams } from "components/SharedComponents/ImageCrop/groupCropResume";
+import { preloadGroupedPhoto } from "components/SharedComponents/ImageCrop/keepCropPreloads";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import React, {
   useCallback, useEffect, useMemo, useRef,
 } from "react";
-import { enqueuePreload, noteCropRequested } from "sharedHelpers/imageCropPreload";
+import { noteCropRequested } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
@@ -128,17 +129,17 @@ const GroupPhotos = ( {
   const canCropSelectedPhotos = selectedPhotoUris.length > 0 || !!resume;
 
   // Preload the first selected image as soon as it's selected so its data is
-  // usually ready by the time the user taps crop. The remaining images are
-  // preloaded in the background by ImageCropEditor once the first is ready,
-  // so their loads don't contend with the first image's. enqueuePreload caches
-  // and dedupes, so re-running on selection changes is cheap.
+  // usually ready by the time the user taps crop: the grid's first photos are
+  // kept prepared already (keepCropPreloads), but a selection can start
+  // anywhere. The remaining images are preloaded by ImageCropEditor once the
+  // first is ready, so their loads don't contend with the first image's.
+  // Preloads are cached and deduped, so re-running on selection changes is cheap.
   useEffect( ( ) => {
     const [firstPhoto] = selectedPhotos;
     if ( firstPhoto ) {
-      const { uri, cropOriginalUri, crop } = firstPhoto.image;
-      enqueuePreload( uri, cropOriginalUri || uri, crop ?? null );
+      preloadGroupedPhoto( firstPhoto.image.uri, groupedPhotos ).catch( ( ) => null );
     }
-  }, [selectedPhotos] );
+  }, [groupedPhotos, selectedPhotos] );
 
   // Read through a ref so the viewability callback stays stable; FlashList
   // treats a changed onViewableItemsChanged as a fresh viewability config.

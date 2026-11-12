@@ -5,8 +5,10 @@ import {
 import { Platform } from "react-native";
 
 const mockPreload = jest.fn( );
+jest.mock( "sharedHelpers/imageCropPreload", ( ) => ( {
+  PRELOAD_LOOKAHEAD: 2,
+} ) );
 jest.mock( "sharedHelpers/pickerCropPreload", ( ) => ( {
-  PICKER_PRELOAD_COUNT: 2,
   canPreloadPickerPhoto: uri => uri.startsWith( "ph://" ) || uri.startsWith( "file://" ),
   preloadPickerPhoto: ( ...args ) => mockPreload( ...args ),
 } ) );

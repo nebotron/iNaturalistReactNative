@@ -10,10 +10,10 @@ import {
   getPreviouslyUploadedDevicePhotoUrisSet,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import { PRELOAD_LOOKAHEAD } from "sharedHelpers/imageCropPreload";
 import { log } from "sharedHelpers/logger";
 import {
   canPreloadPickerPhoto,
-  PICKER_PRELOAD_COUNT,
   preloadPickerPhoto,
 } from "sharedHelpers/pickerCropPreload";
 import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
@@ -50,7 +50,7 @@ export const isPickerPreloadable = ( node: PhotoNode ) => !isVideoNode( node )
 // The picker keeps preparing whatever is on top once it is open; these are the
 // same photos, so they are prepared once (see pickerCropPreload).
 export async function preloadNewestPickerPhotos( realm: Realm ): Promise<void> {
-  if ( Platform.OS !== "ios" || PICKER_PRELOAD_COUNT <= 0 || realm.isClosed ) return;
+  if ( Platform.OS !== "ios" || PRELOAD_LOOKAHEAD <= 0 || realm.isClosed ) return;
   try {
     // Checked, never requested: this runs without the user asking for Photos.
     const status = await iosReadGalleryPermission( "readWrite" );
@@ -74,7 +74,7 @@ export async function preloadNewestPickerPhotos( realm: Realm ): Promise<void> {
     [...library, ...staged]
       .sort( ( a, b ) => b.timestamp - a.timestamp )
       .filter( node => isPickerPreloadable( node ) && !isHidden( node ) )
-      .slice( 0, PICKER_PRELOAD_COUNT )
+      .slice( 0, PRELOAD_LOOKAHEAD )
       .forEach( node => preloadPickerPhoto( node.image.uri, node.image.filename ) );
   } catch ( error ) {
     logger.error( "Could not preload the newest photos for the picker", error );

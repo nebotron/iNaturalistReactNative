@@ -2145,7 +2145,7 @@ Tunable-autoAdvancedModeObservations-description = Users with at least this many
 # Label for a tunable parameter in settings
 Tunable-cropPreloadAhead = Photos to preload for cropping
 # Description of a tunable parameter in settings
-Tunable-cropPreloadAhead-description = How many photos ahead of the one on screen the cropper prepares at full resolution, so advancing doesn't wait.
+Tunable-cropPreloadAhead-description = How many photos are kept prepared for cropping at full resolution: the next ones in a bulk crop, the first ones in Group Photos, and the ones the photo picker opens on. Kept across restarts.
 # Label for a tunable parameter in settings
 Tunable-cropPreloadConcurrency = Photos prepared at once for cropping
 # Description of a tunable parameter in settings
@@ -2239,7 +2239,7 @@ Tunable-maxSoundsPerObservation-description = Maximum number of sounds an observ
 # Label for a tunable parameter in settings
 Tunable-mediaCacheDays = Media cache lifetime (days)
 # Description of a tunable parameter in settings
-Tunable-mediaCacheDays-description = How long brightness-adjusted photos, extracted audio, and photo thumbnails are kept.
+Tunable-mediaCacheDays-description = How long brightness-adjusted photos, extracted audio, photo thumbnails, and photos prepared for cropping but not yet cropped are kept.
 # Label for a tunable parameter in settings
 Tunable-minFreeStorageMb = Minimum free storage (MB)
 # Description of a tunable parameter in settings
@@ -2264,10 +2264,6 @@ Tunable-onlineSuggestionsTimeoutSeconds-description = How long to wait for onlin
 TUNABLE-PARAMETERS = TUNABLE PARAMETERS
 # Note at the top of the tunable parameters settings screen
 Tunable-parameters-restart-note = Changes take effect after restarting the app. Values outside the allowed range are clamped.
-# Label for a tunable parameter in settings
-Tunable-pickerPreloadCount = Photos to prepare before selecting
-# Description of a tunable parameter in settings
-Tunable-pickerPreloadCount-description = How many of the photos the photo picker opens on are prepared for cropping ahead of time: as a USB import copies them, after each batch is imported, and when the picker opens. The cropper then opens on them without waiting. 0 turns this off.
 # Label for a tunable parameter in settings
 Tunable-placeSearchMaxSuggestions = Place search suggestions
 # Description of a tunable parameter in settings

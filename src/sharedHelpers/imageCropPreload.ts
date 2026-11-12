@@ -1,6 +1,13 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import { cropSourcesPath } from "appConstants/paths";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import {
+  clearPersistedPreloads,
+  deletePersistedPreload,
+  readPersistedPreloads,
+  writePersistedPreload,
+} from "sharedHelpers/persistedPreloads";
 import type { PreparedSourceFile } from "sharedHelpers/prepareCropSource";
 import prepareCropSource from "sharedHelpers/prepareCropSource";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
@@ -36,14 +43,44 @@ export interface PreloadResult {
   timing: PreloadTiming;
 }
 
-// How many upcoming photos in a bulk crop to preload ahead of the one
-// currently shown (Settings > Tunable Parameters). Preloads leave their result
-// on disk, so a deeper lookahead costs no extra memory: it banks prepares
-// while the user frames a slow crop, to cover a later run of quick ones.
+// How many photos are kept prepared for cropping (Settings > Tunable
+// Parameters): the next ones in the current bulk crop, the first ones in Group
+// Photos, and the ones the photo picker opens on (keepCropPreloads,
+// pickerCropPreload). Preloads leave their result on disk, so a deeper
+// lookahead costs no extra memory: it banks prepares while the user frames a
+// slow crop, to cover a later run of quick ones.
 export const PRELOAD_LOOKAHEAD = getTunable( "cropPreloadAhead" );
 
-// Module-level cache so preloaded data survives navigation.replace cycles
-export const preloadCache = new Map<string, PreloadResult>( );
+// A preload not used within this long (Settings > Tunable Parameters, media
+// cache lifetime) is dropped at the next launch, files and all.
+const PERSISTED_PRELOAD_TTL_MS = getTunable( "mediaCacheDays" ) * 24 * 60 * 60 * 1000;
+
+// Every finished preload, kept on disk as well (persistedPreloads) so the
+// work survives navigation.replace cycles, the tab tree being torn down, and
+// the app being killed or restarted.
+class PersistedPreloadCache extends Map<string, PreloadResult> {
+  set( imageUri: string, result: PreloadResult ) {
+    writePersistedPreload( imageUri, { ...result, savedAt: Date.now( ) } );
+    return super.set( imageUri, result );
+  }
+
+  delete( imageUri: string ) {
+    deletePersistedPreload( imageUri );
+    return super.delete( imageUri );
+  }
+
+  clear( ) {
+    clearPersistedPreloads( );
+    super.clear( );
+  }
+
+  // Back into memory without writing it again
+  restore( imageUri: string, result: PreloadResult ) {
+    super.set( imageUri, result );
+  }
+}
+
+export const preloadCache = new PersistedPreloadCache( );
 // Track in-flight loads by their promise so callers can await (and dedupe)
 // an ongoing preload instead of kicking off duplicate, contending work.
 const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
@@ -52,6 +89,32 @@ const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
 // (ensureLocalImageForCrop) isn't the one wanted.
 export type PreloadExport = ( ) => Promise<string>;
 
+const fileExists = ( uri: string ) => exists( stripFilePrefix( uri ) ).catch( ( ) => false );
+
+// Last launch's preloads, back in the cache once their files are confirmed
+// still there. One that has gone unused too long is dropped with its files.
+async function restorePersistedPreloads( ) {
+  await Promise.all( readPersistedPreloads( ).map( async ( [imageUri, persisted] ) => {
+    const { savedAt, ...result } = persisted;
+    if ( Date.now( ) - savedAt > PERSISTED_PRELOAD_TTL_MS ) {
+      // eslint-disable-next-line no-use-before-define
+      releaseCropSource( imageUri, [result.localUri, result.displayUri] );
+      return;
+    }
+    const [hasSource, hasDisplay] = await Promise.all( [
+      fileExists( result.localUri ),
+      fileExists( result.displayUri ),
+    ] );
+    if ( hasSource && hasDisplay ) {
+      preloadCache.restore( imageUri, result as PreloadResult );
+    } else {
+      // eslint-disable-next-line no-use-before-define
+      releaseCropSource( imageUri, [result.localUri, result.displayUri] );
+    }
+  } ) ).catch( ( ) => undefined );
+}
+const restored = restorePersistedPreloads( );
+
 async function loadImageData(
   imageUri: string,
   cropSourceUri: string,
@@ -59,6 +122,11 @@ async function loadImageData(
   requestedAt: number,
   exportSource?: PreloadExport,
 ): Promise<PreloadResult | null> {
+  // A preload asked for in the moments after launch may be one of last
+  // launch's, still being read back.
+  await restored;
+  const kept = preloadCache.get( imageUri );
+  if ( kept ) return kept;
   const startedAt = Date.now( );
   const resolvedUri = exportSource
     ? await exportSource( )
