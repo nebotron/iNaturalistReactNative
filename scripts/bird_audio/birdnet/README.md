@@ -6,12 +6,14 @@ Technology; Museum für Naturkunde Berlin), "Powered by BirdNET", licensed
 CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), from the full
 fp16 ONNX export at https://huggingface.co/tphakala/BirdNET-v3.0-Models.
 Changes: the classifier heads are sliced to the 7,994 species that iNaturalist
-has research-grade sound observations of (birds, frogs, insects, mammals), and
-the weights are split across `audio_id.data0-2` to stay under GitHub's file size
-limit. The result, `ios/iNaturalistReactNative/audio_id.onnx` and its data
+has research-grade sound observations of (birds, frogs, insects, mammals), those
+per-species heads (~76M of the 105M weights) are stored as int8 with one scale
+per species, and the weights are split across `audio_id.data0-1` to stay under
+GitHub's file size limit. The result, `ios/iNaturalistReactNative/audio_id.onnx` and its data
 files, is under the same license. The bundled BirdNET geomodel
 (`audio_geo.onnx`, V3.0.3, https://huggingface.co/sammlapp/BirdNET_GeoModel)
-drops species unlikely at the user's place and week when location is available.
+drops species unlikely at the user's place and week when location is available;
+its weights are stored as int8.
 Everything runs on device with no network. Poaching and military use are
 prohibited by BirdNET's terms of use.
 
@@ -20,6 +22,20 @@ Rebuild and check (from this directory):
     python3 build_model.py <repo>     # model, data files, geomodel, audioIdSpecies.json
     python3 build_splits.py <repo>    # audioIdSplits.json, for species iNaturalist split
     python3 eval_regions.py <repo>    # small accuracy check -> report_regions.json
+
+## Weight storage
+
+The int8 weights are a file-size measure only: `scripts/onnx_weights.py`
+follows each with a DequantizeLinear node that ONNX Runtime folds while
+loading (with `session.disable_quant_qdq`, set in `AudioBirdId.m`), before
+CoreML takes its part of the graph, so the session runs fp16 weights as
+before. Loading takes ~0.4 s longer and peaks ~100 MB higher on a desktop CPU.
+Rounding the weights moved scores by under 0.008 and changed no recording's or
+labeled field clip's detections at 0.5 (400 recent recordings from the sets
+below, 3,255 windows; 327 field clips). That cut the bundled weights from 210 MB to
+135 MB and the geomodel from 14 MB to 7.4 MB. Quantizing the encoder as well
+(110 MB) moved field-clip scores by up to 0.18 and lost 3 detections against
+1 gained; int4 heads (about 98 MB) lost 9 against 4 gained. Neither is used.
 
 ## Species iNaturalist has split
 

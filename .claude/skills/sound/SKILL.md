@@ -128,3 +128,20 @@ notes of what did and did not work at the end of this skill.
   right of 96, which breaks the "no right lost" rule; the user's call).
   Shipped as 87be35f (alerts waited for the check, 5 s or more), then reverted at the user's
   call; don't re-ship without asking.
+
+### Model size (int8 head weights, shipped)
+
+- The per-species heads (`att_block*`, `head.`) are 76M of the 105M weights. Storing them
+  as int8 per species (`scripts/onnx_weights.py`, called by `build_model.py`) took the
+  weights from 210 to 135 MB with no detection change at 0.5 on 400 recordings or 327
+  field clips; the geomodel went to int8 too (14 to 7.4 MB, no detection change).
+- Not shipped: int8 on the encoder as well (scores moved up to 0.18 on field clips, -3/+1
+  detections) and int4 heads (-9/+4). ORT folds the int8 weights back to fp16 at load
+  (`session.disable_quant_qdq` in `AudioBirdId.m`), so CoreML and power use see the same
+  graph; the cost is ~0.4 s more session load and ~100 MB more peak memory while loading.
+  Cast/Mul nodes instead of DequantizeLinear needed no setting but peaked ~370 MB higher.
+- eval_clips.py / eval_regions.py sessions don't set that entry, so ORT dequantizes per run
+  there: same scores, just slower.
+- The model returns NaN for every species on clipped input (samples at or beyond +/-1.0;
+  6 of 3,255 windows, from 2 recordings), quantized or not. `isHeard` is false for NaN, so it
+  only blanks those windows, but clamping the input to [-1, 1] before the run may fix it.
