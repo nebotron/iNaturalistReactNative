@@ -7,6 +7,10 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import DevicePhotoGrid from "components/PhotoImporter/DevicePhotoGrid";
 import type { PhotoGalleryListItem } from "components/PhotoImporter/helpers/photoGallerySections";
 import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGallerySections";
+import {
+  getDeviceUriFromNode,
+  isPickerPreloadable,
+} from "components/PhotoImporter/helpers/preloadNewestPickerPhotos";
 import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
 import PhotoGalleryImage from "components/PhotoImporter/PhotoGalleryImage";
 import { Body2 } from "components/SharedComponents";
@@ -47,7 +51,6 @@ import {
   updatePhotoImportProgress,
 } from "sharedHelpers/photoImportMarker";
 import {
-  canPreloadPickerPhoto,
   PICKER_PRELOAD_COUNT,
   preloadPickerPhoto,
   releasePickerPreloads,
@@ -88,17 +91,6 @@ type GalleryInclude = NonNullable<Parameters<typeof CameraRoll.getPhotos>[0]["in
 const GALLERY_INCLUDE: GalleryInclude = Platform.OS === "android"
   ? ["filename", "fileSize", "filepath", "imageSize", "location"]
   : ["filename", "fileSize", "imageSize", "location"];
-
-const getDeviceUriFromNode = ( node: PhotoNode ): string | null => {
-  // A staged SD card photo (see usbStaging.ts), not a library asset
-  if ( Platform.OS === "ios" && !node.image.uri.startsWith( "file://" ) ) {
-    if ( !node.id ) {
-      return null;
-    }
-    return normalizeDevicePhotoUri( `ph://${node.id}` );
-  }
-  return normalizeDevicePhotoUri( node.image.uri );
-};
 
 const getSelectionKey = ( node: PhotoNode ) => node.image.uri;
 
@@ -463,9 +455,7 @@ const PhotoGallery = ( {
   const isFocused = useIsFocused( );
   useEffect( ( ) => {
     if ( !isFocused || importingRef.current ) return;
-    const preloadable = visiblePhotos.filter( node => !isVideoNode( node )
-      && !( node.image.filename ?? "" ).toLowerCase( ).endsWith( ".gif" )
-      && canPreloadPickerPhoto( node.image.uri ) );
+    const preloadable = visiblePhotos.filter( isPickerPreloadable );
     const newestSelected = preloadable.find(
       node => selectedUris.has( getSelectionKey( node ) ),
     );

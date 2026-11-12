@@ -111,8 +111,28 @@ describe( "pickerCropPreload", ( ) => {
     expect( mockUnlink ).toHaveBeenCalledWith( expect.stringMatching( /picker_ASSET_3\.jpg$/ ) );
   } );
 
-  it( "doesn't preload a file already on the device", ( ) => {
-    preloadPickerPhoto( "file:///staged/IMG.jpg", "IMG.jpg" );
+  it( "prepares a staged SD card photo from its own file, with no export", async ( ) => {
+    preloadPickerPhoto( "file:///usbStaging/1_IMG.JPG", "1_IMG.JPG" );
+    const result = await enqueuePreload(
+      "file:///usbStaging/1_IMG.JPG",
+      "file:///usbStaging/1_IMG.JPG",
+      null,
+    );
+    expect( mockExportOriginal ).not.toHaveBeenCalled( );
+    expect( result.localUri ).toBe( "file:///usbStaging/1_IMG.JPG" );
+  } );
+
+  it( "leaves a prepare something else started alone", async ( ) => {
+    await enqueuePreload( "file:///usbStaging/2_IMG.JPG", "file:///usbStaging/2_IMG.JPG", null );
+    preloadPickerPhoto( "file:///usbStaging/2_IMG.JPG", "2_IMG.JPG" );
+    releasePickerPreloads( );
+    await flush( );
+    await flush( );
+    expect( preloadCache.has( "file:///usbStaging/2_IMG.JPG" ) ).toBe( true );
+    expect( mockUnlink ).not.toHaveBeenCalled( );
+  } );
+
+  it( "doesn't treat a mis-prefixed file path as a library asset", ( ) => {
     preloadPickerPhoto( "ph:///var/mobile/IMG.jpg", "IMG.jpg" );
     expect( mockExportOriginal ).not.toHaveBeenCalled( );
   } );

@@ -5,6 +5,9 @@ import { duplicateGroupedMediaGroups } from
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
+import {
+  preloadNewestPickerPhotos,
+} from "components/PhotoImporter/helpers/preloadNewestPickerPhotos";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
@@ -625,6 +628,9 @@ const GroupPhotosContainer = ( ) => {
       sumExifMs: createTimings.exifMs,
       sumResizeMs: createTimings.resizeMs,
     } );
+    // The picker's next photos, so the next batch's cropper doesn't open on a
+    // photo it has to prepare from scratch.
+    preloadNewestPickerPhotos( realm );
     Promise.all( prefetches ).then( results => {
       const sum = results.reduce( ( total, r ) => ( {
         count: total.count + r.count,
