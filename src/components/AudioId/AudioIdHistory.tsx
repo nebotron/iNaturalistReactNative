@@ -120,7 +120,9 @@ const AudioIdHistory = ( ) => {
               <Body1>{formatISOTimestamp( clip.time )}</Body1>
               {!clip.manual && (
                 <Body3>
-                  {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
+                  {t( "X-percent-confidence", {
+                    count: Math.round( ( clip.callConfidence ?? clip.confidence ) * 100 ),
+                  } )}
                 </Body3>
               )}
             </View>

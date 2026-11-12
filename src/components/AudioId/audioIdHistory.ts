@@ -26,6 +26,9 @@ export interface AudioIdClip {
   sp: AudioIdSpecies;
   time: number;
   confidence: number;
+  // What Identify gives the species for the call alone (see scoreTrim), once
+  // the call is found
+  callConfidence?: number;
   label?: AudioIdLabel;
   location?: { latitude: number; longitude: number; accuracy: number };
   // Seconds into the 15 s context clip the call fills, when found
@@ -91,6 +94,7 @@ const uploadLabel = async ( id: string, clip: AudioIdClip, label: AudioIdLabel )
       predictedTaxonId: clip.sp.taxonId,
       predictedName: clip.sp.name,
       confidence: clip.confidence,
+      callConfidence: clip.callConfidence ?? null,
       heardAt: new Date( clip.time ).toISOString( ),
       latitude: clip.location?.latitude ?? null,
       longitude: clip.location?.longitude ?? null,

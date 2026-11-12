@@ -23,7 +23,7 @@ import useStore from "stores/useStore";
 import * as uuid from "uuid";
 
 import useAudioIdHistory from "./audioIdHistory";
-import { AudioBirdId } from "./audioIdSession";
+import { AudioBirdId, scoreTrim } from "./audioIdSession";
 import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
 import useCommonName from "./useCommonName";
 import { clipTaxonId, NEARBY_MS, obsTime } from "./useEligibleClips";
@@ -51,6 +51,33 @@ const AudioIdClip = ( ) => {
   const [error, setError] = useState<string | null>( null );
   const { span, trim, setTrim } = useClipSpan( id, clip?.time, clip?.call, clip?.duration );
   const time = clip?.time ?? 0;
+  // The score for the trim as it stands, which is what Identify will give the
+  // species: the trimmed audio is the observation's sound. Until it's back,
+  // the call's score, or the live session's.
+  const [trimScore, setTrimScore] = useState<{ key: string; score: number | null } | null>( null );
+  const clipSp = clip?.manual
+    ? undefined
+    : clip?.sp;
+  const spanPath = span?.path;
+  const [trimFrom, trimTo] = trim;
+  const trimKey = `${spanPath}:${trimFrom}:${trimTo}`;
+  useEffect( ( ) => {
+    let current = true;
+    // After a pause, so dragging a handle doesn't score every step
+    const timer = setTimeout( ( ) => {
+      if ( !spanPath || !clipSp || trimTo <= trimFrom ) return;
+      scoreTrim( spanPath, [trimFrom, trimTo], clipSp )
+        .then( score => { if ( current ) setTrimScore( { key: trimKey, score } ); } )
+        .catch( ( ) => undefined );
+    }, 400 );
+    return ( ) => {
+      current = false;
+      clearTimeout( timer );
+    };
+  }, [spanPath, clipSp, trimFrom, trimTo, trimKey] );
+  const confidence = ( trimScore?.key === trimKey
+    ? trimScore.score
+    : null ) ?? clip?.callConfidence ?? clip?.confidence ?? 0;
   // A clip heard minutes ago can be newer than the last drained fix
   useEffect( ( ) => { drainTrackedLocationFixes( ); }, [] );
   const trackPoints = useQuery(
@@ -152,7 +179,7 @@ const AudioIdClip = ( ) => {
       <Body3>{formatISOTimestamp( clip.time )}</Body3>
       {!clip.manual && (
         <Body3>
-          {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
+          {t( "X-percent-confidence", { count: Math.round( confidence * 100 ) } )}
         </Body3>
       )}
       {span && (

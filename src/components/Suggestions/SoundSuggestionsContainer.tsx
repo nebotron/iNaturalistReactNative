@@ -90,16 +90,21 @@ const SoundSuggestionsContainer = ( {
       ? ownSoundUri
       : soundUris[0] );
   const { latitude, longitude } = currentObservation || {};
-  const observedAt = currentObservation?.time_observed_at || currentObservation?.observed_on;
+  // A new local observation has only observed_on_string until it's uploaded,
+  // and without it the geomodel would use this week rather than the sound's.
+  const observedAt = currentObservation?.time_observed_at
+    || currentObservation?.observed_on_string
+    || currentObservation?.observed_on;
+  const observedTime = Date.parse( observedAt ?? "" );
   const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: false } );
 
   const { data, isLoading } = useQuery( {
-    queryKey: ["soundSuggestions", soundUri, latitude, longitude, observedAt],
+    queryKey: ["soundSuggestions", soundUri, latitude, longitude, observedTime],
     queryFn: ( ) => scoreSound( soundUri as string, latitude != null && longitude != null
       ? { latitude, longitude }
-      : null, observedAt
-      ? new Date( observedAt )
-      : new Date( ) ),
+      : null, Number.isNaN( observedTime )
+      ? new Date( )
+      : new Date( observedTime ) ),
     enabled: !!soundUri,
     retry: false,
   } );

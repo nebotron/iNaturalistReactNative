@@ -106,3 +106,23 @@ notes of what did and did not work at the end of this skill.
 - Audio ID's power use goes down instead by running the model on CoreML / the Neural Engine
   (`-checkCoreML` in AudioBirdId.m, chosen per build after comparing against the CPU; look for
   "model provider" in the app log).
+
+### Live vs. Identify (call-only) scores
+
+- Identify on a clip makes an observation from the trimmed call (`findCall`'s span by default,
+  2 s at the median), re-encoded to AAC by `trimClip`, and Suggestions scores it with
+  `scoreSound`: one window, zero-padded to 5 s. Live scored 5 s of audio around the call.
+- On 170 labeled 15 s clips (centered window as live, the call span re-encoded as Identify):
+  scores differ by 0.15 on average and by > 0.25 on a quarter; the two disagree on ≥ 0.5 for
+  22% and on the top species for 15%. No padding closes the gap: centering, tiling the call,
+  sliding it across the window at 1 s or 1/3 s steps (max) all leave |d| 0.14–0.16. Skipping
+  the AAC re-encode helps a little (0.15 → 0.14, sliding 0.14 → 0.12).
+- The call alone is the better score: at 0.5 it keeps 101 of 105 right detections and 25 of
+  65 wrong ones (live window: 100 / 44). On the logged confidences, of 149 reported, the call
+  keeps 92 of 96 right and 18 of 53 wrong.
+- **Shipped**: clips store `callConfidence` (`scoreTrim` in `audioIdSession.ts`, the same
+  trim + `scoreSound` Identify runs), shown in the history and on the clip page (which rescores
+  as the trim changes), and uploaded with labels. Suggestions also now takes the geomodel
+  week from `observed_on_string`, which new local observations have instead of
+  `time_observed_at`. Not shipped: dropping detections whose call scores < 0.5 (would lose 4
+  right of 96, which breaks the "no right lost" rule; the user's call).
