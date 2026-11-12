@@ -202,7 +202,7 @@ const AddressInput = ( {
         accessibilityRole="button"
         activeOpacity={1}
         onPress={handleClear}
-        className="flex-row items-center border border-lightGray rounded-lg px-3 py-1"
+        className="flex-row items-center border border-lightGray rounded-lg px-3 py-0.5"
       >
         <View
           className="w-4 h-4 rounded-full mr-2 items-center justify-center"
@@ -212,9 +212,10 @@ const AddressInput = ( {
         </View>
         <TextInput
           accessibilityLabel={placeholder}
-          // Always one line: a fixed height, no vertical padding, and long
-          // addresses scroll horizontally instead of wrapping.
-          className="flex-1 h-8 py-0 text-darkGray"
+          // Always one line: a fixed height just tall enough for the text, no
+          // vertical padding, and long addresses scroll horizontally instead
+          // of wrapping.
+          className="flex-1 h-6 py-0 text-sm text-darkGray"
           multiline={false}
           numberOfLines={1}
           textAlignVertical="center"
