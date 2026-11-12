@@ -34,9 +34,9 @@ jobs:
       started: ${{ steps.start.outputs.started }}
 
     steps:
-    # Intel runners keep their own caches: node_modules and Pods hold
-    # host-arch binaries, and ccache misses on a different compiler binary.
-    # "macOSX64" doesn't share the "macOS-" prefix the Arm restore-keys use.
+    # Intel runners keep their own node_modules and Pods cache, which hold
+    # host-arch binaries. "macOSX64" doesn't share the "macOS-" prefix the Arm
+    # restore-keys use. The ccache and Metro cache are shared: see below.
     # Also tells testflight-ios.yml a runner was acquired, so it doesn't retry
     # a build that failed on its own merits.
     - name: Name the cache namespace for this runner
@@ -154,7 +154,14 @@ jobs:
         # Xcode exports build settings to script phases but not to CompileC,
         # so the wrapper's $CCACHE_BINARY is empty there and it runs plain
         # clang, bypassing ccache. Bake the binary and cache dir into it.
-        sed -i '' "s|^exec \$CCACHE_BINARY|exec env CCACHE_DIR=$HOME/.ccache CCACHE_MAXSIZE=2G $( command -v ccache )|" \
+        #
+        # Both images cross-compile the same arm64 iOS objects with the same
+        # Xcode, from the same paths, so an Arm build's cache entries are hits
+        # on Intel too. But by default ccache keys on the compiler binary's
+        # mtime and size, which needn't match between images. Key on the Xcode
+        # build instead, so the two can share one cache.
+        COMPILER_CHECK="string:$( xcodebuild -version | tr -d ' \n' )"
+        sed -i '' "s|^exec \$CCACHE_BINARY|exec env CCACHE_DIR=$HOME/.ccache CCACHE_MAXSIZE=2G CCACHE_COMPILERCHECK=$COMPILER_CHECK $( command -v ccache )|" \
           node_modules/react-native/scripts/xcode/ccache-clang.sh
         cat node_modules/react-native/scripts/xcode/ccache-clang.sh
 
@@ -164,6 +171,10 @@ jobs:
     # restore-keys fall back to the newest one built against the same
     # dependencies. react-native-xcode.sh always bundles with --reset-cache,
     # which would wipe the Metro cache, so the next step drops the flag.
+    # Neither depends on the host's architecture, so Arm and Intel share them:
+    # Intel builds are rare, and their own cache would always be stale or
+    # evicted, leaving the archive to compile all ~2000 files (~80 minutes).
+    #
     # Worklets bundle mode writes each worklet to its own module under
     # .worklets as a side effect of transforming the file that holds it, so a
     # cached transform needs those modules kept alongside it.
@@ -174,10 +185,10 @@ jobs:
           ~/.ccache
           ~/.metro-cache
           node_modules/react-native-worklets/.worklets
-        key: build-${{ env.CACHE_OS }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-${{ github.run_id }}
+        key: build-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-${{ github.run_id }}
         restore-keys: |
-          build-${{ env.CACHE_OS }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-
-          build-${{ env.CACHE_OS }}-
+          build-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-
+          build-
 
     - name: Stop the bundle phase resetting the Metro cache
       run: |
