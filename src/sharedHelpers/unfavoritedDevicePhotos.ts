@@ -28,6 +28,8 @@ const isFavorited = ( observation: FavoritableObservation ): boolean => {
 // via Group Photos, and those on a favorited one. Matching is by stored URI
 // only. A photo also stored on a favorited observation is protected.
 // crops: the crop each favorited device photo has on its observation.
+// uploadedOrRemoved: device photos whose upload to iNaturalist has finished,
+// faved or not, plus those removed via Group Photos or the photo picker.
 const classifyDevicePhotoUris = (
   realm: Realm,
   observationsCache?: UserObservationsCache,
@@ -35,10 +37,12 @@ const classifyDevicePhotoUris = (
   unfavorited: string[];
   favorited: string[];
   crops: Record<string, NormalizedCrop>;
+  uploadedOrRemoved: string[];
 } => {
   const unfavoritedUris = new Set<string>( );
   const favoritedUris = new Set<string>( );
   const crops: Record<string, NormalizedCrop> = {};
+  const uploadedOrRemoved = new Set<string>( );
 
   realm.objects<FavoritableObservation>( "Observation" ).forEach( observation => {
     // Realm's votes can be stale; prefer the shared cache, which is reconciled
@@ -52,13 +56,14 @@ const classifyDevicePhotoUris = (
         ? favoritedUris
         : unfavoritedUris ).add( uri );
     } );
-    if ( favorited ) {
-      ( observation.observationPhotos ?? [] ).forEach( obsPhoto => {
-        const uri = normalizeDevicePhotoUri( obsPhoto.originalDevicePhotoUri );
-        const crop = savedNormalizedCrop( obsPhoto.photo ?? {} );
-        if ( uri && crop ) crops[uri] = crop;
-      } );
-    }
+    ( observation.observationPhotos ?? [] ).forEach( obsPhoto => {
+      const uri = normalizeDevicePhotoUri( obsPhoto.originalDevicePhotoUri );
+      if ( !uri ) return;
+      if ( obsPhoto._synced_at ) uploadedOrRemoved.add( uri );
+      if ( !favorited ) return;
+      const crop = savedNormalizedCrop( obsPhoto.photo ?? {} );
+      if ( crop ) crops[uri] = crop;
+    } );
   } );
 
   favoritedUris.forEach( uri => unfavoritedUris.delete( uri ) );
@@ -67,8 +72,14 @@ const classifyDevicePhotoUris = (
   getRemovedGroupPhotoUris( ).forEach( uri => {
     unfavoritedUris.add( uri );
     favoritedUris.delete( uri );
+    uploadedOrRemoved.add( uri );
   } );
-  return { unfavorited: [...unfavoritedUris], favorited: [...favoritedUris], crops };
+  return {
+    unfavorited: [...unfavoritedUris],
+    favorited: [...favoritedUris],
+    crops,
+    uploadedOrRemoved: [...uploadedOrRemoved],
+  };
 };
 
 export default classifyDevicePhotoUris;

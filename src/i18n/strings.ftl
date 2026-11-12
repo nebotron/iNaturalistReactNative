@@ -2335,7 +2335,7 @@ Tunable-usbMaxPhotosPerScan-description = Maximum number of new photos imported 
 # Label for a tunable parameter in settings
 Tunable-usbStagingRetentionDays = Days to keep USB originals
 # Description of a tunable parameter in settings
-Tunable-usbStagingRetentionDays-description = How long photos copied from USB are kept in the app after you add them to an observation or delete them in the photo picker or Group Photos, whether or not you fave the observation. Photos you never add or delete are kept. Photos on observations you fave are also saved to your photo library.
+Tunable-usbStagingRetentionDays-description = How long photos copied from USB are kept in the app after they finish uploading to iNaturalist or you delete them in the photo picker or Group Photos, whether or not you fave the observation. Photos never uploaded or deleted are kept. Photos on observations you fave are also saved to your photo library.
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
