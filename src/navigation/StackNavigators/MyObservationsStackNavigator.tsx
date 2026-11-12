@@ -2,7 +2,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import MyObservationsResults from "components/MyObservations/MyObservationsResults";
 import SearchMyObservationsTaxon
   from "components/MyObservations/Search/SearchMyObservationsTaxon";
-import { hideHeader, preventSwipeToGoBack } from "navigation/navigationOptions";
+import { hideHeader } from "navigation/navigationOptions";
 import type { MyObservationsStackParamList } from "navigation/types";
 import React from "react";
 
@@ -14,10 +14,7 @@ export const SCREEN_NAME_SEARCH_MY_OBSERVATIONS = "SearchMyObservations";
 const Stack = createNativeStackNavigator<MyObservationsStackParamList>( );
 
 const MyObservationsStackNavigator = ( ) => (
-  <Stack.Navigator
-    screenOptions={preventSwipeToGoBack}
-    initialRouteName={SCREEN_NAME_MY_OBSERVATIONS_RESULTS}
-  >
+  <Stack.Navigator initialRouteName={SCREEN_NAME_MY_OBSERVATIONS_RESULTS}>
     <Stack.Screen
       name={SCREEN_NAME_MY_OBSERVATIONS_RESULTS}
       component={MyObservationsResults}

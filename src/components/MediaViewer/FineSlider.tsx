@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import usePreventSwipeBack from "sharedHooks/usePreventSwipeBack";
 import colors from "styles/tailwindColors";
 
 const THUMB_SIZE = 20;
@@ -82,6 +83,7 @@ const FineSlider = ( {
   snapValue,
   snapThreshold = 0,
 }: Props ) => {
+  usePreventSwipeBack( !disabled );
   const [trackWidth, setTrackWidth] = useState( 0 );
   const [dragging, setDragging] = useState( false );
 
