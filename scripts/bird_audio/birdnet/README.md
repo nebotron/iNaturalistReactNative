@@ -37,6 +37,22 @@ below, 3,255 windows; 327 field clips). That cut the bundled weights from 210 MB
 (110 MB) moved field-clip scores by up to 0.18 and lost 3 detections against
 1 gained; int4 heads (about 98 MB) lost 9 against 4 gained. Neither is used.
 
+## Spectrogram front end
+
+BirdNET computes its spectrogram with a Conv whose 2,050 filters are a
+2048-point windowed DFT (1.3 billion multiply-adds per 5 s window, 16% of the
+model's). `fft_frontend.py` replaces it with an ONNX STFT, which ONNX Runtime
+computes by FFT in fp32, and drops its 8.4 MB of filter weights. Scores moved
+by under 0.07 on the 3,255 windows and 0.2 on one field clip; recall was
+unchanged, there was one wrong detection fewer on the recordings, and on the
+field clips one more right and one fewer wrong. Both front ends are equally
+close to the model run in fp32 (mean difference 0.0036 and 0.0037), so the
+changes are rounding, not a better or worse spectrogram. On a desktop CPU it
+took the front end from 26 to 17 ms per run; ONNX Runtime's FFT is not fast
+(~54 us per frame), so vDSP in AudioBirdId.m feeding the model a spectrogram
+would cut more. CoreML has no STFT, so with CoreML the front end stays on the
+CPU.
+
 ## Species iNaturalist has split
 
 BirdNET's taxonomy predates some of iNaturalist's splits, and build_model.py
