@@ -853,6 +853,18 @@ static uint64_t freeMB( void )
   return os_proc_available_memory( ) >> 20;
 }
 
+// What the app is charged for against its memory limit (what iOS kills it on),
+// or -1 where task_info fails.
+static long long footprintMB( void )
+{
+  task_vm_info_data_t    vm;
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  if ( task_info( mach_task_self( ), TASK_VM_INFO, (task_info_t)&vm, &count ) != KERN_SUCCESS ) {
+    return -1;
+  }
+  return (long long)( vm.phys_footprint >> 20 );
+}
+
 // Free space on the volume the app writes to. When it runs out every write
 // fails, and a bulk import of 50MB raws can take the last of it.
 static uint64_t freeDiskMB( void )
@@ -1154,6 +1166,19 @@ static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *s
 
 // ─── Queues for the heavy image methods ──────────────────────────────────
 
+// A queue made with the default attributes doesn't drain an autorelease pool
+// after each work item: what one autoreleases (full-resolution UIImages, their
+// JPEG data, Vision's buffers) can live on until the worker thread drains,
+// which a queue kept busy -- a bulk crop preloading 30 photos ahead -- may not
+// do for many photos. On Nov 12 iOS killed the app for memory twice mid bulk
+// crop at cropPreloadConcurrency 2; just before the second, a prepare started
+// with 1.1GB free and no other prepare running, against 3.1GB at launch.
+static dispatch_queue_attr_t drainEachWorkItem( dispatch_queue_attr_t attr )
+{
+  return dispatch_queue_attr_make_with_autorelease_frequency(
+    attr, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM );
+}
+
 // This module has no methodQueue of its own, so React Native gives it one
 // serial queue that every call to it shares. Three of its methods are heavy,
 // and a bulk crop runs all three at once: the Group Photos grid behind the
@@ -1169,7 +1194,7 @@ static dispatch_queue_t heavyImageQueue( const char *label )
 {
   return dispatch_queue_create( label,
     dispatch_queue_attr_make_with_qos_class(
-      DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0 ) );
+      drainEachWorkItem( DISPATCH_QUEUE_SERIAL ), QOS_CLASS_USER_INITIATED, 0 ) );
 }
 
 static dispatch_queue_t subjectDetectionQueue( void )
@@ -1194,7 +1219,7 @@ static dispatch_queue_t cropPrepareQueue( void )
   dispatch_once( &once, ^{
     queue = dispatch_queue_create( "org.inaturalist.imagecropper.prepare",
       dispatch_queue_attr_make_with_qos_class(
-        DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_USER_INITIATED, 0 ) );
+        drainEachWorkItem( DISPATCH_QUEUE_CONCURRENT ), QOS_CLASS_USER_INITIATED, 0 ) );
   } );
   return queue;
 }
@@ -2771,6 +2796,7 @@ RCT_EXPORT_METHOD( prepareCropSource
     int memWaitMs = 0;
     __attribute__( ( cleanup( releasePrepareSlot ) ) ) uint64_t startFreeMB =
       acquirePrepareSlot( &memWaitMs );
+    long long startFootprintMB = footprintMB( );
     NSTimeInterval startedAt = [NSDate timeIntervalSinceReferenceDate];
     NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
     NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
@@ -2889,6 +2915,7 @@ RCT_EXPORT_METHOD( prepareCropSource
     }
     [source addEntriesFromDictionary:decodedInfo];
     source[@"freeMB"] = @( startFreeMB );
+    source[@"footprintMB"] = @( startFootprintMB );
 
     // Free the full-resolution pixels and their JPEG as soon as they're on disk,
     // keeping only what detection needs, so the next raw decode has room.

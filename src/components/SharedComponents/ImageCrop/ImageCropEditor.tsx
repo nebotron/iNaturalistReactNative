@@ -230,6 +230,8 @@ const ImageCropEditor = ( ) => {
     buffered: number;
     preloaded: boolean;
     prepareMs: number | null;
+    freeMB?: number;
+    footprintMB?: number;
     dwellMs?: number;
   }[]>( [] );
   const decodedAt = useRef( 0 );
@@ -284,6 +286,8 @@ const ImageCropEditor = ( ) => {
       prepareMs: timing
         ? timing.exportMs + timing.prepareMs
         : null,
+      freeMB: timing?.source?.freeMB,
+      footprintMB: timing?.source?.footprintMB,
     } );
     if ( totalMs < SLOW_PHOTO_MS ) {
       return;
@@ -369,6 +373,12 @@ const ImageCropEditor = ( ) => {
       // the user out-crops the preloader and the buffer must eventually drain
       medianDwellMs: median( photos.map( photo => photo.dwellMs ) ),
       medianPrepareMs: median( photos.map( photo => photo.prepareMs ) ),
+      // The tightest memory any prepare started with, and the app's highest
+      // footprint as one started: iOS kills the app for memory without a trace,
+      // so the last summary before a kill is the only reading of how close
+      // it came. -1 is unknown.
+      minFreeMB: Math.min( ...photos.map( photo => photo.freeMB ?? Infinity ) ),
+      peakFootprintMB: Math.max( -1, ...photos.map( photo => photo.footprintMB ?? -1 ) ),
       // waitMs:bufferedAhead:dwellMs:prepareMs per photo, in the order shown
       // (an empty field is unknown)
       perPhoto: photos.slice( 0, 300 )
