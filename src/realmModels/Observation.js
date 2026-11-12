@@ -12,6 +12,7 @@ import { recordUploadedDevicePhotoUrisFromObservation } from
 import { log } from "sharedHelpers/logger";
 import readExifFromMultiplePhotos from "sharedHelpers/parseExif";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import withoutUnchangedRemoteObservations from "sharedHelpers/unchangedRemoteObservations";
 import * as uuid from "uuid";
 
 import Application from "./Application";
@@ -206,9 +207,13 @@ class Observation extends Realm.Object {
   static upsertRemoteObservations( remoteObservations, realm, options = {} ) {
     if ( !remoteObservations ) return;
     if ( remoteObservations.length === 0 ) return;
-    const obsToUpsert = options.force
-      ? remoteObservations
-      : remoteObservations.filter( obs => !Observation.isUnsyncedObservation( realm, obs ) );
+    const [obsToUpsert, markWritten] = withoutUnchangedRemoteObservations(
+      options.force
+        ? remoteObservations
+        : remoteObservations.filter( obs => !Observation.isUnsyncedObservation( realm, obs ) ),
+      realm,
+    );
+    if ( obsToUpsert.length === 0 ) return;
     // const msg = obsToUpsert.map( remoteObservation => {
     //   const obsPhotoUUIDs = remoteObservation.observation_photos?.map( op => op.uuid );
     //   return `obs ${remoteObservation.uuid}, ops: ${obsPhotoUUIDs}`;
@@ -224,6 +229,7 @@ class Observation extends Realm.Object {
         );
       } );
     }, "upserting remote observations in Observation" );
+    markWritten( );
   }
 
   static mapApiToRealm( obs, realm = null ) {
