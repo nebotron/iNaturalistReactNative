@@ -16,7 +16,7 @@ import Announcements from "./Announcements";
 
 interface Props {
   isConnected: boolean;
-  obsMissingBasicsExist: boolean;
+  obsMissingLocationOrDateExist: boolean;
   numTotalObservations?: number;
 }
 
@@ -27,7 +27,7 @@ const ADVANCED_MODE_ONBOARDING_MIN_OBSERVATIONS = getTunable(
 
 const SimpleHeader = ( {
   isConnected,
-  obsMissingBasicsExist,
+  obsMissingLocationOrDateExist,
   numTotalObservations,
 }: Props ) => {
   const { t } = useTranslation();
@@ -64,7 +64,7 @@ const SimpleHeader = ( {
           onSwitchToAdvancedMode={( ) => setIsDefaultMode( false )}
         />
       )}
-      { obsMissingBasicsExist && (
+      { obsMissingLocationOrDateExist && (
         <View className="flex-row items-center px-[32px] py-[20px]">
           <CircleDots
             color={colors.darkGray}

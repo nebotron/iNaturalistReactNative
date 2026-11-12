@@ -858,15 +858,21 @@ class Observation extends Realm.Object {
     return missingCoords;
   }
 
+  missingDate() {
+    return !Date.parse( this.observed_on_string ) && !this.time_observed_at;
+  }
+
+  missingLocationOrDate() {
+    return this.missingCoords( ) || this.missingDate( );
+  }
+
   missingBasics() {
     const missingId = !this.uuid;
-    const missingDate = !Date.parse( this.observed_on_string ) && !this.time_observed_at;
     const missingEvidence = ( this.observationPhotos?.length ?? 0 ) === 0
       && ( this.observationSounds?.length ?? 0 ) === 0;
     const missingTaxon = !this.taxon;
     return missingId
-      || missingDate
-      || this.missingCoords( )
+      || this.missingLocationOrDate( )
       || missingEvidence
       || missingTaxon;
   }

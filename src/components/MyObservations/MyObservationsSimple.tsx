@@ -88,6 +88,7 @@ interface Props {
   numTotalTaxa?: number;
   numUnuploadedObservations: number;
   numObsMissingBasics: number;
+  numObsMissingLocationOrDate: number;
   numUnuploadedObsNoTaxon: number;
   observationIds: { uuid: string }[];
   observationsSortOptionId: MyObservationsSort;
@@ -160,6 +161,7 @@ const MyObservationsSimple = ( {
   numTotalTaxa,
   numUnuploadedObservations,
   numObsMissingBasics: numUnuploadedObsMissingBasics,
+  numObsMissingLocationOrDate,
   numUnuploadedObsNoTaxon,
   observationIds,
   observationsSortOptionId,
@@ -342,7 +344,9 @@ const MyObservationsSimple = ( {
     taxa?.length,
   ] );
 
-  const obsMissingBasicsExist = numUnuploadedObservations > 0 && numUnuploadedObsMissingBasics > 0;
+  // The header warning is about location and date only; obs that are just
+  // missing a taxon shouldn't trigger it.
+  const obsMissingLocationOrDateExist = numObsMissingLocationOrDate > 0;
 
   // if user is not logged in, we'll consider all obs 'uploadable' to shepherd people to login flow
   const numUploadableObservations = isDefaultMode && !!currentUser
@@ -397,7 +401,7 @@ const MyObservationsSimple = ( {
           {tabsHeader}
           <SimpleHeader
             isConnected={isConnected}
-            obsMissingBasicsExist={obsMissingBasicsExist}
+            obsMissingLocationOrDateExist={obsMissingLocationOrDateExist}
             numTotalObservations={numTotalObservations}
           />
         </>
@@ -420,7 +424,7 @@ const MyObservationsSimple = ( {
         {tabsHeader}
         <SimpleHeader
           isConnected={isConnected}
-          obsMissingBasicsExist={obsMissingBasicsExist}
+          obsMissingLocationOrDateExist={obsMissingLocationOrDateExist}
           numTotalObservations={numTotalObservations}
         />
       </View>

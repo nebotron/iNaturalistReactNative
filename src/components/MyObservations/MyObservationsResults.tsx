@@ -128,6 +128,7 @@ const MyObservationsResults = ( ) => {
   const {
     numUnuploadedObservations,
     numObsMissingBasics,
+    numObsMissingLocationOrDate,
     numUnuploadedObsNoTaxon,
   } = useObservationCounts( );
   const prevObservationsLength = useRef( observationIds.length );
@@ -644,6 +645,7 @@ const MyObservationsResults = ( ) => {
       numTotalTaxa={displayedSpeciesCount}
       numUnuploadedObservations={numUnuploadedObservations}
       numObsMissingBasics={numObsMissingBasics}
+      numObsMissingLocationOrDate={numObsMissingLocationOrDate}
       numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
       observationIds={observationIds}
       observationsSortOptionId={myObsState.observationsSort}
