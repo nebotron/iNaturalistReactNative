@@ -1265,8 +1265,6 @@
   "Tunable-audioIdCallPaddingBins-description": "Steps of 1/3 s added before and after a found call.",
   "Tunable-audioIdCallPeakRange": "Audio ID call peak range",
   "Tunable-audioIdCallPeakRange-description": "When a call's peak is below the call logit, how far below its peak a moment can be and still count as part of it.",
-  "Tunable-audioIdCallThreshold": "Audio ID call check threshold",
-  "Tunable-audioIdCallThreshold-description": "Minimum score (0-1) the call alone must get, a few seconds after a detection, for the detection to be kept and alerted on.",
   "Tunable-audioIdDimAfterSeconds": "Audio ID dim after (seconds)",
   "Tunable-audioIdDimAfterSeconds-description": "Seconds without a touch before the Audio ID screen dims.",
   "Tunable-audioIdMinCallSeconds": "Audio ID minimum call length (seconds)",
