@@ -9,7 +9,6 @@ import SignUpConfirmation from "components/LoginSignUp/SignUpConfirmation";
 import { CloseButton } from "components/SharedComponents";
 import {
   hideHeaderLeft,
-  preventSwipeToGoBack,
   showSimpleCustomHeader,
 } from "navigation/navigationOptions";
 import type { LoginStackParamList } from "navigation/types";
@@ -34,7 +33,7 @@ const LOGIN_SCREEN_OPTIONS = {
 } as const;
 
 const LoginStackNavigator = ( ) => (
-  <Stack.Navigator screenOptions={preventSwipeToGoBack}>
+  <Stack.Navigator>
     <Stack.Screen
       name="Login"
       component={Login}

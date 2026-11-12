@@ -178,7 +178,6 @@ const FadeInJournal = ( ) => fadeInComponent( <Journal /> );
 const FadeInPostDetails = ( ) => fadeInComponent( <PostDetails /> );
 
 const BASE_SCREEN_OPTIONS = {
-  ...preventSwipeToGoBack,
   headerBackButtonDisplayMode: "minimal",
   headerTintColor: colors.darkGray,
 } as const;
@@ -376,7 +375,7 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           <Stack.Screen
             name="AudioIdClip"
             component={AudioIdClip}
-            options={{ headerTitle: audioIdClipTitle }}
+            options={{ headerTitle: audioIdClipTitle, ...preventSwipeToGoBack }}
           />
           <Stack.Screen
             name="AudioIdTaxa"

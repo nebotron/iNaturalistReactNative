@@ -13,7 +13,6 @@ import {
   fadeInComponent,
   hideHeader,
   hideHeaderLeft,
-  preventSwipeToGoBack,
 } from "navigation/navigationOptions";
 import { StackHostProvider } from "navigation/StackHostContext";
 import type { NoBottomTabStackParamList } from "navigation/types";
@@ -89,7 +88,6 @@ const NoBottomTabStackNavigator = ( ) => (
   <StackHostProvider value={{ hasBottomTabBar: false }}>
     <Stack.Navigator
       screenOptions={{
-        ...preventSwipeToGoBack,
         headerBackButtonDisplayMode: "minimal",
         contentStyle: {
           backgroundColor: "white",

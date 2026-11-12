@@ -18,6 +18,7 @@ import {
   blankHeaderTitle,
   fadeInComponent,
   hideHeader,
+  preventSwipeToGoBack,
   showHeader,
   showSimpleCustomHeader,
 } from "navigation/navigationOptions";
@@ -152,6 +153,7 @@ const SharedStackScreens = ( ) => (
         component={FadeInImageCropEditor}
         options={{
           ...hideHeader,
+          ...preventSwipeToGoBack,
           headerTitleAlign: "center",
           headerBackButtonDisplayMode: "minimal",
           contentStyle: {

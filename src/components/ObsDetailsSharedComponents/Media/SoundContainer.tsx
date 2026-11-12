@@ -27,6 +27,7 @@ import React, {
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useTranslation } from "sharedHooks";
+import usePreventSwipeBack from "sharedHooks/usePreventSwipeBack";
 import colors from "styles/tailwindColors";
 
 interface SoundContainerProps {
@@ -276,6 +277,7 @@ const SoundContainer = ( {
     }
   };
 
+  usePreventSwipeBack( );
   // The gesture is made once, so it reads the latest seekTo through a ref.
   const latestSeekTo = useRef( seekTo );
   useLayoutEffect( ( ) => { latestSeekTo.current = seekTo; } );
