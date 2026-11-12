@@ -10,6 +10,7 @@ import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGa
 import {
   getDeviceUriFromNode,
   isPickerPreloadable,
+  preloadNewestPickerPhotos,
 } from "components/PhotoImporter/helpers/preloadNewestPickerPhotos";
 import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
 import PhotoGalleryImage from "components/PhotoImporter/PhotoGalleryImage";
@@ -27,6 +28,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  InteractionManager,
   Platform,
 } from "react-native";
 import type Realm from "realm";
@@ -38,7 +40,7 @@ import {
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
-import { noteCropRequested } from "sharedHelpers/imageCropPreload";
+import { noteCropRequested, promotePreloads } from "sharedHelpers/imageCropPreload";
 import {
   fileExtension,
   summarizeTypes,
@@ -50,11 +52,7 @@ import {
   markPhotoImportStarted,
   updatePhotoImportProgress,
 } from "sharedHelpers/photoImportMarker";
-import {
-  PICKER_PRELOAD_COUNT,
-  preloadPickerPhoto,
-  releasePickerPreloads,
-} from "sharedHelpers/pickerCropPreload";
+import { preloadPickerPhoto } from "sharedHelpers/pickerCropPreload";
 import {
   addRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
@@ -330,9 +328,9 @@ const PhotoGallery = ( {
     }
     const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
     noteCropRequested( );
-    // The selected photos' prepares carry over to their imported copies; the
-    // rest leave the preload queue now, so they can't delay the first photo.
-    releasePickerPreloads( new Set( selected.map( node => node.image.uri ) ) );
+    // The selected photos' prepares carry over to their imported copies, and
+    // move ahead of the ones prepared in case they were picked.
+    promotePreloads( selected.map( node => node.image.uri ) );
     importingRef.current = true;
     setImportingCount( selected.length );
     setImportedCount( 0 );
@@ -448,27 +446,28 @@ const PhotoGallery = ( {
     [photos, hideImported, isImported, deletedUris],
   );
 
-  // Prepare the newest photos for cropping before any are selected, and the
-  // newest selected one, which is the photo the cropper opens on after Done
-  // (see pickerCropPreload). Only while this screen is in front: after Done
-  // it sits under Group Photos and the cropper, whose photos come first.
+  // The photos this screen opens on are prepared for cropping by the same
+  // path a USB import and a finished batch take (preloadNewestPickerPhotos),
+  // usually long before it is opened; this catches anything newer since.
+  useFocusEffect( useCallback( ( ) => {
+    // After the screen has opened, which reads the same library and Realm
+    const handle = InteractionManager.runAfterInteractions( ( ) => {
+      preloadNewestPickerPhotos( realm );
+    } );
+    return ( ) => handle.cancel( );
+  }, [realm] ) );
+  // The newest selected photo is the one the cropper opens on after Done, so
+  // it is prepared as soon as it is picked, wherever it is in the list.
   const isFocused = useIsFocused( );
   useEffect( ( ) => {
     if ( !isFocused || importingRef.current ) return;
-    const preloadable = visiblePhotos.filter( isPickerPreloadable );
-    const newestSelected = preloadable.find(
-      node => selectedUris.has( getSelectionKey( node ) ),
+    const newestSelected = visiblePhotos.find(
+      node => selectedUris.has( getSelectionKey( node ) ) && isPickerPreloadable( node ),
     );
-    [
-      ...( newestSelected
-        ? [newestSelected]
-        : [] ),
-      ...preloadable.slice( 0, PICKER_PRELOAD_COUNT ),
-    ].forEach( node => preloadPickerPhoto( node.image.uri, node.image.filename ) );
+    if ( newestSelected ) {
+      preloadPickerPhoto( newestSelected.image.uri, newestSelected.image.filename );
+    }
   }, [isFocused, visiblePhotos, selectedUris] );
-  // Leaving without importing drops what was prepared (Done hands the
-  // selected photos' prepares to the import before this runs).
-  useFocusEffect( useCallback( ( ) => ( ) => releasePickerPreloads( ), [] ) );
 
   const galleryItems = useMemo( ( ) => {
     const items = buildSectionedGalleryItems( visiblePhotos, getSelectionKey, hasNextPage );

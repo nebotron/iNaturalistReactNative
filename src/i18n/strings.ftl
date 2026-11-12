@@ -2267,7 +2267,7 @@ Tunable-parameters-restart-note = Changes take effect after restarting the app. 
 # Label for a tunable parameter in settings
 Tunable-pickerPreloadCount = Photos to prepare before selecting
 # Description of a tunable parameter in settings
-Tunable-pickerPreloadCount-description = How many of the newest photos in the photo picker are prepared for cropping while it is open, before any are selected, so the cropper can open on them without waiting. 0 turns this off.
+Tunable-pickerPreloadCount-description = How many of the photos the photo picker opens on are prepared for cropping ahead of time: as a USB import copies them, after each batch is imported, and when the picker opens. The cropper then opens on them without waiting. 0 turns this off.
 # Label for a tunable parameter in settings
 Tunable-placeSearchMaxSuggestions = Place search suggestions
 # Description of a tunable parameter in settings
