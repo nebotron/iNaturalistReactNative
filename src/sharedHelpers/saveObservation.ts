@@ -1,9 +1,13 @@
 import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
+import { Platform } from "react-native";
 import type Realm from "realm";
 import Observation from "realmModels/Observation";
 import type { RealmObservation } from "realmModels/types";
-import { autoApplyTrackedLocationIfMissing } from "sharedHelpers/applyTrackedLocationToPhotos";
+import {
+  applyLocationToDevicePhotoLibrary,
+  autoApplyTrackedLocationIfMissing,
+} from "sharedHelpers/applyTrackedLocationToPhotos";
 import exifUri from "sharedHelpers/exifUri";
 import { log } from "sharedHelpers/logger";
 
@@ -24,6 +28,22 @@ const writeExifToCameraRollPhotos = async (
 
   // eslint-disable-next-line camelcase
   const { latitude, longitude, positional_accuracy } = exif;
+
+  // On iOS the camera's library copies are ph:// assets, and Exify can't edit
+  // one in place: it writes a brand-new asset with the new metadata, so every
+  // save left a second copy of each photo in the user's library. Set the
+  // asset's location through PhotoKit instead, which changes the existing
+  // asset (and only fills it in when the photo has none of its own).
+  if ( Platform.OS === "ios" ) {
+    if ( latitude == null || longitude == null ) return;
+    await Promise.all( cameraRollUris.map( uri => applyLocationToDevicePhotoLibrary( uri, {
+      latitude,
+      longitude,
+      // eslint-disable-next-line camelcase
+      accuracy: positional_accuracy,
+    } ) ) );
+    return;
+  }
 
   const exifToWrite: ExifTags = {
     GPSLatitude: latitude,

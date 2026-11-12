@@ -217,7 +217,7 @@ export const endLocationWriteBatch = async ( ) => {
 // reflected in the Photos app, not just the app's own copy. The native side
 // only applies to assets that are missing location, leaving photos that
 // already carry their own GPS data untouched.
-const applyLocationToDevicePhotoLibrary = async (
+export const applyLocationToDevicePhotoLibrary = async (
   originalDevicePhotoUri: string | null | undefined,
   match: TrackedLocationMatch,
 ): Promise<void> => {
