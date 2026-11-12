@@ -222,10 +222,14 @@ const ExploreResults = ( ) => {
   const needsPermission = isNearby && hasPermissions === false && !hasBlockedPermissions;
   const nearbyResolved = !isNearby || nearbyCoords !== undefined;
   // "Unobserved by me" can't be applied until the user's observed species are
-  // synced, and nothing is fetched until it is
+  // synced (or the previous list is read), and nothing is fetched until then
   const unobservedUserId = unobservedByUserId( state );
-  const observedSpecies = useObservedSpeciesSync( unobservedUserId, appliedSearchCount );
-  const observedSpeciesReady = !unobservedUserId || !!observedSpecies.observedSpeciesIds;
+  const observedSpeciesIds = useObservedSpeciesSync(
+    unobservedUserId,
+    appliedSearchCount,
+    isConnected === false,
+  );
+  const observedSpeciesReady = !unobservedUserId || !!observedSpeciesIds;
   const canFetch = !needsPermission && nearbyResolved && observedSpeciesReady;
 
   const queryParams = useMemo(
@@ -233,9 +237,9 @@ const ExploreResults = ( ) => {
       state,
       nearbyCoords,
       currentUserId,
-      observedSpecies.observedSpeciesIds,
+      observedSpeciesIds,
     ),
-    [state, nearbyCoords, currentUserId, observedSpecies.observedSpeciesIds],
+    [state, nearbyCoords, currentUserId, observedSpeciesIds],
   );
 
   const offlineResults = useOfflineExploreResults( queryParams );
@@ -614,29 +618,13 @@ const ExploreResults = ( ) => {
   };
 
   const renderContent = ( ) => {
-    // Before anything else, offline results included: they'd be filtered by
-    // whatever the cache last held
+    // Before anything else, offline results included: they're filtered by it too
     if ( !observedSpeciesReady ) {
-      return observedSpecies.isError
-        ? (
-          <View className="flex-1 justify-center p-4">
-            <Body2 className="text-center">
-              {t( "Couldnt-check-which-species-youve-observed" )}
-            </Body2>
-            <Button
-              className="mt-5"
-              text={t( "TRY-AGAIN" )}
-              level="focus"
-              onPress={observedSpecies.retry}
-              testID="ExploreResults.retryObservedSpecies"
-            />
-          </View>
-        )
-        : (
-          <View className="flex-1 justify-center items-center">
-            <ActivityIndicator testID="ExploreResults.syncingObservedSpecies" />
-          </View>
-        );
+      return (
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator testID="ExploreResults.syncingObservedSpecies" />
+        </View>
+      );
     }
     if ( isConnected === false && offlineResults && state.activeTab === OBSERVATIONS_TAB ) {
       // Same views as online; the map counts the whole search, the list its map area

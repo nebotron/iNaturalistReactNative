@@ -203,7 +203,6 @@ const AdvancedSearch = ( ) => {
       nearbyCoords = { lat: coords.latitude, lng: coords.longitude };
     }
     const search = { ...v2State, ...currentSearch };
-    // Throws if the user's observed species can't be brought up to date
     const unobservedUserId = unobservedByUserId( search );
     const observedSpeciesIds = unobservedUserId
       ? await syncResearchGradeSpeciesIds( unobservedUserId, { api_token: await getJWT( ) } )

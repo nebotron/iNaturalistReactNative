@@ -6,6 +6,7 @@ import {
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
+import { syncUserObservations } from "sharedHelpers/userObservationsCache";
 import factory, { makeResponse } from "tests/factory";
 import {
   addTaxonFilter,
@@ -144,7 +145,17 @@ describe( "searching from Advanced Search", ( ) => {
       expect( within( header ).getByTestId( "ExploreV2Header.unobserved" ) ).toBeVisible( );
     } );
 
-    it( "shows an error instead of results when the history can't be synced", async ( ) => {
+    it( "uses the previous species list when the sync fails", async ( ) => {
+      const researchGrade = factory( "RemoteObservation", {
+        taxon: mockOtherTaxon,
+        quality_grade: "research",
+      } );
+      inatjs.observations.search.mockImplementation( params => Promise.resolve(
+        makeResponse( isHistorySync( params )
+          ? [researchGrade]
+          : mockObservations ),
+      ) );
+      await syncUserObservations( mockUser.id, { api_token: null } );
       inatjs.observations.search.mockImplementation( params => ( isHistorySync( params )
         ? Promise.reject( new Error( "offline" ) )
         : Promise.resolve( makeResponse( mockObservations ) ) ) );
@@ -152,11 +163,12 @@ describe( "searching from Advanced Search", ( ) => {
       await navigateToExplore( );
       await openAdvancedSearch( );
       await actor.press( screen.getByText( "Unobserved by me" ) );
-      inatjs.observations.search.mockClear( );
       await submitAdvancedSearch( );
 
-      expect( await screen.findByTestId( "ExploreResults.retryObservedSpecies" ) ).toBeVisible( );
-      expect( exploreSearchCalls( ) ).toEqual( [] );
+      await waitFor( ( ) => {
+        expect( exploreSearchCalls( ).at( -1 )?.without_taxon_id )
+          .toEqual( expect.stringContaining( String( mockOtherTaxon.id ) ) );
+      } );
     } );
   } );
 
