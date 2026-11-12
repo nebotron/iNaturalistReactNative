@@ -21,8 +21,10 @@ import GridOverlaysSheet
   from "components/Explore/ExploreV2/components/GridOverlaysSheet";
 import type { NearbyCoords }
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import buildExploreV2QueryParams
+import buildExploreV2QueryParams, { unobservedByUserId }
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
+import useObservedSpeciesSync
+  from "components/Explore/ExploreV2/hooks/useObservedSpeciesSync";
 import ExploreV2IdentificationsView
   from "components/Explore/ExploreV2/screens/ExploreV2IdentificationsView";
 import ExploreV2SpeciesView
@@ -42,6 +44,7 @@ import {
 } from "components/Explore/OfflineExplore";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
+  ActivityIndicator,
   Body2,
   Button,
   OfflineNotice,
@@ -218,11 +221,21 @@ const ExploreResults = ( ) => {
 
   const needsPermission = isNearby && hasPermissions === false && !hasBlockedPermissions;
   const nearbyResolved = !isNearby || nearbyCoords !== undefined;
-  const canFetch = !needsPermission && nearbyResolved;
+  // "Unobserved by me" can't be applied until the user's observed species are
+  // synced, and nothing is fetched until it is
+  const unobservedUserId = unobservedByUserId( state );
+  const observedSpecies = useObservedSpeciesSync( unobservedUserId, appliedSearchCount );
+  const observedSpeciesReady = !unobservedUserId || !!observedSpecies.observedSpeciesIds;
+  const canFetch = !needsPermission && nearbyResolved && observedSpeciesReady;
 
   const queryParams = useMemo(
-    ( ) => buildExploreV2QueryParams( state, nearbyCoords, currentUserId ),
-    [state, nearbyCoords, currentUserId],
+    ( ) => buildExploreV2QueryParams(
+      state,
+      nearbyCoords,
+      currentUserId,
+      observedSpecies.observedSpeciesIds,
+    ),
+    [state, nearbyCoords, currentUserId, observedSpecies.observedSpeciesIds],
   );
 
   const offlineResults = useOfflineExploreResults( queryParams );
@@ -601,6 +614,30 @@ const ExploreResults = ( ) => {
   };
 
   const renderContent = ( ) => {
+    // Before anything else, offline results included: they'd be filtered by
+    // whatever the cache last held
+    if ( !observedSpeciesReady ) {
+      return observedSpecies.isError
+        ? (
+          <View className="flex-1 justify-center p-4">
+            <Body2 className="text-center">
+              {t( "Couldnt-check-which-species-youve-observed" )}
+            </Body2>
+            <Button
+              className="mt-5"
+              text={t( "TRY-AGAIN" )}
+              level="focus"
+              onPress={observedSpecies.retry}
+              testID="ExploreResults.retryObservedSpecies"
+            />
+          </View>
+        )
+        : (
+          <View className="flex-1 justify-center items-center">
+            <ActivityIndicator testID="ExploreResults.syncingObservedSpecies" />
+          </View>
+        );
+    }
     if ( isConnected === false && offlineResults && state.activeTab === OBSERVATIONS_TAB ) {
       // Same views as online; the map counts the whole search, the list its map area
       const offlineCount = ( showMap

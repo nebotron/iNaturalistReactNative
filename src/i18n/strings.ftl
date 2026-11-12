@@ -427,6 +427,7 @@ Could-not-plan-route = Could not plan a route
 # Error adding an Audio ID clip to an observation; error is a technical message
 Couldnt-add-the-sound-error = Couldn't add the sound: { $error }
 # Title of an alert shown when combining observations fails
+Couldnt-check-which-species-youve-observed = Couldn't check which species you've observed, so Unobserved by me can't be applied.
 Couldnt-combine-observations = Couldn't combine observations
 Couldnt-create-comment = Couldn't create comment
 Couldnt-create-identification-error = Couldn't create identification { $error }
@@ -2066,6 +2067,8 @@ Tracked-location = Tracked location
 Tracking-your-location = Tracking your location
 Traditional-Project = Traditional Project
 Traditional-Projects = Traditional Projects
+# Button that retries something that failed
+TRY-AGAIN = TRY AGAIN
 # Label for a tunable parameter in settings
 Tunable-advancedModeOnboardingObservations = Advanced mode prompt observations
 # Description of a tunable parameter in settings

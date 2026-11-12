@@ -44,11 +44,22 @@ export interface NearbyCoords {
   lng: number;
 }
 
+// Whose observed species "Unobserved by me" hides, if it's on
+export const unobservedByUserId = ( state: ExploreV2State ): number | undefined => (
+  state.subject?.type === "unobserved"
+    ? state.subject.user.id
+    : state.filters.unobservedByUser?.id
+) ?? undefined;
+
 const buildExploreV2QueryParams = (
   state: ExploreV2State,
   nearbyCoords?: NearbyCoords,
   // The signed-in user's id, needed by the reviewed filter (viewer_id param).
   currentUserId?: number | null,
+  // Species the unobserved-by user has research-grade observations of, freshly
+  // synced (see useObservedSpeciesSync). Callers mustn't fetch with the
+  // unobserved filter on until they have these.
+  observedSpeciesIds?: number[],
 ): ExploreV2QueryParams => {
   const params: ExploreV2QueryParams = {
     per_page: PER_PAGE,
@@ -119,11 +130,13 @@ const buildExploreV2QueryParams = (
     delete paramsWithFilters.verifiable;
   }
 
-  const unobservedByUserId = paramsWithFilters.unobserved_by_user_id;
-  if ( unobservedByUserId ) {
+  // Applied locally from research-grade species rather than by the API's
+  // filter; see withoutObservedSpecies
+  if ( paramsWithFilters.unobserved_by_user_id ) {
+    delete paramsWithFilters.unobserved_by_user_id;
     const withoutTaxonId = withoutObservedSpecies(
       paramsWithFilters.without_taxon_id,
-      unobservedByUserId,
+      observedSpeciesIds ?? [],
     );
     if ( withoutTaxonId !== undefined ) paramsWithFilters.without_taxon_id = withoutTaxonId;
   }

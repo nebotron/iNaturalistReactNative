@@ -55,15 +55,30 @@ describe( "buildExploreV2QueryParams", ( ) => {
       expect( params.project_id ).toBe( 12 );
     } );
 
-    it( "maps an unobserved subject to unobserved_by_user_id", ( ) => {
+    it( "excludes observed species for an unobserved subject, not via the API", ( ) => {
       const state = {
         ...initialExploreV2State,
         subject: { type: "unobserved", user: { id: 99 } },
       };
-      const params = buildExploreV2QueryParams( state );
-      expect( params.unobserved_by_user_id ).toBe( 99 );
+      const params = buildExploreV2QueryParams( state, undefined, 99, [5, 6] );
+      expect( params.unobserved_by_user_id ).toBeUndefined( );
+      expect( params.without_taxon_id ).toBe( "5,6" );
       expect( params.user_id ).toBeUndefined( );
       expect( params.taxon_id ).toBeUndefined( );
+    } );
+
+    it( "merges observed species into an existing without_taxon_id", ( ) => {
+      const state = {
+        ...initialExploreV2State,
+        filters: {
+          ...initialExploreV2State.filters,
+          unobservedByUser: { id: 99 },
+          taxonFilters: [{ taxon: { id: 3 }, exclude: true }],
+        },
+      };
+      const params = buildExploreV2QueryParams( state, undefined, 99, [3, 5] );
+      expect( params.unobserved_by_user_id ).toBeUndefined( );
+      expect( params.without_taxon_id ).toBe( "3,5" );
     } );
 
     it( "maps an unknown subject to iconic_taxa=[unknown]", ( ) => {

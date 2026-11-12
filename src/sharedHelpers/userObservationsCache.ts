@@ -223,6 +223,9 @@ interface SyncOptions {
   onPage?: ( results: ApiObservation[] ) => void;
   // Called with how much of the history has landed so far, for progress UI.
   onProgress?: ( syncedCount: number ) => void;
+  // Throw rather than return a partial cache when the history couldn't all be
+  // read, for callers that would give wrong answers from an incomplete one.
+  requireComplete?: boolean;
 }
 
 // Brings the cache up to date and returns it. The first run pages the whole
@@ -246,7 +249,7 @@ interface SyncOptions {
 export const syncUserObservations = async (
   userId: number | undefined | null,
   opts: { api_token: string | null },
-  { onPage, onProgress }: SyncOptions = {},
+  { onPage, onProgress, requireComplete }: SyncOptions = {},
 ): Promise<UserObservationsCache> => {
   if ( !userId ) {
     return new Map( );
@@ -303,6 +306,7 @@ export const syncUserObservations = async (
     if ( !Array.isArray( response?.results ) ) {
       logger.warn( `Unreadable observation page ${pages}; keeping what has synced so far` );
       savePartial( );
+      if ( requireComplete ) throw new Error( `Unreadable observation page ${pages}` );
       return cache;
     }
     const { results }: { results: ApiObservation[] } = response;
@@ -328,6 +332,10 @@ export const syncUserObservations = async (
     idAbove = lastId;
   }
 
+  if ( requireComplete && hasMorePages ) {
+    savePartial( );
+    throw new Error( `Observation history is longer than ${MAX_PAGES} pages` );
+  }
   writeUserObservationsCache( userId, cache, changed );
   store.set( lastSyncKey( userId ), syncStartedAt );
   return cache;

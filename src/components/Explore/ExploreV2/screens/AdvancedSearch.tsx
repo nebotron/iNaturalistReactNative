@@ -28,12 +28,13 @@ import {
   draftFromV2State,
   searchTaxonFilters,
 } from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
-import buildExploreV2QueryParams
+import buildExploreV2QueryParams, { unobservedByUserId }
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import useApplySavedSearch from "components/Explore/ExploreV2/hooks/useApplySavedSearch";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { syncResearchGradeSpeciesIds } from "components/Explore/helpers/withoutObservedSpecies";
 import ExploreLocationSearchModal from "components/Explore/Modals/ExploreLocationSearchModal";
 import ExploreProjectSearchModal from "components/Explore/Modals/ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "components/Explore/Modals/ExploreTaxonSearchModal";
@@ -41,6 +42,7 @@ import ExploreUserSearchModal from "components/Explore/Modals/ExploreUserSearchM
 import { SaveOfflineButton } from "components/Explore/OfflineExplore";
 import type { ExploreSearchUser }
   from "components/Explore/SearchScreens/ExploreUserSearch";
+import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
 import {
   Body2,
@@ -201,7 +203,14 @@ const AdvancedSearch = ( ) => {
       nearbyCoords = { lat: coords.latitude, lng: coords.longitude };
     }
     const search = { ...v2State, ...currentSearch };
-    return { ...buildExploreV2QueryParams( search, nearbyCoords, currentUser?.id ) };
+    // Throws if the user's observed species can't be brought up to date
+    const unobservedUserId = unobservedByUserId( search );
+    const observedSpeciesIds = unobservedUserId
+      ? await syncResearchGradeSpeciesIds( unobservedUserId, { api_token: await getJWT( ) } )
+      : undefined;
+    return {
+      ...buildExploreV2QueryParams( search, nearbyCoords, currentUser?.id, observedSpeciesIds ),
+    };
   };
 
   const handleSearch = () => {

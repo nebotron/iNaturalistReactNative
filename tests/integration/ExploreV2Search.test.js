@@ -100,21 +100,64 @@ afterEach( async ( ) => {
 global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
 
 describe( "searching from Advanced Search", ( ) => {
-  it( "searches for species the signed-in user has not observed", async ( ) => {
-    renderApp( );
-    await navigateToExplore( );
-    await openAdvancedSearch( );
+  describe( "unobserved by me", ( ) => {
+    // The history sync is the observations search for the user's own id
+    const isHistorySync = params => params?.user_id === mockUser.id && params?.order_by === "id";
+    const exploreSearchCalls = ( ) => inatjs.observations.search.mock.calls
+      .map( call => call[0] )
+      .filter( params => !isHistorySync( params ) );
 
-    await actor.press( screen.getByText( "Unobserved by me" ) );
-    await submitAdvancedSearch( );
-
-    await waitFor( ( ) => {
-      expect( lastObservationsSearchParams( ) ).toMatchObject( {
-        unobserved_by_user_id: mockUser.id,
-      } );
+    afterEach( ( ) => {
+      inatjs.observations.search.mockImplementation( ( ) => Promise.resolve(
+        makeResponse( mockObservations ),
+      ) );
     } );
-    const header = await screen.findByTestId( "ExploreV2Header" );
-    expect( within( header ).getByTestId( "ExploreV2Header.unobserved" ) ).toBeVisible( );
+
+    it( "excludes species the user has observed at research grade", async ( ) => {
+      const researchGrade = factory( "RemoteObservation", {
+        taxon: mockTaxon,
+        quality_grade: "research",
+      } );
+      const needsId = factory( "RemoteObservation", {
+        taxon: mockOtherTaxon,
+        quality_grade: "needs_id",
+      } );
+      inatjs.observations.search.mockImplementation( params => Promise.resolve(
+        makeResponse( isHistorySync( params )
+          ? [researchGrade, needsId]
+          : mockObservations ),
+      ) );
+      renderApp( );
+      await navigateToExplore( );
+      await openAdvancedSearch( );
+
+      await actor.press( screen.getByText( "Unobserved by me" ) );
+      await submitAdvancedSearch( );
+
+      await waitFor( ( ) => {
+        expect( exploreSearchCalls( ).at( -1 ) ).toMatchObject( {
+          without_taxon_id: String( mockTaxon.id ),
+        } );
+      } );
+      expect( exploreSearchCalls( ).at( -1 ).unobserved_by_user_id ).toBeUndefined( );
+      const header = await screen.findByTestId( "ExploreV2Header" );
+      expect( within( header ).getByTestId( "ExploreV2Header.unobserved" ) ).toBeVisible( );
+    } );
+
+    it( "shows an error instead of results when the history can't be synced", async ( ) => {
+      inatjs.observations.search.mockImplementation( params => ( isHistorySync( params )
+        ? Promise.reject( new Error( "offline" ) )
+        : Promise.resolve( makeResponse( mockObservations ) ) ) );
+      renderApp( );
+      await navigateToExplore( );
+      await openAdvancedSearch( );
+      await actor.press( screen.getByText( "Unobserved by me" ) );
+      inatjs.observations.search.mockClear( );
+      await submitAdvancedSearch( );
+
+      expect( await screen.findByTestId( "ExploreResults.retryObservedSpecies" ) ).toBeVisible( );
+      expect( exploreSearchCalls( ) ).toEqual( [] );
+    } );
   } );
 
   it( "searches for several taxa at once", async ( ) => {
