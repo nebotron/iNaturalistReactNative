@@ -15,13 +15,6 @@ export interface HotspotSpecies {
   name: string;
   preferred_common_name?: string;
   count: number;
-  meanTimeOfDay?: string;
-}
-
-interface HotspotSpeciesBuilder extends HotspotSpecies {
-  timeSinSum: number;
-  timeCosSum: number;
-  timeCount: number;
 }
 
 export interface HotspotObservation {
@@ -49,33 +42,6 @@ const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const OSRM_TABLE_BASE = "https://router.project-osrm.org/table/v1/driving";
 // Hotspot settings ride along in filterParams but aren't iNaturalist API params
 const HOTSPOT_PARAM_KEYS = Object.keys( DEFAULT_HOTSPOT_SETTINGS );
-
-function parseTimeToMinutes( timeStr: string ): number | null {
-  const match = timeStr.match( /T(\d{2}):(\d{2})/ );
-  if ( !match ) return null;
-  return parseInt( match[1], 10 ) * 60 + parseInt( match[2], 10 );
-}
-
-function circularMeanMinutes( sinSum: number, cosSum: number, count: number ): number {
-  const meanAngle = Math.atan2( sinSum / count, cosSum / count );
-  const normalized = meanAngle < 0
-    ? meanAngle + 2 * Math.PI
-    : meanAngle;
-  return ( normalized / ( 2 * Math.PI ) ) * 1440;
-}
-
-function minutesToAmPm( minutes: number ): string {
-  const total = Math.round( minutes );
-  const h = Math.floor( total / 60 ) % 24;
-  const m = total % 60;
-  const ampm = h >= 12
-    ? "PM"
-    : "AM";
-  const h12 = h % 12 === 0
-    ? 12
-    : h % 12;
-  return `~${h12}:${m.toString().padStart( 2, "0" )} ${ampm}`;
-}
 
 export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<{
   coords: RoutePoint[];
@@ -355,7 +321,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm: number ): Map<string
   centerLng: number;
   area: Circle;
   count: number;
-  taxa: Map<number | string, HotspotSpeciesBuilder>;
+  taxa: Map<number | string, HotspotSpecies>;
   observations: HotspotObservation[];
 }> {
   // Extract valid positions paired with their original observation
@@ -376,13 +342,13 @@ function clusterByKMeans( observations: any[], maxRadiusKm: number ): Map<string
     centerLng: number;
     area: Circle;
     count: number;
-    taxa: Map<number | string, HotspotSpeciesBuilder>;
+    taxa: Map<number | string, HotspotSpecies>;
     observations: HotspotObservation[];
   }>();
 
   for ( const { centroid, memberIndices } of clusters ) {
     const key = `${centroid.lat.toFixed( 5 )},${centroid.lng.toFixed( 5 )}`;
-    const taxa = new Map<number | string, HotspotSpeciesBuilder>();
+    const taxa = new Map<number | string, HotspotSpecies>();
     const cellObservations: HotspotObservation[] = [];
     // Observations of the same species on the same day count once
     const seenSpeciesDays = new Set<string>();
@@ -400,34 +366,14 @@ function clusterByKMeans( observations: any[], maxRadiusKm: number ): Map<string
       if ( !isDuplicate ) count += 1;
       if ( taxonKey && !isDuplicate ) {
         const prev = taxa.get( taxonKey );
-        const timeMinutes = obs.time_observed_at
-          ? parseTimeToMinutes( obs.time_observed_at )
-          : null;
         if ( prev ) {
           prev.count += 1;
-          if ( timeMinutes !== null ) {
-            const angle = ( timeMinutes / 1440 ) * 2 * Math.PI;
-            prev.timeSinSum += Math.sin( angle );
-            prev.timeCosSum += Math.cos( angle );
-            prev.timeCount += 1;
-          }
         } else {
-          const timeSinSum = timeMinutes !== null
-            ? Math.sin( ( timeMinutes / 1440 ) * 2 * Math.PI )
-            : 0;
-          const timeCosSum = timeMinutes !== null
-            ? Math.cos( ( timeMinutes / 1440 ) * 2 * Math.PI )
-            : 0;
           taxa.set( taxonKey, {
             id: taxon.id,
             name: taxon.name ?? "",
             preferred_common_name: taxon.preferred_common_name,
             count: 1,
-            timeSinSum,
-            timeCosSum,
-            timeCount: timeMinutes !== null
-              ? 1
-              : 0,
           } );
         }
       }
@@ -559,15 +505,7 @@ export function useRouteHotspots() {
         cells.forEach( ( cell, key ) => {
           const topSpecies: HotspotSpecies[] = [...cell.taxa.values()]
             .sort( ( a, b ) => b.count - a.count )
-            .slice( 0, 3 )
-            .map( ( {
-              timeSinSum, timeCosSum, timeCount, ...species
-            } ) => ( {
-              ...species,
-              meanTimeOfDay: timeCount > 0
-                ? minutesToAmPm( circularMeanMinutes( timeSinSum, timeCosSum, timeCount ) )
-                : undefined,
-            } ) );
+            .slice( 0, 3 );
 
           candidates.push( {
             id: `hotspot-${key}`,

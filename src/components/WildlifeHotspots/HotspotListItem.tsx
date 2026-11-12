@@ -119,9 +119,6 @@ const HotspotListItem = ( {
                       </Body3>
                     )
                     : species.count}
-                  {species.meanTimeOfDay
-                    ? `  ·  ${species.meanTimeOfDay}`
-                    : ""}
                 </Body3>
               </View>
             ) )}
