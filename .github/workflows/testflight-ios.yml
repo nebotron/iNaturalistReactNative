@@ -72,7 +72,7 @@ jobs:
     steps:
       - name: Move to macos-26-intel if macos-26 has no runner after 30 seconds
         run: |
-          jobs_url="actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs"
+          jobs_url="repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs"
           while true; do
             job=$( gh api "$jobs_url" \
               --jq '[.jobs[] | select(.name | startswith("attempt-1"))][0]' )
