@@ -20,6 +20,10 @@ const logger = log.extend( "prepareCropSource" );
 // Speed up loading some other way.
 const DISPLAY_MAX_PIXEL = 99999;
 
+// Free memory under which a prepare is logged: twice what native reserves for
+// one (kPrepareReserveMB). The prepare killed on Nov 12 started with 1090MB.
+const LOW_MEMORY_MB = 1536;
+
 export interface PreparedSourceFile {
   type?: string;
   depth?: number;
@@ -39,6 +43,10 @@ export interface PreparedSourceFile {
   // Memory iOS would still let the app allocate when this prepare started,
   // after waiting (stageMs.memWait) for room beside other running prepares.
   freeMB?: number;
+  // The app's own memory footprint (what iOS's memory limit is measured on)
+  // as the prepare started: climbing photo after photo means memory is being
+  // kept, not just peaking during a prepare.
+  footprintMB?: number;
 }
 
 interface PreparedSource {
@@ -137,6 +145,18 @@ const prepareCropSource = async (
     }
     if ( !prepared || prepared.width <= 0 || prepared.height <= 0 ) {
       return null;
+    }
+    if ( ( prepared.source?.freeMB ?? Infinity ) < LOW_MEMORY_MB ) {
+      // iOS kills the app for memory without anything reaching the log, and a
+      // killed bulk crop never writes its crop_session_summary, so say when a
+      // prepare started this close to the limit while the app can still say it.
+      logger.warnWithExtra( "crop_prepare_low_memory", {
+        freeMB: prepared.source?.freeMB,
+        footprintMB: prepared.source?.footprintMB,
+        memWaitMs: prepared.stageMs?.memWait,
+        bytes: prepared.source?.bytes,
+        type: prepared.source?.type,
+      } );
     }
     logSubjectDetectionTiming( prepared.bounds );
     const size = { w: prepared.width, h: prepared.height };
