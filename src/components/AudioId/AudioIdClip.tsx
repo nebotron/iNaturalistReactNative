@@ -43,6 +43,7 @@ const AudioIdClip = ( ) => {
   const clip = useAudioIdHistory( state => state.clips[id] );
   const commonName = useCommonName( clip?.sp );
   const updateClip = useAudioIdHistory( state => state.updateClip );
+  const deleteClip = useAudioIdHistory( state => state.deleteClip );
   const setObservations = useStore( state => state.setObservations );
   const prepareObsEdit = useStore( state => state.prepareObsEdit );
   const updateObservations = useStore( state => state.updateObservations );
@@ -80,7 +81,8 @@ const AudioIdClip = ( ) => {
   }, [day] );
   const taxonId = clip && clipTaxonId( clip );
   const nearbyObs = sameDayObs
-    .filter( obs => taxonId && obs.taxon?.id === taxonId
+    // A clip saved by hand has no ID, so any observation made near then fits.
+    .filter( obs => ( clip?.manual || ( taxonId && obs.taxon?.id === taxonId ) )
       && Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
     .sort( ( a, b ) => Math.abs( obsTime( a ) - time ) - Math.abs( obsTime( b ) - time ) );
 
@@ -100,10 +102,11 @@ const AudioIdClip = ( ) => {
         observation.longitude = location.longitude;
         observation.positional_accuracy = location.accuracy;
       }
-      // The user's label wins over the model's ID; "no organism" leaves it blank.
+      // The user's label wins over the model's ID; "no organism" leaves it blank,
+      // as does a clip saved by hand, which has no ID.
       const { label, sp } = clip;
-      if ( identify ) {
-        // The taxon is chosen on Suggestions
+      if ( identify || clip.manual ) {
+        // No taxon: it's chosen on Suggestions, or by the user on ObsEdit
       } else if ( label?.taxonId ) {
         observation.taxon = { id: label.taxonId, name: label.name };
       } else if ( label?.taxonId !== null ) {
@@ -138,12 +141,20 @@ const AudioIdClip = ( ) => {
 
   return (
     <ScrollView className="bg-white h-full px-5 pt-4">
-      <Body1>{commonName}</Body1>
-      <List2 className="italic">{clip.sp.name}</List2>
+      {clip.manual
+        ? <Body1>{t( "Saved-clip" )}</Body1>
+        : (
+          <>
+            <Body1>{commonName}</Body1>
+            <List2 className="italic">{clip.sp.name}</List2>
+          </>
+        )}
       <Body3>{formatISOTimestamp( clip.time )}</Body3>
-      <Body3>
-        {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
-      </Body3>
+      {!clip.manual && (
+        <Body3>
+          {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
+        </Body3>
+      )}
       {span && (
         <ClipTrimmer
           span={span}
@@ -209,6 +220,17 @@ const AudioIdClip = ( ) => {
         </Pressable>
       ) )}
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
+      {clip.manual && (
+        <Button
+          className="mt-6"
+          level="warning"
+          text={t( "DELETE-CLIP" )}
+          onPress={( ) => {
+            navigation.goBack( );
+            deleteClip( id );
+          }}
+        />
+      )}
 
       <View className="h-20" />
     </ScrollView>

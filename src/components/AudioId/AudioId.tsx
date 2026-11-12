@@ -9,7 +9,7 @@ import { Pressable, ScrollView, View } from "components/styledComponents";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import React, {
-  useCallback, useEffect, useMemo, useSyncExternalStore,
+  useCallback, useEffect, useMemo, useState, useSyncExternalStore,
 } from "react";
 import { Trans } from "react-i18next";
 import type { ViewProps } from "react-native";
@@ -32,8 +32,8 @@ import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
-  isHeard, noteActivity, noteScreenRender, startDimming, stopDimming, useScreenDimmed,
-  useScreenPaused,
+  isHeard, noteActivity, noteScreenRender, saveRecentClip, startDimming, stopDimming,
+  useScreenDimmed, useScreenPaused,
 } from "./audioIdSession";
 import useEligibleClips from "./useEligibleClips";
 
@@ -272,10 +272,29 @@ const AudioId = ( ) => {
   const scoreNow = ( taxonId: number ) => current?.[outputOf.get( taxonId ) ?? -1] || 0;
   const hearingNow = ( taxonId: number ) => listening && isHeard( scoreNow( taxonId ) );
   const clips = useWhileBright( useAudioIdHistory, state => state.clips );
+  const savedCount = useMemo(
+    ( ) => Object.values( clips ).filter( c => c.manual ).length,
+    [clips],
+  );
+  const [saveStatus, setSaveStatus] = useState<string | null>( null );
+  useEffect( ( ) => {
+    const timer = saveStatus
+      ? setTimeout( ( ) => setSaveStatus( null ), 4000 )
+      : undefined;
+    return ( ) => clearTimeout( timer );
+  }, [saveStatus] );
+  const saveClip = async ( ) => {
+    try {
+      await saveRecentClip( );
+      setSaveStatus( t( "Clip-saved" ) );
+    } catch ( e ) {
+      setSaveStatus( t( "Couldnt-save-the-clip-error", { error: ( e as Error ).message } ) );
+    }
+  };
   // Every species ever heard, most recently heard first.
   const heardList = useMemo( ( ) => {
     const bySpecies = new Map<number, Heard>( );
-    Object.values( clips ).forEach( c => {
+    Object.values( clips ).filter( c => !c.manual ).forEach( c => {
       const h = bySpecies.get( c.sp.taxonId );
       bySpecies.set( c.sp.taxonId, {
         sp: c.sp,
@@ -392,6 +411,16 @@ const AudioId = ( ) => {
             ? stop
             : start}
         />
+        {listening && (
+          <Button
+            className="mt-3"
+            level="neutral"
+            text={t( "SAVE-LAST-15-SECONDS" )}
+            accessibilityHint={t( "Saves-the-last-15-seconds-heard-as-a-clip" )}
+            onPress={saveClip}
+          />
+        )}
+        {saveStatus && <Body3 className="mt-1">{saveStatus}</Body3>}
         {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
         {listening && <Spectrogram paused={dimmed} />}
         {listening && !current && (
@@ -399,6 +428,19 @@ const AudioId = ( ) => {
         )}
 
         <View className="h-6" />
+        {savedCount > 0 && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint={t( "Opens-your-saved-clips" )}
+            className="flex-row items-center py-3 border-b border-lightGray"
+            onPress={( ) => navigation.navigate( "AudioIdHistory", { saved: true } )}
+          >
+            <INatIcon name="sound-outline" color={colors.darkGray} size={22} />
+            <Body1 className="ml-3 flex-1">
+              {t( "Saved-clips-X", { count: savedCount } )}
+            </Body1>
+          </Pressable>
+        )}
         {heardList.length === 0 && <Body3 className="py-2">{t( "Nothing-heard-yet" )}</Body3>}
         {heardList.map( h => row( h.sp, h.lastHeard ) )}
 

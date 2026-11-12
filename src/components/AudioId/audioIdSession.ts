@@ -9,7 +9,7 @@ import createMmkvRecordStore, { AUDIO_ID_HEARD_MMKV_ID } from "sharedHelpers/mmk
 import { getTunable } from "sharedHelpers/tunableParams";
 import { create } from "zustand";
 
-import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
+import useAudioIdHistory, { clipPath, contextClipPath, NO_SPECIES } from "./audioIdHistory";
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
 import { prepareAudioId } from "./audioIdModel";
 
@@ -186,6 +186,33 @@ const saveCallClip = (
       } )
       .catch( ( e: Error ) => logger.error( `saving context clip failed: ${e.message}` ) );
   }, 5000 ) );
+};
+
+// Saves the last 15 s heard as a clip of its own, whether or not anything was
+// detected in it, and returns its ID. It plays, trims and makes observations
+// like a detected clip, and is kept until deleted.
+export const saveRecentClip = async ( ): Promise<string> => {
+  if ( !AudioBirdId ) throw new Error( "Audio ID is unavailable" );
+  const time = Date.now( );
+  const id = `${time}-saved`;
+  // An end past the newest sample saves up to the newest one.
+  await AudioBirdId.saveClip( contextClipPath( id ), CONTEXT_S, Number.MAX_SAFE_INTEGER );
+  const history = useAudioIdHistory.getState( );
+  history.addClip( NO_SPECIES, 0, {
+    id, time, duration: CONTEXT_S, manual: true,
+  } );
+  logger.info( "saved the last 15 s by hand" );
+  fetchCoarseUserLocation( ).catch( ( ) => null ).then( loc => {
+    const l = loc || sessionLocation;
+    if ( l ) {
+      history.updateClip( id, {
+        location: {
+          latitude: l.latitude, longitude: l.longitude, accuracy: l.positional_accuracy,
+        },
+      } );
+    }
+  } );
+  return id;
 };
 
 interface AudioIdState {

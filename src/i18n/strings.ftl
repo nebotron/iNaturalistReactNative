@@ -336,6 +336,7 @@ CLEAR-FILTERS = CLEAR FILTERS
 Clearing-the-storage-device = Clearing the storage device…
 # Screen title for one Audio ID sound clip
 CLIP--audio-id = CLIP
+Clip-saved = Clip saved.
 # Label for a button that closes a window or popup
 Close = Close
 CLOSE = CLOSE
@@ -433,6 +434,8 @@ Couldnt-create-identification-unknown-error = Couldn't create identification, un
 # Error creating an observation from an Audio ID clip; error is a technical message
 Couldnt-create-the-observation-error = Couldn't create the observation: { $error }
 Couldnt-delete-observations = Couldn't delete observations
+# Shown when saving the last 15 seconds of Audio ID listening fails
+Couldnt-save-the-clip-error = Couldn't save the clip: { $error }
 CREATE-AN-ACCOUNT = CREATE AN ACCOUNT
 # Button that creates an observation from an Audio ID clip
 CREATE-OBSERVATION = CREATE OBSERVATION
@@ -528,6 +531,8 @@ December = December
 DELETE = DELETE
 Delete = Delete
 Delete-all-observations = Delete all observations
+# Button that deletes an audio clip saved in Audio ID
+DELETE-CLIP = DELETE CLIP
 Delete-comment = Delete comment
 DELETE-COMMENT--question = DELETE COMMENT?
 # Button that deletes the current observation in a batch of several observations
@@ -1440,6 +1445,7 @@ Opens-the-history-of-when-this-species-was-heard = Opens the history of when thi
 # Accessibility hint for a species photo that opens its species page
 Opens-the-species-page = Opens the species page.
 Opens-top-faved-sound-observations-in-Explore = Opens top-faved sound observations in Explore.
+Opens-your-saved-clips = Opens your saved clips.
 # Attribution for OpenStreetMap map tiles shown on the offline map
 OpenStreetMap-contributors = © OpenStreetMap contributors
 # Connector placed between any number of alternative project rule sentences, e.g. "must be observed in Germany or must be observed in France"
@@ -1732,7 +1738,15 @@ SAVE-CHANGES = SAVE CHANGES
 SAVE-CROP = SAVE CROP
 Save-current-filters = Save current filters
 SAVE-FOR-LATER = SAVE FOR LATER
+# Audio ID button that keeps the last 15 seconds of sound as a clip, whether or not anything was identified in it
+SAVE-LAST-15-SECONDS = SAVE LAST 15 SECONDS
 SAVE-LOCATION = SAVE LOCATION
+# Title of an Audio ID clip the user saved by hand, which has no identification
+Saved-clip = Saved clip
+# Heading of the list of Audio ID clips the user saved by hand
+Saved-clips = Saved clips
+# Audio ID row that opens the clips the user saved by hand, with how many there are
+Saved-clips-X = Saved clips ({ $count })
 Saved-filter-already-exists-description = You already have a saved filter with this name. Choose a different name.
 Saved-filter-already-exists-title = Name already in use
 Saved-filter-name-placeholder = e.g. Nearby birds
@@ -1752,6 +1766,7 @@ Saved-X-photos-to-your-library-and-cleared-Y =
         [one] Saved { $count } photo to your library and cleared { $deleted } from the device.
        *[other] Saved { $count } photos to your library and cleared { $deleted } from the device.
     }
+Saves-the-last-15-seconds-heard-as-a-clip = Saves the last 15 seconds heard as a clip.
 # Explore filter option for an observation's evidence of presence annotation
 Scat--evidence = Scat
 Scientific-Name = Scientific Name

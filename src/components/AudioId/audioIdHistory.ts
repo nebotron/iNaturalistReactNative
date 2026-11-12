@@ -39,7 +39,13 @@ export interface AudioIdClip {
   // Seconds the context clip lasts when it isn't the 15 s centered on the
   // call: a sound shared to the app is kept whole, ending at `time`.
   duration?: number;
+  // Saved by hand while listening, whatever was heard: the last 15 s, kept
+  // until deleted. Its `sp` is NO_SPECIES.
+  manual?: boolean;
 }
+
+// A hand-saved clip's species: none.
+export const NO_SPECIES: AudioIdSpecies = { name: "", commonName: "", taxonId: 0 };
 
 // The app container's path changes across installs, so only ids are stored.
 export const clipPath = ( id: string ) => `${CLIPS_PATH}/${id}.m4a`;
@@ -158,13 +164,14 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( ( set, get ) => ( {
   },
 } ) );
 
-// Clips, and their audio, are kept for three days.
+// Detected clips, and their audio, are kept for three days; hand-saved ones
+// until deleted.
 const CLIP_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 export const expireOldClips = ( ) => {
   const { clips, deleteClip } = useAudioIdHistory.getState( );
   const cutoff = Date.now( ) - CLIP_TTL_MS;
   Object.values( clips )
-    .filter( clip => clip.time < cutoff )
+    .filter( clip => !clip.manual && clip.time < cutoff )
     .forEach( clip => deleteClip( clip.id ) );
 };
 

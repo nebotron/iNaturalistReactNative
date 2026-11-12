@@ -23,20 +23,24 @@ const { useQuery } = RealmContext;
 const TAG_SHADES = { true: "rgba(116, 172, 0, 0.2)", false: "rgba(155, 16, 16, 0.15)" };
 const OBSERVED_SHADE = "rgba(116, 172, 0, 0.5)";
 
-// Every time Audio ID heard one species, newest first.
+// Every time Audio ID heard one species, or every clip saved by hand, newest first.
 const AudioIdHistory = ( ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
   const { params } = useRoute( );
-  const { taxonId } = params as { taxonId: number };
+  const { taxonId, saved } = params as { taxonId?: number; saved?: boolean };
   const clips = useAudioIdHistory( state => state.clips );
   const tagClip = useAudioIdHistory( state => state.tagClip );
   const deleteClip = useAudioIdHistory( state => state.deleteClip );
   const openTopSounds = useOpenTopSounds( );
   const ofSpecies = Object.values( clips )
-    .filter( c => c.sp.taxonId === taxonId )
+    .filter( c => ( saved
+      ? c.manual
+      : !c.manual && c.sp.taxonId === taxonId ) )
     .sort( ( a, b ) => b.time - a.time );
-  const sp = ofSpecies[0]?.sp;
+  const sp = saved
+    ? undefined
+    : ofSpecies[0]?.sp;
   const commonName = useCommonName( sp );
   // Clips whose observation is still saved on this device
   const obsUuids = ofSpecies.flatMap( c => ( c.observationUuid
@@ -57,30 +61,32 @@ const AudioIdHistory = ( ) => {
       : TAG_SHADES[`${correct}`];
   };
 
-  const header = sp && (
-    <View className="flex-row items-center mb-3">
-      <Pressable
-        accessibilityRole="link"
-        accessibilityHint={t( "Opens-the-species-page" )}
-        className="flex-1"
-        onPress={( ) => navigation.navigate( "TaxonDetails", {
-          id: taxonId, fromAudioId: true,
-        } )}
-      >
-        <Body1 className="color-inatGreen underline">{commonName}</Body1>
-        <List2 className="italic">{sp.name}</List2>
-      </Pressable>
-      <INatIconButton
-        icon="sound-outline"
-        color={colors.inatGreen}
-        onPress={( ) => openTopSounds( {
-          id: taxonId, name: sp.name, preferred_common_name: commonName,
-        } )}
-        accessibilityLabel={t( "Top-faved-sounds" )}
-        accessibilityHint={t( "Opens-top-faved-sound-observations-in-Explore" )}
-      />
-    </View>
-  );
+  const header = saved
+    ? <Body1 className="mb-3">{t( "Saved-clips" )}</Body1>
+    : sp && (
+      <View className="flex-row items-center mb-3">
+        <Pressable
+          accessibilityRole="link"
+          accessibilityHint={t( "Opens-the-species-page" )}
+          className="flex-1"
+          onPress={( ) => navigation.navigate( "TaxonDetails", {
+            id: sp.taxonId, fromAudioId: true,
+          } )}
+        >
+          <Body1 className="color-inatGreen underline">{commonName}</Body1>
+          <List2 className="italic">{sp.name}</List2>
+        </Pressable>
+        <INatIconButton
+          icon="sound-outline"
+          color={colors.inatGreen}
+          onPress={( ) => openTopSounds( {
+            id: sp.taxonId, name: sp.name, preferred_common_name: commonName,
+          } )}
+          accessibilityLabel={t( "Top-faved-sounds" )}
+          accessibilityHint={t( "Opens-top-faved-sound-observations-in-Explore" )}
+        />
+      </View>
+    );
 
   // Virtualized: rendering every clip row up front held the tap on the Audio ID
   // list ~600 ms before this screen appeared (slow_screen_transition).
@@ -112,27 +118,33 @@ const AudioIdHistory = ( ) => {
           >
             <View className="flex-1">
               <Body1>{formatISOTimestamp( clip.time )}</Body1>
-              <Body3>
-                {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
-              </Body3>
+              {!clip.manual && (
+                <Body3>
+                  {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
+                </Body3>
+              )}
             </View>
             {eligible.has( clip.id ) && (
               <INatIcon name="merge" color={colors.inatGreen} size={20} />
             )}
-            <INatIconButton
-              icon="check"
-              color={colors.inatGreen}
-              onPress={( ) => tagClip( clip.id, true )}
-              accessibilityLabel={t( "Right--correct" )}
-              accessibilityHint={t( "Tags-the-ID-as-right" )}
-            />
-            <INatIconButton
-              icon="close"
-              color={colors.warningRed}
-              onPress={( ) => tagClip( clip.id, false )}
-              accessibilityLabel={t( "Wrong--incorrect" )}
-              accessibilityHint={t( "Tags-the-ID-as-wrong" )}
-            />
+            {!clip.manual && (
+              <>
+                <INatIconButton
+                  icon="check"
+                  color={colors.inatGreen}
+                  onPress={( ) => tagClip( clip.id, true )}
+                  accessibilityLabel={t( "Right--correct" )}
+                  accessibilityHint={t( "Tags-the-ID-as-right" )}
+                />
+                <INatIconButton
+                  icon="close"
+                  color={colors.warningRed}
+                  onPress={( ) => tagClip( clip.id, false )}
+                  accessibilityLabel={t( "Wrong--incorrect" )}
+                  accessibilityHint={t( "Tags-the-ID-as-wrong" )}
+                />
+              </>
+            )}
             <ClipPlayButton clip={clip} />
           </Pressable>
         </Swipeable>

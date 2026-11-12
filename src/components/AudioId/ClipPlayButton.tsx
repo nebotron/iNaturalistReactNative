@@ -7,7 +7,7 @@ import { clipPath, contextClipPath } from "./audioIdHistory";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 
 // Plays or stops one Audio ID clip: the call found in it, else its 5 s
-// window. Starting another clip stops this one.
+// window, or all of a clip saved by hand. Starting another clip stops this one.
 const ClipPlayButton = ( { clip }: { clip: AudioIdClip } ) => {
   const { t } = useTranslation( );
   const [player] = useState( ( ) => ( {} ) );
@@ -31,9 +31,17 @@ const ClipPlayButton = ( { clip }: { clip: AudioIdClip } ) => {
   const play = async ( ) => {
     setPlaying( true );
     playingRef.current = true;
-    await ( clip.call
-      ? AudioBirdId?.playClipRange( contextClipPath( clip.id ), clip.call[0], clip.call[1] )
-      : AudioBirdId?.playClip( clipPath( clip.id ) ) )?.catch( ( ) => undefined );
+    let playback;
+    if ( clip.call ) {
+      const [from, to] = clip.call;
+      playback = AudioBirdId?.playClipRange( contextClipPath( clip.id ), from, to );
+    } else {
+      // A clip saved by hand has only its context clip.
+      playback = AudioBirdId?.playClip( clip.manual
+        ? contextClipPath( clip.id )
+        : clipPath( clip.id ) );
+    }
+    await playback?.catch( ( ) => undefined );
     playingRef.current = false;
     setPlaying( false );
   };
