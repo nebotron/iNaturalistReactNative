@@ -24,6 +24,7 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   InteractionManager,
 } from "react-native";
 import ObservationPhoto from "realmModels/ObservationPhoto";
@@ -59,6 +60,8 @@ const logger = log.extend( "ImageCropEditor" );
 // How many of those to also decode off-screen (see ImageCropView's warmUris).
 // A decoded full-resolution photo is ~130MB, so only the next one.
 const DECODE_LOOKAHEAD = 1;
+// How long the framing has to stay put before it's saved for resuming
+const RESUME_CROP_SAVE_DELAY_MS = 1000;
 // Above this, the wait for a photo is long enough for the user to see a
 // spinner, and worth a line in the app log saying which stage it went on.
 // Below it, logging every photo of a 200-photo bulk crop would say nothing.
@@ -391,14 +394,23 @@ const ImageCropEditor = ( ) => {
       : null;
   } );
   const [draftCrop, setDraftCrop] = useState( restoredCrop );
+  // The same, for the callbacks below to read without depending on it
+  const draftCropRef = useRef( restoredCrop );
   const handleCropChange = useCallback( ( crop: NormalizedCrop ) => {
-    if ( imageUri ) setDraftCrop( { uri: imageUri, crop } );
+    if ( !imageUri ) return;
+    draftCropRef.current = { uri: imageUri, crop };
+    setDraftCrop( draftCropRef.current );
   }, [imageUri] );
 
   // A Group Photos crop keeps its place in the store (persisted, so it
   // survives an app kill) until it finishes, so opening the cropper again from
   // Group Photos resumes it (groupCropResume).
   const doneRef = useRef( false );
+  const resumeCropFor = useCallback( ( uri: string | undefined ) => (
+    draftCropRef.current?.uri === uri
+      ? draftCropRef.current?.crop
+      : undefined
+  ), [] );
   useEffect( ( ) => {
     if ( context !== "groupPhotos" || doneRef.current ) {
       return;
@@ -411,20 +423,51 @@ const ImageCropEditor = ( ) => {
       pendingImageUris,
       cropImport,
       skipUris: [...visitedUris],
-      crop: draftCrop?.uri === imageUri
-        ? draftCrop?.crop
-        : undefined,
+      crop: resumeCropFor( imageUri ),
     } );
   }, [
     context,
     cropImport,
-    draftCrop,
     imageUri,
     navigation,
     pendingImageUris,
+    resumeCropFor,
     setGroupCropResume,
     visitedUris,
   ] );
+
+  // The framing changes on every drag and pinch, and groupCropResume is
+  // persisted whole -- with both lists of the bulk crop's photos -- so writing
+  // it each time re-serialized and rewrote hundreds of URIs per gesture. The
+  // framing is saved once the user pauses, and when the app leaves the
+  // foreground or the editor closes, which is all resuming it needs.
+  const saveResumeCrop = useCallback( ( ) => {
+    if ( context !== "groupPhotos" || doneRef.current ) {
+      return;
+    }
+    const resume = useStore.getState( ).groupCropResume;
+    if ( !resume || resume.imageUri !== imageUri ) {
+      return;
+    }
+    const crop = resumeCropFor( imageUri );
+    if ( resume.crop === crop ) {
+      return;
+    }
+    setGroupCropResume( { ...resume, crop } );
+  }, [context, imageUri, resumeCropFor, setGroupCropResume] );
+  useEffect( ( ) => {
+    const timer = setTimeout( saveResumeCrop, RESUME_CROP_SAVE_DELAY_MS );
+    return ( ) => clearTimeout( timer );
+  }, [draftCrop, saveResumeCrop] );
+  useEffect( ( ) => {
+    const subscription = AppState.addEventListener( "change", state => {
+      if ( state !== "active" ) saveResumeCrop( );
+    } );
+    return ( ) => {
+      subscription.remove( );
+      saveResumeCrop( );
+    };
+  }, [saveResumeCrop] );
 
   // Local files of the upcoming photos whose preload has finished, handed to
   // ImageCropView so it can decode them before the user advances.
