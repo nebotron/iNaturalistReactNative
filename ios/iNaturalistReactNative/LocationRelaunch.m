@@ -3,13 +3,60 @@
 #import <CoreLocation/CoreLocation.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
+#import <fcntl.h>
+#import <sys/stat.h>
+#import <unistd.h>
 
 static NSString *const kEnabledKey = @"INatLocationMonitorEnabled";
-static NSString *const kPendingKey = @"INatLocationMonitorPending";
-// Cap the buffered fixes so a long stretch with JS down can't grow
-// NSUserDefaults without bound. JS drains every minute while it's running, so
-// this only fills up while the app is terminated or suspended.
+// Where fixes used to be buffered, as one NSUserDefaults array that every fix
+// read, copied and wrote back whole (up to kMaxPending entries). Only drained
+// now, for fixes an older build left there.
+static NSString *const kLegacyPendingKey = @"INatLocationMonitorPending";
+// Most fixes handed to JS in one drain, the newest ones. JS drains every 5
+// minutes while the app is in use, and whenever it geotags, so the buffer only
+// grows while the app is in the background, suspended or terminated, and at
+// 32 bytes a fix even weeks of that stay small on disk.
 static const NSUInteger kMaxPending = 2000;
+
+// One buffered fix. Each is appended to the buffer file as it arrives, so a fix
+// costs a 32-byte write, and nothing already buffered is read or rewritten.
+typedef struct {
+  double latitude;
+  double longitude;
+  double accuracy;
+  double timestamp; // ms since 1970
+} INatPendingFix;
+
+static NSString *pendingFilePath( void )
+{
+  static NSString *path = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once( &onceToken, ^{
+    NSURL *dir = [[NSFileManager defaultManager]
+      URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject;
+    [[NSFileManager defaultManager] createDirectoryAtURL:dir
+                             withIntermediateDirectories:YES attributes:nil error:nil];
+    path = [dir.path stringByAppendingPathComponent:@"INatLocationMonitorPending.bin"];
+  } );
+  return path;
+}
+
+// Appends whole INatPendingFix records to the buffer file.
+static void appendPendingFixes( NSData *fixes )
+{
+  if ( fixes.length == 0 ) return;
+  int fd = open( pendingFilePath( ).fileSystemRepresentation,
+                 O_WRONLY | O_APPEND | O_CREAT, 0644 );
+  if ( fd < 0 ) return;
+  // A write cut short (the app killed mid-write) leaves a partial record; drop
+  // it so the records after it stay aligned.
+  struct stat info;
+  if ( fstat( fd, &info ) == 0 && info.st_size % (off_t)sizeof( INatPendingFix ) ) {
+    ftruncate( fd, info.st_size - info.st_size % (off_t)sizeof( INatPendingFix ) );
+  }
+  write( fd, fixes.bytes, fixes.length );
+  close( fd );
+}
 // Only record a fix once the user has moved this far, which keeps continuous
 // background tracking power-efficient. Mirrors MIN_DISTANCE_METERS in
 // locationHistoryTracker.ts.
@@ -120,29 +167,44 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
     self.paused = NO;
     [manager startUpdatingLocation];
   }
-  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-  NSMutableArray *pending = [[defaults arrayForKey:kPendingKey] mutableCopy];
-  if ( !pending ) pending = [NSMutableArray array];
+  NSMutableData *fixes = [NSMutableData data];
   for ( CLLocation *location in locations ) {
-    [pending addObject:@{
-      @"latitude": @( location.coordinate.latitude ),
-      @"longitude": @( location.coordinate.longitude ),
-      @"accuracy": @( location.horizontalAccuracy ),
-      @"timestamp": @( location.timestamp.timeIntervalSince1970 * 1000.0 ),
-    }];
+    INatPendingFix fix = {
+      .latitude = location.coordinate.latitude,
+      .longitude = location.coordinate.longitude,
+      .accuracy = location.horizontalAccuracy,
+      .timestamp = location.timestamp.timeIntervalSince1970 * 1000.0,
+    };
+    [fixes appendBytes:&fix length:sizeof( fix )];
   }
-  if ( pending.count > kMaxPending ) {
-    [pending removeObjectsInRange:NSMakeRange( 0, pending.count - kMaxPending )];
-  }
-  [defaults setObject:pending forKey:kPendingKey];
+  appendPendingFixes( fixes );
 }
 
 - (NSArray<NSDictionary *> *)drainPendingLocations
 {
+  NSMutableArray<NSDictionary *> *pending = [NSMutableArray array];
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-  NSArray *pending = [defaults arrayForKey:kPendingKey];
-  [defaults removeObjectForKey:kPendingKey];
-  return pending ?: @[];
+  NSArray *legacy = [defaults arrayForKey:kLegacyPendingKey];
+  if ( legacy ) {
+    [pending addObjectsFromArray:legacy];
+    [defaults removeObjectForKey:kLegacyPendingKey];
+  }
+  NSString *path = pendingFilePath( );
+  NSData *data = [NSData dataWithContentsOfFile:path];
+  [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+  // A trailing partial record (a write cut short) is dropped.
+  NSUInteger records = data.length / sizeof( INatPendingFix );
+  const INatPendingFix *fixes = (const INatPendingFix *)data.bytes;
+  NSUInteger first = records > kMaxPending ? records - kMaxPending : 0;
+  for ( NSUInteger i = first; i < records; i++ ) {
+    [pending addObject:@{
+      @"latitude": @( fixes[i].latitude ),
+      @"longitude": @( fixes[i].longitude ),
+      @"accuracy": @( fixes[i].accuracy ),
+      @"timestamp": @( fixes[i].timestamp ),
+    }];
+  }
+  return pending;
 }
 
 @end
