@@ -33,6 +33,9 @@ export interface PreparedSourceFile {
   space?: string;
   hdr?: boolean;
   eager?: boolean;
+  // Whether ImageIO was asked to tone-map a >8-bit (HDR) photo to SDR as it
+  // decoded, instead of leaving that to the convert stage.
+  toSDR?: boolean;
   // Memory iOS would still let the app allocate when this prepare started,
   // after waiting (stageMs.memWait) for room beside other running prepares.
   freeMB?: number;

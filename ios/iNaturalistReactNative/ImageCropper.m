@@ -2513,8 +2513,9 @@ RCT_EXPORT_METHOD( createThumbnail
 // decode and the conversion into an 8-bit sRGB bitmap: a 32MP 10-bit HDR PQ
 // HEIF (what a Canon writes as .HIF) took ~2s in that stage, against ~0.4s to
 // crop the same file through ImageIO without converting it. info receives the
-// decoded format: bits per component and pixel, colour space, and whether its
-// transfer function is HDR (PQ or HLG).
+// decoded format: bits per component and pixel, colour space, whether its
+// transfer function is HDR (PQ or HLG), and toSDR where the decoder was asked
+// to tone-map it to SDR.
 //
 // Returns nil, having decoded nothing, unless the header says it is the same
 // picture as expected -- the image UIImage loaded, whose size the crop is
@@ -2541,10 +2542,26 @@ static UIImage *eagerlyDecodedImageAtPath(
     CFRelease( src );
     return nil;
   }
+  NSMutableDictionary *options = [@{
+    (__bridge NSString *)kCGImageSourceShouldCacheImmediately: @YES,
+  } mutableCopy];
+  // A deeper-than-8-bit photo (the 10-bit HDR PQ HEIFs above) is tone-mapped
+  // to SDR by the decoder itself, rather than left in PQ for the draw into the
+  // 8-bit bitmap to tone-map pixel by pixel: that draw was 2-5s of every such
+  // photo's prepare (stageMs.convert), and the first photo of a bulk crop,
+  // which nothing can preload, waited the whole of it. Same pixel dimensions
+  // either way; only the cropper's display copy is affected, not the crop.
+  NSDictionary *props =
+    CFBridgingRelease( CGImageSourceCopyPropertiesAtIndex( src, index, NULL ) );
+  if ( @available( iOS 17.0, * ) ) {
+    if ( [props[(__bridge NSString *)kCGImagePropertyDepth] intValue] > 8 ) {
+      options[(__bridge NSString *)kCGImageSourceDecodeRequest] =
+        (__bridge NSString *)kCGImageSourceDecodeToSDR;
+      info[@"toSDR"] = @YES;
+    }
+  }
   CGImageRef cg = CGImageSourceCreateImageAtIndex( src, index,
-    (__bridge CFDictionaryRef)@{
-      (__bridge NSString *)kCGImageSourceShouldCacheImmediately: @YES,
-    } );
+    (__bridge CFDictionaryRef)options );
   CFRelease( src );
   if ( !cg ) return nil;
   if ( CGImageGetWidth( cg ) != (size_t)declared.width
