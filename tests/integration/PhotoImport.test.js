@@ -89,6 +89,7 @@ jest.mock( "sharedHooks/useObservationCounts", () => {
         return {
           numUnuploadedObservations: 0,
           numObsMissingBasics: 0,
+          numObsMissingLocationOrDate: 0,
           numUnuploadedObsNoTaxon: 0,
         };
       }
@@ -97,6 +98,8 @@ jest.mock( "sharedHooks/useObservationCounts", () => {
         numUnuploadedObservations: unsynced.length,
         numObsMissingBasics: unsynced
           .filter( obs => obs.missingBasics( ) ).length,
+        numObsMissingLocationOrDate: unsynced
+          .filter( obs => obs.missingLocationOrDate( ) ).length,
         numUnuploadedObsNoTaxon: unsynced
           .filter( obs => !obs.taxon ).length,
       };
