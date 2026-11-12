@@ -1,3 +1,4 @@
+import { useNavigation } from "@react-navigation/native";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import {
@@ -7,6 +8,7 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
+import type { ExploreStackScreenProps } from "navigation/types";
 import React from "react";
 import { useTranslation } from "sharedHooks";
 
@@ -24,6 +26,8 @@ const ExploreTaxonFiltersSection = ( {
   updateTaxonFilters,
 }: Props ) => {
   const { t } = useTranslation( );
+  const navigation
+    = useNavigation<ExploreStackScreenProps<"AdvancedSearch">["navigation"]>( );
   const hasUnknownIconicTaxon = iconicTaxonNames.indexOf( "unknown" ) >= 0;
   const hasTaxonFilters = taxonFilters.length > 0 || hasUnknownIconicTaxon;
 
@@ -63,8 +67,11 @@ const ExploreTaxonFiltersSection = ( {
                   <View className="flex-1 mr-3">
                     <DisplayTaxon
                       taxon={filter.taxon}
-                      showInfoButton={false}
-                      showCheckmark={false}
+                      handlePress={() => navigation.navigate(
+                        "TaxonDetails",
+                        { id: filter.taxon.id },
+                      )}
+                      accessibilityHint={t( "Navigates-to-taxon-details" )}
                     />
                   </View>
                   <View className="flex-row items-center">
