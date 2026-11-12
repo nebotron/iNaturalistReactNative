@@ -113,11 +113,6 @@ const Menu = ( ) => {
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
 
   const menuItems: Record<string, MenuOption> = {
-    audioId: {
-      label: t( "AUDIO-ID" ),
-      navigation: "AudioId",
-      icon: "microphone",
-    },
     projects: {
       label: t( "PROJECTS" ),
       navigation: "Projects",
