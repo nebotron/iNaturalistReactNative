@@ -18,7 +18,8 @@ import { prepareAudioId } from "./audioIdModel";
 // AudioBirdId native module runs BirdNET on the last 5 s of microphone audio
 // every 2.5 s and emits probabilities for the species likely at the user's
 // place and week (see audioIdModel.ts): the top one, and any that clear
-// THRESHOLD. A species counts as heard when its score clears THRESHOLD.
+// THRESHOLD. A species counts as heard, and is listed, when its score clears
+// THRESHOLD; it vibrates only when its score clears VIBRATE_THRESHOLD.
 
 type VibrateMode = "auto" | "core" | "system";
 
@@ -48,8 +49,10 @@ export const { AudioBirdId } = NativeModules as {
 
 // Up from 0.3: on users' labeled detections it cut wrong birds from 23 to 8
 // and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
-// Raised to 0.6 so everything listed as heard is also confident enough to alert on.
+// Listing and vibrating have thresholds of their own, so a lower bar can fill
+// the list without buzzing the user for every doubtful call.
 const THRESHOLD = getTunable( "audioIdThreshold" );
+const VIBRATE_THRESHOLD = getTunable( "audioIdVibrateThreshold" );
 const NEW_CALL_GAP_MS = getTunable( "audioIdNewCallGapSeconds" ) * 1000;
 const REALERT_MS = getTunable( "audioIdRealertHours" ) * 3600000;
 // Scores by output index, as the native module sends them
@@ -78,6 +81,9 @@ interface ScoresEvent {
 }
 export interface Heard {
   sp: AudioIdSpecies; lastHeard: number; best: number; count: number;
+  // When its score last cleared VIBRATE_THRESHOLD, 0 for never. Missing from
+  // entries saved before the thresholds were split, which fall back to lastHeard.
+  lastConfident?: number;
 }
 
 // The clip of each species' current call, by taxon ID.
@@ -469,8 +475,9 @@ const onScores = ( event: ScoresEvent ) => {
     runs = [];
   }
   const now = Date.now( );
-  // Alert on a species not heard in the last REALERT_MS, and on every call of a
-  // species the user hasn't observed at research grade recently.
+  // Alert on a species not confidently heard in the last REALERT_MS, and on
+  // every confident call of a species the user hasn't observed at research
+  // grade recently.
   const alerts: AudioIdSpecies[] = [];
   let next = heard;
   Object.entries( scores ).forEach( ( [i, s] ) => {
@@ -479,13 +486,20 @@ const onScores = ( event: ScoresEvent ) => {
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > NEW_CALL_GAP_MS;
     saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame );
-    if ( !old || now - old.lastHeard > REALERT_MS
-      || ( isNewCall && recent && !recent.has( sp.taxonId ) ) ) {
+    const confident = s >= VIBRATE_THRESHOLD;
+    const lastConfident = old
+      ? old.lastConfident ?? old.lastHeard
+      : 0;
+    if ( confident && ( !lastConfident || now - lastConfident > REALERT_MS
+      || ( now - lastConfident > NEW_CALL_GAP_MS && recent && !recent.has( sp.taxonId ) ) ) ) {
       alerts.push( sp );
     }
-    const entry = {
+    const entry: Heard = {
       sp,
       lastHeard: now,
+      lastConfident: confident
+        ? now
+        : lastConfident,
       best: Math.max( old?.best || 0, s ),
       count: ( old?.count || 0 ) + ( isNewCall
         ? 1
@@ -494,7 +508,11 @@ const onScores = ( event: ScoresEvent ) => {
     next = { ...next, [sp.taxonId]: entry };
     // lastHeard moves every run of a call; saving it only with a new call or
     // a better score keeps a call to one or two writes rather than one a second.
-    if ( isNewCall || entry.best > ( old?.best || 0 ) ) heardStore.put( sp.taxonId, entry );
+    const newConfidentCall = confident
+      && ( !old?.lastConfident || now - old.lastConfident > NEW_CALL_GAP_MS );
+    if ( isNewCall || newConfidentCall || entry.best > ( old?.best || 0 ) ) {
+      heardStore.put( sp.taxonId, entry );
+    }
   } );
   if ( alerts.length > 0 ) {
     logger.info( `alert: ${alerts.map( sp => sp.commonName ).join( ", " )}` );

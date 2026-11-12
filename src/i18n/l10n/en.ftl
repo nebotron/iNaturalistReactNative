@@ -2133,7 +2133,11 @@ Tunable-audioIdRecentObsDays-description = Every call vibrates for species you h
 # Label for a tunable parameter in settings
 Tunable-audioIdThreshold = Audio ID detection threshold
 # Description of a tunable parameter in settings
-Tunable-audioIdThreshold-description = Minimum score (0-1) for a species to count as heard.
+Tunable-audioIdThreshold-description = Minimum score (0-1) for a species to count as heard and be listed.
+# Label for a tunable parameter in settings
+Tunable-audioIdVibrateThreshold = Audio ID vibration threshold
+# Description of a tunable parameter in settings
+Tunable-audioIdVibrateThreshold-description = Minimum score (0-1) for a species heard to vibrate the phone.
 # Label for a tunable parameter in settings
 Tunable-autoAdvancedModeObservations = Auto advanced mode observations
 # Description of a tunable parameter in settings

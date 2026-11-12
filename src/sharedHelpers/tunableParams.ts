@@ -47,7 +47,8 @@ export const TUNABLE_PARAMS = {
   subjectCropPadding: def( "ai", 0.1, 0, 1, false ),
   subjectCropFrameFraction: def( "ai", 0.8, 0.1, 1, false ),
 
-  audioIdThreshold: def( "audio", 0.6, 0, 1, false ),
+  audioIdThreshold: def( "audio", 0.5, 0, 1, false ),
+  audioIdVibrateThreshold: def( "audio", 0.7, 0, 1, false ),
   audioIdDimAfterSeconds: def( "audio", 30, 1, 600 ),
   audioIdNewCallGapSeconds: def( "audio", 6, 0.5, 60, false ),
   audioIdRealertHours: def( "audio", 24, 0.1, 720, false ),

@@ -78,6 +78,10 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-audioIdThreshold" ),
     t( "Tunable-audioIdThreshold-description" ),
   ],
+  audioIdVibrateThreshold: [
+    t( "Tunable-audioIdVibrateThreshold" ),
+    t( "Tunable-audioIdVibrateThreshold-description" ),
+  ],
   audioIdDimAfterSeconds: [
     t( "Tunable-audioIdDimAfterSeconds" ),
     t( "Tunable-audioIdDimAfterSeconds-description" ),
