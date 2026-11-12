@@ -1223,6 +1223,31 @@ RCT_EXPORT_METHOD( exportPHAsset
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
+  [self exportAsset:phUri destPath:destPath currentVersion:NO resolver:resolve rejecter:reject];
+}
+
+// Like exportPHAsset, but the asset as Photos currently shows it: the edited
+// rendition when the user edited the photo, else the original. Both are the
+// file's own bytes, with no decode or re-encode -- this replaces
+// copyAssetsFileIOS for crop sources, which decoded the photo and re-encoded
+// it as a maximum-quality JPEG several times the original's size, a full
+// decode, encode and write per photo before the cropper had even started.
+// Resolves with the resource's type identifier too, since it may be HEIC.
+RCT_EXPORT_METHOD( exportPHAssetCurrentVersion
+                  : ( NSString * )phUri destPath
+                  : ( NSString * )destPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  [self exportAsset:phUri destPath:destPath currentVersion:YES resolver:resolve rejecter:reject];
+}
+
+- (void)exportAsset:(NSString *)phUri
+           destPath:(NSString *)destPath
+     currentVersion:(BOOL)currentVersion
+           resolver:(RCTPromiseResolveBlock)resolve
+           rejecter:(RCTPromiseRejectBlock)reject
+{
   // This module has no methodQueue of its own, so React Native gives it one
   // serial queue that every call to it shares. Everything below up to
   // writeDataForAssetResource is a synchronous trip through the Photos
@@ -1249,9 +1274,13 @@ RCT_EXPORT_METHOD( exportPHAsset
 
     PHAssetResource *photoResource = nil;
     for ( PHAssetResource *r in [PHAssetResource assetResourcesForAsset:asset] ) {
-      if ( r.type == PHAssetResourceTypePhoto ) {
+      if ( currentVersion && r.type == PHAssetResourceTypeFullSizePhoto ) {
         photoResource = r;
         break;
+      }
+      if ( r.type == PHAssetResourceTypePhoto && !photoResource ) {
+        photoResource = r;
+        if ( !currentVersion ) break;
       }
     }
     if ( !photoResource ) {
@@ -1317,6 +1346,7 @@ RCT_EXPORT_METHOD( exportPHAsset
               resolve( @{
                 @"uri": [NSString stringWithFormat:@"file://%@", dest],
                 @"attempts": @( attemptNumber + 1 ),
+                @"uti": photoResource.uniformTypeIdentifier ?: @"",
               } );
               attemptExport = nil;
               return;

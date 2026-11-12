@@ -3,7 +3,7 @@ import {
   unlink,
 } from "@dr.pogodin/react-native-fs";
 import { cropSourcesPath } from "appConstants/paths";
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
 
 // A source is released once its crop is done (releaseCropSource); one never
@@ -57,6 +57,70 @@ function writeAtomically(
   return promise;
 }
 
+interface CurrentVersionExporter {
+  exportPHAssetCurrentVersion?: (
+    phUri: string,
+    destPath: string,
+  ) => Promise<{ uri: string; uti: string }>;
+}
+
+// The asset's own bytes keep their format, so its file is named for it. Other
+// formats (raws, PNGs) are rare enough to keep going through copyAssetsFileIOS.
+const EXPORTED_EXTENSIONS: Record<string, string> = {
+  "public.jpeg": "jpg",
+  "public.heic": "heic",
+};
+
+// Exported as the photo's own file (ImageCropper.exportPHAssetCurrentVersion),
+// in the version Photos shows. copyAssetsFileIOS, used before, decoded it and
+// re-encoded it as a maximum-quality JPEG several times the original's size,
+// which made the crop editor one of the app's heaviest disk writers; the
+// exact bytes are also strictly better quality than a re-encode of them.
+const exportsInFlight = new Map<string, Promise<string>>( );
+const exportPhotoLibraryAsset = ( uri: string ): Promise<string> => {
+  const inFlight = exportsInFlight.get( uri );
+  if ( inFlight ) return inFlight;
+  // eslint-disable-next-line no-use-before-define
+  const promise = exportPhotoLibraryAssetOnce( uri )
+    .finally( ( ) => exportsInFlight.delete( uri ) );
+  exportsInFlight.set( uri, promise );
+  return promise;
+};
+
+const exportPhotoLibraryAssetOnce = async ( uri: string ): Promise<string> => {
+  const base = `${cropSourcesPath}/${urlToFilename( uri ).replace( /\.jpg$/, "" )}`;
+  const heicPath = `${base}.heic`;
+  const jpgPath = `${base}.jpg`;
+  const cached = await getCachedOrNull( heicPath ) ?? await getCachedOrNull( jpgPath );
+  if ( cached ) return cached;
+
+  const { ImageCropper } = NativeModules as { ImageCropper?: CurrentVersionExporter };
+  if ( ImageCropper?.exportPHAssetCurrentVersion ) {
+    // Exported first, then moved to the name its type calls for, so a path
+    // only ever holds a whole file of the type its extension says
+    const tmpPath = `${base}.${Date.now( )}.export.tmp`;
+    try {
+      const { uti } = await ImageCropper.exportPHAssetCurrentVersion( uri, tmpPath );
+      const extension = EXPORTED_EXTENSIONS[uti];
+      if ( extension ) {
+        const destPath = `${base}.${extension}`;
+        await unlink( destPath ).catch( ( ) => {} );
+        await moveFile( tmpPath, destPath );
+        return `file://${destPath}`;
+      }
+    } catch {
+      // Fall back to copyAssetsFileIOS below
+    }
+    await unlink( tmpPath ).catch( ( ) => {} );
+  }
+
+  // 99999 → no upscaling; copyAssetsFileIOS caps at the asset's natural dimensions
+  await writeAtomically( jpgPath, async tmpPath => {
+    await copyAssetsFileIOS( uri, tmpPath, 99999, 99999 );
+  } );
+  return `file://${jpgPath}`;
+};
+
 const ensureLocalImageForCrop = async (
   uri: string,
   // "large" is plenty for subject detection, which only needs to locate a
@@ -84,7 +148,7 @@ const ensureLocalImageForCrop = async (
 
   // ph:// URIs come in two forms:
   // - ph:///path/to/file  → a file path incorrectly wrapped with ph:// prefix; strip it
-  // - ph://LOCALIDENTIFIER → an iOS Photos library asset; export via copyAssetsFileIOS
+  // - ph://LOCALIDENTIFIER → an iOS Photos library asset; export it
   if ( uri.startsWith( "ph://" ) ) {
     const afterScheme = uri.slice( "ph://".length );
     if ( afterScheme.startsWith( "/" ) ) {
@@ -92,14 +156,7 @@ const ensureLocalImageForCrop = async (
     }
     if ( Platform.OS === "ios" ) {
       await mkdir( cropSourcesPath );
-      const destPath = `${cropSourcesPath}/${urlToFilename( uri )}`;
-      const cached = await getCachedOrNull( destPath );
-      if ( cached ) return cached;
-      // 99999 → no upscaling; copyAssetsFileIOS caps at the asset's natural dimensions
-      await writeAtomically( destPath, async tmpPath => {
-        await copyAssetsFileIOS( uri, tmpPath, 99999, 99999 );
-      } );
-      return `file://${destPath}`;
+      return exportPhotoLibraryAsset( uri );
     }
   }
 
