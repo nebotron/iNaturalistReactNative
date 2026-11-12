@@ -48,14 +48,21 @@ export const preloadCache = new Map<string, PreloadResult>( );
 // an ongoing preload instead of kicking off duplicate, contending work.
 const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
 
+// Writes the file a preload decodes, where the default export
+// (ensureLocalImageForCrop) isn't the one wanted.
+export type PreloadExport = ( ) => Promise<string>;
+
 async function loadImageData(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
   requestedAt: number,
+  exportSource?: PreloadExport,
 ): Promise<PreloadResult | null> {
   const startedAt = Date.now( );
-  const resolvedUri = await ensureLocalImageForCrop( cropSourceUri, "original" );
+  const resolvedUri = exportSource
+    ? await exportSource( )
+    : await ensureLocalImageForCrop( cropSourceUri, "original" );
   const exportedAt = Date.now( );
   // One decode of the photo, off the screen the user is still cropping on,
   // producing the size, the framing and the file the cropper will draw.
@@ -89,6 +96,7 @@ function preloadImage(
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
   requestedAt: number,
+  exportSource?: PreloadExport,
 ): Promise<PreloadResult | null> {
   const cached = preloadCache.get( imageUri );
   if ( cached ) {
@@ -98,7 +106,13 @@ function preloadImage(
   if ( inFlight ) {
     return inFlight;
   }
-  const promise = loadImageData( imageUri, cropSourceUri, existingSavedCrop, requestedAt )
+  const promise = loadImageData(
+    imageUri,
+    cropSourceUri,
+    existingSavedCrop,
+    requestedAt,
+    exportSource,
+  )
     .then( result => {
       if ( result ) {
         preloadCache.set( imageUri, result );
@@ -118,6 +132,7 @@ interface PreloadRequest {
   cropSourceUri: string;
   existingSavedCrop: NormalizedCrop | null;
   requestedAt: number;
+  exportSource?: PreloadExport;
   resolve: ( result: PreloadResult | null ) => void;
 }
 
@@ -152,6 +167,7 @@ function startNextPreload( ) {
     request.cropSourceUri,
     request.existingSavedCrop,
     request.requestedAt,
+    request.exportSource,
   ).then( request.resolve, ( ) => request.resolve( null ) ).finally( ( ) => {
     activePreloadCount -= 1;
     // eslint-disable-next-line no-use-before-define
@@ -174,6 +190,7 @@ export function enqueuePreload(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
+  exportSource?: PreloadExport,
 ): Promise<PreloadResult | null> {
   const cached = preloadCache.get( imageUri );
   if ( cached ) {
@@ -193,10 +210,27 @@ export function enqueuePreload(
   } );
   preloadQueued.set( imageUri, promise );
   preloadQueue.push( {
-    imageUri, cropSourceUri, existingSavedCrop, requestedAt: Date.now( ), resolve,
+    imageUri, cropSourceUri, existingSavedCrop, requestedAt: Date.now( ), exportSource, resolve,
   } );
   pumpPreloadQueue( );
   return promise;
+}
+
+// A preload already finished or running for this URI, without starting one.
+export function existingPreload( imageUri: string ): Promise<PreloadResult | null> | null {
+  const cached = preloadCache.get( imageUri );
+  if ( cached ) return Promise.resolve( cached );
+  return preloadInFlight.get( imageUri ) ?? null;
+}
+
+// Takes a preload that hasn't started yet out of the queue, so it can't hold
+// up a photo the user is actually waiting on. Its promise resolves null.
+export function dequeuePreload( imageUri: string ) {
+  const index = preloadQueue.findIndex( request => request.imageUri === imageUri );
+  if ( index < 0 ) return;
+  const [request] = preloadQueue.splice( index, 1 );
+  preloadQueued.delete( imageUri );
+  request.resolve( null );
 }
 
 // A photo the import copied to a new uri (a USB-staged photo copied into the
@@ -221,6 +255,11 @@ export function aliasPreload( fromUri: string, toUri: string ) {
     }
     const aliased = { ...result, localUri: toUri };
     preloadCache.set( toUri, aliased );
+    // The file the preload decoded is superseded by the copy at toUri, which
+    // holds the same bytes. Only a scratch export is removed, never a staged
+    // USB original.
+    // eslint-disable-next-line no-use-before-define
+    if ( result.localUri !== toUri ) releaseCropSource( fromUri, [result.localUri] );
     return aliased;
   } ).finally( ( ) => {
     preloadInFlight.delete( toUri );

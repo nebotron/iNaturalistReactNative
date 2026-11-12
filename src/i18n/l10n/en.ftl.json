@@ -1344,6 +1344,8 @@
   "Tunable-onlineSuggestionsTimeoutSeconds-description": "How long to wait for online ID suggestions before falling back to offline ones.",
   "TUNABLE-PARAMETERS": "TUNABLE PARAMETERS",
   "Tunable-parameters-restart-note": "Changes take effect after restarting the app. Values outside the allowed range are clamped.",
+  "Tunable-pickerPreloadCount": "Photos to prepare before selecting",
+  "Tunable-pickerPreloadCount-description": "How many of the newest photos in the photo picker are prepared for cropping while it is open, before any are selected, so the cropper can open on them without waiting. 0 turns this off.",
   "Tunable-placeSearchMaxSuggestions": "Place search suggestions",
   "Tunable-placeSearchMaxSuggestions-description": "Maximum number of address suggestions shown.",
   "Tunable-remoteImageCacheMb": "Image cache size (MB)",

@@ -3,7 +3,7 @@ import {
   CameraRoll,
   iosRequestReadWriteGalleryPermission,
 } from "@react-native-camera-roll/camera-roll";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import DevicePhotoGrid from "components/PhotoImporter/DevicePhotoGrid";
 import type { PhotoGalleryListItem } from "components/PhotoImporter/helpers/photoGallerySections";
 import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGallerySections";
@@ -46,6 +46,12 @@ import {
   markPhotoImportStarted,
   updatePhotoImportProgress,
 } from "sharedHelpers/photoImportMarker";
+import {
+  canPreloadPickerPhoto,
+  PICKER_PRELOAD_COUNT,
+  preloadPickerPhoto,
+  releasePickerPreloads,
+} from "sharedHelpers/pickerCropPreload";
 import {
   addRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
@@ -332,6 +338,9 @@ const PhotoGallery = ( {
     }
     const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
     noteCropRequested( );
+    // The selected photos' prepares carry over to their imported copies; the
+    // rest leave the preload queue now, so they can't delay the first photo.
+    releasePickerPreloads( new Set( selected.map( node => node.image.uri ) ) );
     importingRef.current = true;
     setImportingCount( selected.length );
     setImportedCount( 0 );
@@ -446,6 +455,30 @@ const PhotoGallery = ( {
     } ),
     [photos, hideImported, isImported, deletedUris],
   );
+
+  // Prepare the newest photos for cropping before any are selected, and the
+  // newest selected one, which is the photo the cropper opens on after Done
+  // (see pickerCropPreload). Only while this screen is in front: after Done
+  // it sits under Group Photos and the cropper, whose photos come first.
+  const isFocused = useIsFocused( );
+  useEffect( ( ) => {
+    if ( !isFocused || importingRef.current ) return;
+    const preloadable = visiblePhotos.filter( node => !isVideoNode( node )
+      && !( node.image.filename ?? "" ).toLowerCase( ).endsWith( ".gif" )
+      && canPreloadPickerPhoto( node.image.uri ) );
+    const newestSelected = preloadable.find(
+      node => selectedUris.has( getSelectionKey( node ) ),
+    );
+    [
+      ...( newestSelected
+        ? [newestSelected]
+        : [] ),
+      ...preloadable.slice( 0, PICKER_PRELOAD_COUNT ),
+    ].forEach( node => preloadPickerPhoto( node.image.uri, node.image.filename ) );
+  }, [isFocused, visiblePhotos, selectedUris] );
+  // Leaving without importing drops what was prepared (Done hands the
+  // selected photos' prepares to the import before this runs).
+  useFocusEffect( useCallback( ( ) => ( ) => releasePickerPreloads( ), [] ) );
 
   const galleryItems = useMemo( ( ) => {
     const items = buildSectionedGalleryItems( visiblePhotos, getSelectionKey, hasNextPage );
