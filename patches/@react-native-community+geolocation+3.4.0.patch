@@ -1,8 +1,68 @@
+diff --git a/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/BaseLocationManager.java b/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/BaseLocationManager.java
+index 02d2e85..f2cfc23 100644
+--- a/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/BaseLocationManager.java
++++ b/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/BaseLocationManager.java
+@@ -86,6 +86,9 @@ public abstract class BaseLocationManager {
+         protected final double maximumAge;
+         protected final boolean highAccuracy;
+         protected final float distanceFilter;
++        // ~100 m from Wi-Fi and cell towers rather than ~10 km, for a
++        // non-high-accuracy request (Play Services' PRIORITY_BALANCED_POWER_ACCURACY)
++        protected final boolean balancedPowerAccuracy;
+ 
+         private LocationOptions(
+                 int interval,
+@@ -93,13 +96,15 @@ public abstract class BaseLocationManager {
+                 long timeout,
+                 double maximumAge,
+                 boolean highAccuracy,
+-                float distanceFilter) {
++                float distanceFilter,
++                boolean balancedPowerAccuracy) {
+             this.interval = interval;
+             this.fastestInterval = fastestInterval;
+             this.timeout = timeout;
+             this.maximumAge = maximumAge;
+             this.highAccuracy = highAccuracy;
+             this.distanceFilter = distanceFilter;
++            this.balancedPowerAccuracy = balancedPowerAccuracy;
+         }
+ 
+         protected static LocationOptions fromReactMap(ReadableMap map) {
+@@ -118,7 +123,10 @@ public abstract class BaseLocationManager {
+                     (float) map.getDouble("distanceFilter") :
+                     RCT_DEFAULT_LOCATION_ACCURACY;
+ 
+-            return new LocationOptions(interval, fastestInterval, timeout, maximumAge, highAccuracy, distanceFilter);
++            boolean balancedPowerAccuracy =
++                    map.hasKey("balancedPowerAccuracy") && map.getBoolean("balancedPowerAccuracy");
++
++            return new LocationOptions(interval, fastestInterval, timeout, maximumAge, highAccuracy, distanceFilter, balancedPowerAccuracy);
+         }
+     }
+ }
+diff --git a/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/PlayServicesLocationManager.java b/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/PlayServicesLocationManager.java
+index 423f7a5..439e1dd 100644
+--- a/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/PlayServicesLocationManager.java
++++ b/node_modules/@react-native-community/geolocation/android/src/main/java/com/reactnativecommunity/geolocation/PlayServicesLocationManager.java
+@@ -102,7 +102,11 @@ public class PlayServicesLocationManager extends BaseLocationManager {
+     private void checkLocationSettings(ReadableMap options, LocationCallback locationCallback, Callback error) {
+         LocationOptions locationOptions = LocationOptions.fromReactMap(options);
+         LocationRequest.Builder requestBuilder = new LocationRequest.Builder(locationOptions.interval);
+-        requestBuilder.setPriority(locationOptions.highAccuracy ? Priority.PRIORITY_HIGH_ACCURACY : Priority.PRIORITY_LOW_POWER);
++        requestBuilder.setPriority(locationOptions.highAccuracy
++                ? Priority.PRIORITY_HIGH_ACCURACY
++                : locationOptions.balancedPowerAccuracy
++                        ? Priority.PRIORITY_BALANCED_POWER_ACCURACY
++                        : Priority.PRIORITY_LOW_POWER);
+         requestBuilder.setMaxUpdateAgeMillis((long) locationOptions.maximumAge);
+ 
+         if (locationOptions.fastestInterval >= 0) {
 diff --git a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
-index 0000000..1111111 100644
+index 03df64d..0a73b6c 100644
 --- a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
 +++ b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
-@@ -412,7 +412,13 @@
+@@ -412,7 +412,13 @@ RCT_REMAP_METHOD(getCurrentPosition, getCurrentPosition:(RNCGeolocationOptions)o
                            useSignificantChanges:options.useSignificantChanges];
  
    if (didPause) {

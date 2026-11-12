@@ -194,7 +194,13 @@ const backgroundTask = async ( ) => {
       recordPosition( ),
       error => logger.warn( "watchPosition error", error ),
       {
-        enableHighAccuracy: true,
+        // ~100 m from Wi-Fi and cell towers, with the GPS mostly off, as on
+        // iOS (LocationRelaunch.m): fixes coarser than locationHistoryMaxAccuracyM
+        // (100 m) are never used anyway. While the camera's precise watch runs,
+        // androidWatchOptions raises this watch to high accuracy with it, so the
+        // track is as fine as on iOS when the GPS is on regardless.
+        enableHighAccuracy: false,
+        balancedPowerAccuracy: true,
         distanceFilter: MIN_DISTANCE_METERS,
         interval: MIN_INTERVAL_MS,
         fastestInterval: MIN_INTERVAL_MS,
