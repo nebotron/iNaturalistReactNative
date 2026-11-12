@@ -235,6 +235,7 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   float             _minScore;
   OrtSession       *_geoSession;
   BOOL              _checkCoreML; // inferQueue only: compare CoreML once listening
+  NSString         *_openError; // inferQueue only: why the last session failed to open
   BOOL              _wantListening;
   dispatch_source_t _watchdog;
   CHHapticEngine   *_haptics;
@@ -325,7 +326,15 @@ RCT_EXPORT_MODULE( );
   OrtSession *session = NULL;
   if ( !status ) status = ort->CreateSession( _env, [path UTF8String], opts, &session );
   ort->ReleaseSessionOptions( opts );
-  if ( status ) { ort->ReleaseStatus( status ); return NULL; }
+  if ( status ) {
+    // Kept for the provider status line: "CoreML failed to open" alone gives
+    // no way to tell an unsupported op from a conversion or memory failure.
+    const char *message = ort->GetErrorMessage( status );
+    _openError = message ? [NSString stringWithUTF8String:message] : @"unknown error";
+    if ( _openError.length > 400 ) _openError = [_openError substringToIndex:400];
+    ort->ReleaseStatus( status );
+    return NULL;
+  }
   return session;
 }
 
@@ -346,6 +355,8 @@ RCT_EXPORT_MODULE( );
   if ( [choice isEqualToString:[build stringByAppendingString:@":coreml"]] ) {
     OrtSession *session = [self openSession:path coreMLCache:[self coreMLCache]];
     if ( session ) return session;
+    [self status:[NSString stringWithFormat:@"model provider cpu: CoreML failed to open: %@",
+                  _openError]];
   } else if ( [choice isEqualToString:[build stringByAppendingString:@":checking"]] ) {
     // The last check never finished: the app died during it, quite possibly
     // because of it, so don't try again on this build.
@@ -439,12 +450,13 @@ static float ABMaxDiff( NSData *a, NSData *b, BOOL logits )
   }
   [defaults setObject:[build stringByAppendingFormat:@":%@", useCoreML ? @"coreml" : @"cpu"]
                forKey:kABProviderKey];
+  // Why CoreML failed to open, else any error running it.
+  NSString *why = coreML ? error : _openError;
   [self status:[NSString stringWithFormat:
     @"model provider %@: CoreML %@, load %.0f ms, run %.0f ms vs CPU %.0f ms, "
     @"max score diff %.4f%@",
     useCoreML ? @"coreml" : @"cpu", coreML ? @"opened" : @"failed to open", loadMs,
-    coreMLMs, cpuMs, scoreDiff,
-    error ? [@", error: " stringByAppendingString:error] : @""]];
+    coreMLMs, cpuMs, scoreDiff, why ? [@", error: " stringByAppendingString:why] : @""]];
 }
 
 - (BOOL)loadModel

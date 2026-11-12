@@ -8,6 +8,7 @@
 #    The per-species head weights (~76M of the model's 105M) are stored as
 #    int8 per class, which ORT turns back into fp16 at load (onnx_weights.py):
 #    no detection changed on 400 recordings or 327 labeled field clips.
+#    Its spectrogram Conv is replaced by an FFT (fft_frontend.py).
 #  - src/components/AudioId/audioIdSpecies.json: [scientific name, common name,
 #    taxon ID, geomodel index or -1, 1 if a bird] per model output. The app's
 #    geomodel cutoff is 0.03 for birds; at that cutoff it dropped the true
@@ -16,17 +17,17 @@
 #  - ios/iNaturalistReactNative/audio_geo.onnx: the BirdNET geomodel, its
 #    weights stored as int8 (no Audio ID detection changed on 400 recordings).
 # Usage (from this directory): python3 build_model.py <repo root>
-import glob, json, os, sys, time, urllib.request
+import json, os, sys, time, urllib.request
 import numpy as np, onnx
 from onnx import numpy_helper
-from onnx.external_data_helper import set_external_data
 from huggingface_hub import hf_hub_download
 repo = sys.argv[1]; ios = f"{repo}/ios/iNaturalistReactNative"
-sys.path.insert(0, f"{repo}/scripts")
+sys.path.insert(0, f"{repo}/scripts"); sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from onnx_weights import store_int8
+from fft_frontend import fft_frontend
+from model_files import save_weights
 HF, REV = "tphakala/BirdNET-v3.0-Models", "71e1ffb06c0323a3428536ac02f4ecc59742c4d6"
 GEO, GEO_FILE = "sammlapp/BirdNET_GeoModel", "BirdNET+_Geomodel_V3.0.3_Global_12K"
-CHUNK = 95_000_000
 
 if not os.path.exists("inat_sound_species.json"):  # ~25 requests
     out = []
@@ -68,16 +69,7 @@ g.node.append(onnx.helper.make_node("Cast", ["/cla_1/Conv_output_0"], ["frames"]
 frames = onnx.helper.make_tensor_value_info("frames", onnx.TensorProto.FLOAT, [None, len(idx), None])
 frames.type.tensor_type.shape.dim[0].CopyFrom(g.output[0].type.tensor_type.shape.dim[0])
 g.output.append(frames)
+fft_frontend(m)
 store_int8(m, ["att_block.", "att_block2.", "head."])
-for f in glob.glob(f"{ios}/audio_id.data*"): os.remove(f)
-n, f, off = 0, None, 0
-for t in g.initializer:
-    if len(t.raw_data) < 4096: continue
-    if f is None or off + len(t.raw_data) > CHUNK:
-        if f: f.close()
-        name = f"audio_id.data{n}"; f = open(f"{ios}/{name}", "wb"); n += 1; off = 0
-    data = t.raw_data; f.write(data); set_external_data(t, name, off, len(data)); t.ClearField("raw_data")
-    t.data_location = onnx.TensorProto.EXTERNAL; off += len(data)
-f.close()
-onnx.save(m, f"{ios}/audio_id.onnx")
+n = save_weights(m, ios)
 print(len(species), "species,", n, "weight files")

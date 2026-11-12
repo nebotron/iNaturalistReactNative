@@ -123,3 +123,23 @@ notes of what did and did not work at the end of this skill.
 - The model returns NaN for every species on clipped input (samples at or beyond +/-1.0;
   6 of 3,255 windows, from 2 recordings), quantized or not. `isHeard` is false for NaN, so it
   only blanks those windows, but clamping the input to [-1, 1] before the run may fix it.
+
+### Cheaper inference (session 5)
+
+- On the device that logged it, CoreML failed to open, so Audio ID runs on 2 CPU cores
+  (26% CPU while listening in MetricKit). `AudioBirdId.m` now logs ORT's error with the
+  "model provider" line; read it before anything else, since the Neural Engine would cut
+  power far more than any change below.
+- Per window: 8.1 GMAC, 74% encoder, 16% spectrogram front end, 9% species heads.
+- **Shipped:** STFT front end (`fft_frontend.py`, see the README). Recall unchanged, one
+  wrong detection fewer on recordings, field clips +1 right / -1 wrong; 8.4 MB smaller.
+- Not shipped: int8 compute for the encoder (static, calibrated on 100 windows 15-20 s
+  into the eval recordings): wrong species per recording 0.40 -> 0.69, recall 0.745 ->
+  0.723, field clips 49 -> 69 wrong kept, for only ~14% speed. Keeping the head weights
+  int8 in memory (no `session.disable_quant_qdq`) saves 210 MB resident but costs ~13% per
+  run; MetricKit shows no memory kills, so the weights are folded to fp16 at load.
+- Desktop x86 timings mislead for this model: ORT has no fast fp16 Gemm there, so fc1/fc2
+  (58 MMAC) took 74% of the time. Count MACs or measure on device.
+- The fp32 model differs from the shipped fp16 one by up to 0.15 per score: the model is
+  sensitive to precision, so compare variants against the fp16 model, not fp32.
+
