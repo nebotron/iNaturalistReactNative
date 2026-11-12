@@ -21,7 +21,9 @@ from pathlib import Path
 import numpy as np
 import onnx
 import torch
-from onnx import numpy_helper
+
+sys.path.insert(0, str(Path(__file__).parent))
+from onnx_weights import stored_weights
 
 REPO_ROOT = Path(__file__).parent.parent
 DEFAULT_ONNX = REPO_ROOT / "ios/iNaturalistReactNative/yolov8n.onnx"
@@ -83,7 +85,9 @@ def onnx_to_pt(onnx_path: Path, out_pt: Path, calib_images=None) -> Path:
     _match_sppf_activation(model, graph)
     model.fuse()  # BN folded away — matches the exported ONNX layout
 
-    tensors = {t.name: numpy_helper.to_array(t) for t in graph.initializer}
+    # The bundled model stores its weights as fp16 (onnx_weights.py); this
+    # gives them back as float32 under their torch names.
+    tensors = stored_weights(graph)
 
     state = model.state_dict()
     new_state = {}

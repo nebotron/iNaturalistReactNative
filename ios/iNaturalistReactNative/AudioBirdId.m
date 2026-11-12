@@ -305,8 +305,12 @@ RCT_EXPORT_MODULE( );
   // The arena keeps peak scratch memory for good; a smaller footprint makes
   // iOS less likely to kill the app in the background.
   ort->DisableCpuMemArena( opts );
-  OrtStatus *status = NULL;
-  if ( cache ) {
+  // audio_id's per-species heads and audio_geo store their weights as int8
+  // (scripts/onnx_weights.py). This lets ORT fold them back to the original
+  // weights while loading, before CoreML takes its part of the graph, so the
+  // model runs as it did before; without it they'd be dequantized every run.
+  OrtStatus *status = ort->AddSessionConfigEntry( opts, "session.disable_quant_qdq", "1" );
+  if ( !status && cache ) {
     [[NSFileManager defaultManager] createDirectoryAtPath:cache withIntermediateDirectories:YES
                                                attributes:nil error:nil];
     // Every run is one window, and a fixed batch lets the shape arithmetic

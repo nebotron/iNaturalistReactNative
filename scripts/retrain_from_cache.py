@@ -18,10 +18,12 @@ import shutil
 import sys
 from pathlib import Path
 
+import onnx
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 from evaluate_subject_detector import resolve_image, get_image_size
+from onnx_weights import store_fp16
 
 REPO_ROOT = Path(__file__).parent.parent
 CACHE_DIR = Path("/tmp/inat_eval_cache")
@@ -236,8 +238,12 @@ def main() -> None:
         print(f"--no-install: leaving deployed model untouched (export at {export_path})")
         return
     dest = REPO_ROOT / "ios/iNaturalistReactNative/yolov8n.onnx"
-    shutil.copy2(export_path, dest)
-    print(f"Installed to {dest}")
+    # Bundled with fp16 weights, half the size; the crop score was identical
+    # (onnx_weights.py). ORT casts them back to fp32 when it loads the model.
+    model = onnx.load(export_path)
+    store_fp16(model)
+    onnx.save(model, dest)
+    print(f"Installed to {dest} (fp16 weights)")
     print(f"Model size: {dest.stat().st_size / 1e6:.1f} MB\n")
     print("Done! Run scripts/eval_onnx_variants.py to evaluate the new model.")
 
