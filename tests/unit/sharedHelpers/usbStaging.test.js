@@ -33,32 +33,55 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
 const uri = name => `file:///old/container/usbStaging/${name}`;
 
 describe( "sweepUsbStaging", ( ) => {
-  it( "saves faved photos to the Shared Library album", async ( ) => {
+  beforeEach( ( ) => { jest.useFakeTimers( { now: 0 } ); } );
+  afterEach( ( ) => { jest.useRealTimers( ); } );
+
+  it( "saves a faved photo to the Shared Library album once, then expires it", async ( ) => {
     mockFiles = ["1_FAVED.JPG"];
     await sweepUsbStaging( [uri( "1_FAVED.JPG" )], [] );
-
     expect( CameraRoll.saveAsset ).toHaveBeenCalledWith(
       "file:///docs/usbStaging/1_FAVED.JPG",
       { type: "photo", album: "→ Shared Library" },
     );
+    // Kept like any other imported photo until its three days are up.
+    expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
+
+    jest.setSystemTime( 4 * DAY_MS );
+    await sweepUsbStaging( [uri( "1_FAVED.JPG" )], [] );
+    expect( CameraRoll.saveAsset ).toHaveBeenCalledTimes( 1 );
     expect( mockFiles ).toEqual( [] );
   } );
 
-  it( "starts the clock when a photo is on an observation or removed", async ( ) => {
-    jest.useFakeTimers( { now: 0 } );
-    // Staged long ago, but only now put on an observation.
-    mockFiles = ["1_ON_OBS.JPG", "1_UNUSED.JPG"];
-    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" )] );
+  it( "expires imported and removed photos three days on, and keeps the rest", async ( ) => {
+    mockFiles = ["1_ON_OBS.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"];
+    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" ), uri( "1_REMOVED.JPG" )] );
 
     jest.setSystemTime( 2 * DAY_MS );
-    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" )] );
-    expect( mockFiles ).toEqual( ["1_ON_OBS.JPG", "1_UNUSED.JPG"] );
+    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" ), uri( "1_REMOVED.JPG" )] );
+    expect( mockFiles ).toEqual( ["1_ON_OBS.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"] );
 
     jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" )] );
-    // A photo nothing has used yet keeps no clock and stays staged.
+    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" ), uri( "1_REMOVED.JPG" )] );
     expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
-    jest.useRealTimers( );
+
+    // Never imported or removed: kept indefinitely.
+    jest.setSystemTime( 400 * DAY_MS );
+    await sweepUsbStaging( [], [] );
+    expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
+  } );
+
+  it( "goes on expiring photos when Photos refuses to save a faved one", async ( ) => {
+    CameraRoll.saveAsset.mockRejectedValue( new Error( "denied" ) );
+    // Read in name order, so the faved photo comes before the expiring one.
+    mockFiles = ["1_REFUSED.JPG", "2_EXPIRED.JPG"];
+    await sweepUsbStaging( [uri( "1_REFUSED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
+
+    jest.setSystemTime( 4 * DAY_MS );
+    await sweepUsbStaging( [uri( "1_REFUSED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
+    // Past its time, but a faved photo is only deleted once it's saved.
+    expect( mockFiles ).toEqual( ["1_REFUSED.JPG"] );
+    CameraRoll.saveAsset.mockReset( );
+    CameraRoll.saveAsset.mockResolvedValue( {} );
   } );
 
   it( "saves a faved photo with its import crop when the observation lost it", async ( ) => {
