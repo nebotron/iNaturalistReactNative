@@ -63,6 +63,17 @@ static NSString *const kABProviderKey = @"AudioBirdIdProvider";
 // it was within a few hundredths already.
 // Frame logits are compared as probabilities too.
 #define AB_COREML_MAX_SCORE_DIFF 0.03f
+// CoreML is kept when a run takes at most this long, even if the CPU is
+// faster: the Neural Engine draws far less power per run, and a run this short
+// still finishes well inside the AB_STEP (2.5 s) between runs, so no window is
+// dropped and every window is still scored.
+#define AB_COREML_MAX_RUN_MS 1250
+// CoreML execution provider settings tried in order, stopping at the first
+// that opens. MLProgram on the Neural Engine is preferred; static input shapes
+// keep any node CoreML can't size up front on the CPU instead of failing the
+// whole load; NeuralNetwork is the older format, with different op coverage.
+// The index of the one that opened is stored with the build's choice.
+#define AB_COREML_VARIANTS 3
 
 // Writes mono samples as AAC at `path`, replacing any file there.
 static BOOL ABWriteClip( NSString *path, const float *samples, AVAudioFrameCount frames,
@@ -333,7 +344,7 @@ RCT_EXPORT_MODULE( );
 
 - (OrtSession *)openSession:(NSString *)path
 {
-  return [self openSession:path coreMLCache:nil];
+  return [self openSession:path coreMLCache:nil variant:0 error:NULL];
 }
 
 // With `cache`, the parts of the model CoreML supports run there (on the
@@ -341,17 +352,26 @@ RCT_EXPORT_MODULE( );
 // rest stay on the CPU. CoreML converts the model on first load and keeps it
 // in `cache`; without one it would write the converted model out again on
 // every load.
+// `variant` picks one of the AB_COREML_VARIANTS provider settings. On failure,
+// `errorMessage` says why: without it a failed CoreML load was only ever
+// reported as "failed to open", and the build fell back to the CPU for good.
 - (OrtSession *)openSession:(NSString *)path coreMLCache:(NSString *)cache
+                    variant:(int)variant error:(NSString **)errorMessage
 {
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
-  if ( !_env && ort->CreateEnv( ORT_LOGGING_LEVEL_WARNING, "iNatAudio", &_env ) ) return NULL;
-  OrtSessionOptions *opts;
-  if ( ort->CreateSessionOptions( &opts ) ) return NULL;
+  OrtStatus *status = NULL;
+  if ( !_env ) status = ort->CreateEnv( ORT_LOGGING_LEVEL_WARNING, "iNatAudio", &_env );
+  OrtSessionOptions *opts = NULL;
+  if ( !status ) status = ort->CreateSessionOptions( &opts );
+  if ( status ) {
+    if ( errorMessage ) *errorMessage = @( ort->GetErrorMessage( status ) );
+    ort->ReleaseStatus( status );
+    return NULL;
+  }
   ort->SetIntraOpNumThreads( opts, 2 );
   // The arena keeps peak scratch memory for good; a smaller footprint makes
   // iOS less likely to kill the app in the background.
   ort->DisableCpuMemArena( opts );
-  OrtStatus *status = NULL;
   if ( cache ) {
     [[NSFileManager defaultManager] createDirectoryAtPath:cache withIntermediateDirectories:YES
                                                attributes:nil error:nil];
@@ -359,15 +379,30 @@ RCT_EXPORT_MODULE( );
     // fold away, leaving CoreML larger static pieces of the graph.
     status = ort->AddFreeDimensionOverrideByName( opts, "batch", 1 );
     if ( !status ) {
-      const char *keys[] = { "ModelFormat", "MLComputeUnits", "ModelCacheDirectory" };
-      const char *values[] = { "MLProgram", "CPUAndNeuralEngine", cache.UTF8String };
-      status = ort->SessionOptionsAppendExecutionProvider( opts, "CoreML", keys, values, 3 );
+      const char *keys[4], *values[4];
+      size_t count = 0;
+      keys[count] = "MLComputeUnits"; values[count++] = "CPUAndNeuralEngine";
+      if ( variant == 2 ) {
+        keys[count] = "ModelFormat"; values[count++] = "NeuralNetwork";
+      } else {
+        keys[count] = "ModelFormat"; values[count++] = "MLProgram";
+        // Only MLProgram models can be cached.
+        keys[count] = "ModelCacheDirectory"; values[count++] = cache.UTF8String;
+        if ( variant == 1 ) {
+          keys[count] = "RequireStaticInputShapes"; values[count++] = "1";
+        }
+      }
+      status = ort->SessionOptionsAppendExecutionProvider( opts, "CoreML", keys, values, count );
     }
   }
   OrtSession *session = NULL;
   if ( !status ) status = ort->CreateSession( _env, [path UTF8String], opts, &session );
   ort->ReleaseSessionOptions( opts );
-  if ( status ) { ort->ReleaseStatus( status ); return NULL; }
+  if ( status ) {
+    if ( errorMessage ) *errorMessage = @( ort->GetErrorMessage( status ) );
+    ort->ReleaseStatus( status );
+    return NULL;
+  }
   return session;
 }
 
@@ -385,9 +420,18 @@ RCT_EXPORT_MODULE( );
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   NSString *build = [NSBundle mainBundle].infoDictionary[@"CFBundleVersion"] ?: @"";
   NSString *choice = [defaults stringForKey:kABProviderKey];
-  if ( [choice isEqualToString:[build stringByAppendingString:@":coreml"]] ) {
-    OrtSession *session = [self openSession:path coreMLCache:[self coreMLCache]];
+  NSString *coreMLPrefix = [build stringByAppendingString:@":coreml"];
+  if ( [choice hasPrefix:coreMLPrefix] ) {
+    // "<build>:coreml" (variant 0, as stored before there were variants) or
+    // "<build>:coreml<variant>"
+    int variant = MIN( MAX( [[choice substringFromIndex:coreMLPrefix.length] intValue], 0 ),
+                       AB_COREML_VARIANTS - 1 );
+    NSString *error = nil;
+    OrtSession *session = [self openSession:path coreMLCache:[self coreMLCache]
+                                    variant:variant error:&error];
     if ( session ) return session;
+    [self status:[NSString stringWithFormat:@"model provider cpu: CoreML variant %d "
+                  @"failed to reopen: %@", variant, error ?: @"unknown"]];
   } else if ( [choice isEqualToString:[build stringByAppendingString:@":checking"]] ) {
     // The last check never finished: the app died during it, quite possibly
     // because of it, so don't try again on this build.
@@ -419,8 +463,9 @@ static float ABMaxDiff( NSData *a, NSData *b, BOOL logits )
 }
 
 // inferQueue only. Runs the model on CoreML and on the CPU over silence and
-// the microphone's latest window, and keeps CoreML for this build if every score agrees and
-// it's no slower; otherwise the CPU, as before. Reported as a status line.
+// the microphone's latest window, and keeps CoreML for this build if every
+// score agrees and it keeps up (AB_COREML_MAX_RUN_MS, or no slower than the
+// CPU); otherwise the CPU, as before. Reported as a status line.
 - (void)checkCoreML
 {
   _checkCoreML = NO;
@@ -433,7 +478,19 @@ static float ABMaxDiff( NSData *a, NSData *b, BOOL logits )
   [[NSFileManager defaultManager] removeItemAtPath:cache error:nil];
   [defaults setObject:[build stringByAppendingString:@":checking"] forKey:kABProviderKey];
   CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
-  OrtSession *coreML = [self openSession:path coreMLCache:cache];
+  OrtSession *coreML = NULL;
+  int variant = 0;
+  NSMutableArray<NSString *> *openErrors = [NSMutableArray array];
+  for ( ; variant < AB_COREML_VARIANTS && !coreML; variant++ ) {
+    NSString *openError = nil;
+    coreML = [self openSession:path coreMLCache:cache variant:variant error:&openError];
+    if ( !coreML ) {
+      [openErrors addObject:[NSString stringWithFormat:@"variant %d: %@", variant,
+                             openError ?: @"unknown"]];
+      [[NSFileManager defaultManager] removeItemAtPath:cache error:nil];
+    }
+  }
+  if ( coreML ) variant--;
   double loadMs = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
 
   float *audio = (float *)calloc( AB_WIN, sizeof( float ) );
@@ -470,7 +527,8 @@ static float ABMaxDiff( NSData *a, NSData *b, BOOL logits )
   }
   free( audio );
 
-  BOOL useCoreML = coreML && scoreDiff <= AB_COREML_MAX_SCORE_DIFF && coreMLMs <= cpuMs;
+  BOOL useCoreML = coreML && scoreDiff <= AB_COREML_MAX_SCORE_DIFF
+    && ( coreMLMs <= AB_COREML_MAX_RUN_MS || coreMLMs <= cpuMs );
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
   if ( useCoreML ) {
     ort->ReleaseSession( _session );
@@ -479,14 +537,20 @@ static float ABMaxDiff( NSData *a, NSData *b, BOOL logits )
     if ( coreML ) ort->ReleaseSession( coreML );
     [[NSFileManager defaultManager] removeItemAtPath:cache error:nil];
   }
-  [defaults setObject:[build stringByAppendingFormat:@":%@", useCoreML ? @"coreml" : @"cpu"]
+  [defaults setObject:useCoreML
+                        ? [build stringByAppendingFormat:@":coreml%d", variant]
+                        : [build stringByAppendingString:@":cpu"]
                forKey:kABProviderKey];
   [self status:[NSString stringWithFormat:
     @"model provider %@: CoreML %@, load %.0f ms, run %.0f ms vs CPU %.0f ms, "
-    @"max score diff %.4f%@",
-    useCoreML ? @"coreml" : @"cpu", coreML ? @"opened" : @"failed to open", loadMs,
-    coreMLMs, cpuMs, scoreDiff,
-    error ? [@", error: " stringByAppendingString:error] : @""]];
+    @"max score diff %.4f%@%@",
+    useCoreML ? @"coreml" : @"cpu",
+    coreML ? [NSString stringWithFormat:@"opened (variant %d)", variant] : @"failed to open",
+    loadMs, coreMLMs, cpuMs, scoreDiff,
+    error ? [@", error: " stringByAppendingString:error] : @"",
+    openErrors.count
+      ? [@", open errors: " stringByAppendingString:[openErrors componentsJoinedByString:@"; "]]
+      : @""]];
 }
 
 - (BOOL)loadModel
