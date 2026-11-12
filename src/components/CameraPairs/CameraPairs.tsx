@@ -82,7 +82,20 @@ const loadZooms = ( ): Record<string, SavedZoom> => {
   }
   return savedZooms;
 };
-const saveZoom = ( photoUuid: string, zoom: SavedZoom ) => {
+// The same photo can appear in several pairs; every mounted tile showing it
+// follows a pinch on any one of them.
+type ZoomListener = ( zoom: SavedZoom ) => void;
+const zoomListeners: Record<string, Set<ZoomListener>> = {};
+const subscribeZoom = ( photoUuid: string, listener: ZoomListener ) => {
+  const listeners = zoomListeners[photoUuid] ?? new Set<ZoomListener>( );
+  zoomListeners[photoUuid] = listeners;
+  listeners.add( listener );
+  return ( ) => {
+    listeners.delete( listener );
+    if ( listeners.size === 0 ) delete zoomListeners[photoUuid];
+  };
+};
+const saveZoom = ( photoUuid: string, zoom: SavedZoom, source: ZoomListener ) => {
   const zooms = loadZooms( );
   if ( zoom.transform.scale <= 1.001 ) {
     delete zooms[photoUuid];
@@ -90,6 +103,9 @@ const saveZoom = ( photoUuid: string, zoom: SavedZoom ) => {
     zooms[photoUuid] = zoom;
   }
   zustandStorage.setItem( ZOOMS_KEY, JSON.stringify( zooms ) );
+  zoomListeners[photoUuid]?.forEach( listener => {
+    if ( listener !== source ) listener( zoom );
+  } );
 };
 
 // EXIF names, not nicknames, so votes keep matching their gear after a rename
@@ -155,9 +171,8 @@ const PairPhoto = ( { entry, size, onOpen }: {
   const zoomRef = useRef<SharedZoomableImageRef | null>( null );
   const { photoUuid } = entry;
 
-  useEffect( ( ) => {
-    const saved = loadZooms( )[photoUuid];
-    if ( !saved || !zoomRef.current || size <= 0 || saved.size <= 0 ) return;
+  const applyZoom = useCallback( ( saved: SavedZoom ) => {
+    if ( !zoomRef.current || size <= 0 || saved.size <= 0 ) return;
     const ratio = size / saved.size;
     const { transform } = saved;
     zoomRef.current.applyTransform( {
@@ -167,12 +182,22 @@ const PairPhoto = ( { entry, size, onOpen }: {
       focalX: transform.focalX * ratio,
       focalY: transform.focalY * ratio,
     } );
-  }, [photoUuid, size] );
+  }, [size] );
+
+  useEffect( ( ) => {
+    const saved = loadZooms( )[photoUuid];
+    if ( saved ) applyZoom( saved );
+    return subscribeZoom( photoUuid, applyZoom );
+  }, [photoUuid, applyZoom] );
 
   const rememberZoom = useCallback( ( ) => {
     if ( !zoomRef.current || size <= 0 ) return;
-    saveZoom( photoUuid, { size, transform: zoomRef.current.readTransform( ) } );
-  }, [photoUuid, size] );
+    saveZoom(
+      photoUuid,
+      { size, transform: zoomRef.current.readTransform( ) },
+      applyZoom,
+    );
+  }, [photoUuid, size, applyZoom] );
 
   return (
     <SharedZoomableImage
