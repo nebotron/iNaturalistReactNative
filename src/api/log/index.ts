@@ -99,7 +99,7 @@ function redactExtra( extra: Record<string, unknown> ) {
 }
 
 // our transport has no options but this needs to be explicitly `object` for generic typing
-type firebaseLogTransportOptions = object;
+type iNatLogstashTransportOptions = object;
 
 // Lines are sent in batches, one PATCH of push-ID children per batch, rather
 // than one POST per line. Long and large, so the radio wakes rarely; anything
@@ -189,7 +189,7 @@ AppState.addEventListener( "change", state => {
 // Custom transport that queues each log line as a push-ID child of
 // {CROP_LOG_FIREBASE_URL}/app_log. The log DB allows unauthenticated
 // writes, so no auth token is needed (same as the crop/brightness logs).
-const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = props => {
+const iNatLogstashTransport: transportFunctionType<iNatLogstashTransportOptions> = props => {
   // Don't bother to log from dev builds
   if ( __DEV__ ) return;
 
@@ -251,4 +251,4 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
 
 export { default as enhanceLoggerWithExtra } from "./enhanceLoggerWithExtra";
 
-export default firebaseLogTransport;
+export default iNatLogstashTransport;

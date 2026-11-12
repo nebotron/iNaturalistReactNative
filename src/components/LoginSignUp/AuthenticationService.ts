@@ -31,7 +31,7 @@ import realmConfig from "realmModels/index";
 import changeLanguage from "sharedHelpers/changeLanguage";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import { getInstallID } from "sharedHelpers/installData";
-import { log, logFileDirectory } from "sharedHelpers/logger";
+import { log, logFileDirectory, logWithoutRemote } from "sharedHelpers/logger";
 import { clearMmkvUserData } from "sharedHelpers/mmkvRecordStore";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
@@ -44,12 +44,16 @@ function isDebugModeSync( ): boolean {
 }
 
 const logger = log.extend( "AuthenticationService" );
+// The remote transport in the default logger uses many of the methods in this
+// module. Using a separate logger that only writes to disk avoids some
+// potential for infinite loops.
+const localLogger = logWithoutRemote.extend( "AuthenticationService" );
 
 const logDebugInfo = ( infoText: string ): void => {
   if ( !isDebugModeSync( ) ) {
     return;
   }
-  logger.info( infoText );
+  localLogger.info( infoText );
 };
 
 // Base API domain can be overridden (in case we want to use staging URL) -
@@ -115,7 +119,7 @@ async function getSensitiveItem(
     exists = await hasItem( key, options );
   } catch ( e ) {
     if ( e instanceof SensitiveInfoError ) {
-      logger.info(
+      localLogger.info(
         `hasItem error for ${key}: ${e.message}`,
       );
     }

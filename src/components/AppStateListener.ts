@@ -1,3 +1,4 @@
+import { focusManager } from "@tanstack/react-query";
 import useDeviceStorageFull from "components/Camera/hooks/useDeviceStorageFull";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
@@ -14,6 +15,8 @@ const AppStateListener = ( ) => {
           showStorageFullAlert( );
           setDeviceStorageFullShown( true );
         }
+
+        focusManager.setFocused( true );
       }
     } );
 

@@ -23,7 +23,7 @@ jest.mock( "sharedHelpers/logger", () => {
     extend: () => makeLogger(),
   } );
   const log = makeLogger();
-  return { log };
+  return { log, logWithoutRemote: log };
 } );
 
 jest.mock( "components/LoginSignUp/AuthenticationService" );
