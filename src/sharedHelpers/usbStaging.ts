@@ -11,24 +11,25 @@ import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import { getTunable } from "sharedHelpers/tunableParams";
+import useStore from "stores/useStore";
 
 const logger = log.extend( "usbStaging" );
 
 // Photos copied off a USB drive land here instead of in the Photos library, so
-// the ones the user doesn't fave never need deleting from it. A staged photo
-// is offered to Group Photos once. It is saved to Photos (into an album the
-// user moves to their Shared Library) as soon as an observation it is on is
-// faved. Otherwise it is deleted usbStagingRetentionDays after it was first
-// seen on an observation or removed in Group Photos or the cropper. Staged
-// names are "<stagedAtMs>_<file name>", and photos are matched to observations
-// by that name alone: the app container's absolute path changes across app
-// updates.
+// the ones the user doesn't fave never need deleting from it. Every staged
+// photo is deleted usbStagingRetentionDays after it was imported, whether or
+// not it was ever put on an observation. One on a faved observation is saved
+// to Photos (into an album the user moves to their Shared Library) first, as
+// soon as the observation is faved, and is never deleted unsaved. Staged names
+// are "<stagedAtMs>_<file name>", which is where the import time is read from,
+// and photos are matched to observations by that name alone: the app
+// container's absolute path changes across app updates.
 
 const SHARED_LIBRARY_ALBUM_TITLE = "→ Shared Library";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OFFERED_KEY = "offeredNames";
-// Staged name → when its retention clock started.
+// Staged name → when it was first seen, for a name with no import time.
 const CLOCK_KEY = "clockStartedAt";
 const store = new MMKV( { id: "usb-staging" } );
 
@@ -153,16 +154,27 @@ export const saveLocalPhotoToLibrary = async ( path: string, crop?: NormalizedCr
 };
 
 let sweeping = false;
+
+// Staged photos an unfinished import still holds. The import is persisted and
+// can be resumed days later, so its files must outlive their expiry until it
+// is finished or discarded.
+const stagedNamesInImport = ( ) => {
+  const {
+    groupedPhotos, photoLibraryUris, importedPhotoDeviceUriByLocalUri,
+  } = useStore.getState( );
+  const held = JSON.stringify( [
+    groupedPhotos, photoLibraryUris, importedPhotoDeviceUriByLocalUri,
+  ] );
+  return new Set( [...held.matchAll( /\/usbStaging\/([^/"]+)/g )].map( match => match[1] ) );
+};
 let breakdownLoggedAt = 0;
 
-// What is holding the staging folder's space, at most once a day: photos
-// waiting to be saved because they're faved, photos whose retention clock is
-// running, and photos with no clock at all (never put on an observation or
-// removed), which nothing ever expires.
+// What is holding the staging folder's space, at most once a day: faved photos
+// still waiting to be saved to Photos, and the rest waiting to expire.
 const logStagingBreakdown = (
   staged: { name: string; size: number | string }[],
   favorited: Set<string | undefined>,
-  clocks: Record<string, number>,
+  stagedAt: ( name: string ) => number,
 ) => {
   if ( Date.now( ) - breakdownLoggedAt < DAY_MS ) return;
   breakdownLoggedAt = Date.now( );
@@ -173,37 +185,32 @@ const logStagingBreakdown = (
     tally[key].n += 1;
     tally[key].mb += bytes / MB;
   };
-  let oldestUnclockedDays = 0;
+  let oldestDays = 0;
   staged.forEach( item => {
     const bytes = Number( item.size ) || 0;
     const ext = ( item.name.split( "." ).pop( ) ?? "" ).toLowerCase( );
-    let state = "unclocked";
-    if ( favorited.has( item.name ) ) state = "faved";
-    else if ( clocks[item.name] !== undefined ) state = "clocked";
+    const state = favorited.has( item.name )
+      ? "faved"
+      : "expiring";
     add( state, bytes );
     add( `${state}.${ext}`, bytes );
-    if ( state === "unclocked" ) {
-      const stagedAt = parseInt( item.name, 10 ) || Date.now( );
-      oldestUnclockedDays = Math.max( oldestUnclockedDays, ( Date.now( ) - stagedAt ) / DAY_MS );
-    }
+    oldestDays = Math.max( oldestDays, ( Date.now( ) - stagedAt( item.name ) ) / DAY_MS );
   } );
   const rounded = Object.fromEntries( Object.entries( tally )
     .map( ( [key, { n, mb }] ) => [key, { n, mb: Math.round( mb ) }] ) );
   logger.infoWithExtra( "usb_staging_breakdown", {
     files: staged.length,
     byState: JSON.stringify( rounded ),
-    oldestUnclockedDays: Math.round( oldestUnclockedDays ),
+    oldestDays: Math.round( oldestDays ),
   } );
 };
 
 // favoritedUris: device photo URIs on observations the user has faved.
-// unfavoritedUris: those on other observations, or removed from Group Photos.
 // onSavedToPhotos: the library URIs of faved photos just saved to Photos, which
 // are new assets the photo picker would otherwise offer again.
 // crops: device photo URI → its crop on the observation.
 export const sweepUsbStaging = async (
   favoritedUris: string[],
-  unfavoritedUris: string[],
   onSavedToPhotos?: ( uris: string[] ) => void,
   crops: Record<string, NormalizedCrop> = {},
 ) => {
@@ -222,15 +229,18 @@ export const sweepUsbStaging = async (
       ?? undefined;
     const retentionMs = getTunable( "usbStagingRetentionDays" ) * DAY_MS;
     const staged = await readStaged( );
+    const inImport = stagedNamesInImport( );
     const stagedNames = new Set( staged.map( item => item.name ) );
     const clocks = Object.fromEntries( Object.entries( getClocks( ) )
       .filter( ( [name] ) => stagedNames.has( name ) ) );
-    unfavoritedUris.forEach( uri => {
-      const name = stagedNameFromUri( uri );
-      if ( name && stagedNames.has( name ) && clocks[name] === undefined ) {
-        clocks[name] = Date.now( );
-      }
-    } );
+    // The import time is in the name; a name without one counts from when a
+    // sweep first saw it.
+    const stagedAt = ( name: string ) => {
+      const fromName = parseInt( name, 10 );
+      if ( fromName > 0 ) return fromName;
+      clocks[name] = clocks[name] ?? Date.now( );
+      return clocks[name];
+    };
     const removed = new Set<string>( );
     const savedUris: string[] = [];
     let saved = 0;
@@ -264,8 +274,8 @@ export const sweepUsbStaging = async (
         await unlink( item.path ).catch( ( ) => undefined );
         removed.add( item.name );
       } else if (
-        clocks[item.name] !== undefined
-        && Date.now( ) - clocks[item.name] > retentionMs
+        !inImport.has( item.name )
+        && Date.now( ) - stagedAt( item.name ) > retentionMs
       ) {
         // eslint-disable-next-line no-await-in-loop
         await unlink( item.path ).catch( ( ) => undefined );
@@ -285,7 +295,11 @@ export const sweepUsbStaging = async (
       logger.info( `USB staging: saved ${saved} faved photo(s) to Photos, `
         + `expired ${removed.size - saved}` );
     }
-    logStagingBreakdown( staged.filter( item => !removed.has( item.name ) ), favorited, clocks );
+    logStagingBreakdown(
+      staged.filter( item => !removed.has( item.name ) ),
+      favorited,
+      stagedAt,
+    );
   } catch ( error ) {
     logger.error( "USB staging sweep failed", error );
   } finally {

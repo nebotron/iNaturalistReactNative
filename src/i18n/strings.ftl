@@ -2326,7 +2326,7 @@ Tunable-usbMaxPhotosPerScan-description = Maximum number of new photos imported 
 # Label for a tunable parameter in settings
 Tunable-usbStagingRetentionDays = Days to keep USB originals
 # Description of a tunable parameter in settings
-Tunable-usbStagingRetentionDays-description = How long photos imported from USB are kept in the app after they are added to an observation or deleted in Group Photos. Photos on observations you fave are saved to your photo library instead.
+Tunable-usbStagingRetentionDays-description = How long photos imported from USB are kept in the app after they are imported. Photos on observations you fave are saved to your photo library first.
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?

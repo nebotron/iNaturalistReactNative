@@ -43,8 +43,8 @@ const syncNow = async ( ) => {
     ? readUserObservationsCache( userId )
     : undefined;
   const { unfavorited, favorited, crops } = classifyDevicePhotoUris( realm, cache );
-  // Ahead of the early return: expiry depends on the clock, not on a change.
-  void sweepUsbStaging( favorited, unfavorited, uris => {
+  // Ahead of the early return: expiry depends on the time, not on a change.
+  void sweepUsbStaging( favorited, uris => {
     if ( !realm.isClosed ) recordUploadedDevicePhotoUris( realm, uris );
   }, crops );
   // Faved USB imports were saved to Photos as new assets; file those.
