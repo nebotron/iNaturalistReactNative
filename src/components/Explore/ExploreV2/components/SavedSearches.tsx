@@ -112,10 +112,10 @@ const SavedSearches = ( {
   const currentKey = savedSearchKey( currentSearch );
 
   return (
-    <View className="mb-7 px-4" testID="SavedSearches">
-      <Heading4 className="mb-5">{t( "SAVED-SEARCHES" )}</Heading4>
+    <View className="mb-5 px-4" testID="SavedSearches">
+      <Heading4 className="mb-3">{t( "SAVED-SEARCHES" )}</Heading4>
       <Button
-        className="mb-5"
+        className="mb-2"
         level="neutral"
         text={t( "Save-current-filters" )}
         onPress={onSave}
@@ -127,13 +127,13 @@ const SavedSearches = ( {
         : searches.map( search => {
           const isActive = savedSearchKey( relativeSavedSearch( search ) ) === currentKey;
           return (
-            <View key={search.key} className="flex-row items-center mb-4">
+            <View key={search.key} className="flex-row items-center">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t( "Load-saved-filter" )}
                 accessibilityState={{ selected: isActive }}
                 className={classnames(
-                  "flex-1 py-2 px-3 rounded-lg border-[2px]",
+                  "flex-1 py-1 px-3 rounded-lg border-[2px]",
                   isActive
                     ? "border-inatGreen bg-inatGreen/10"
                     : "border-transparent",
@@ -148,7 +148,6 @@ const SavedSearches = ( {
                 onPress={( ) => updateSearch( search.key, currentSearch )}
                 size={20}
                 accessibilityLabel={t( "Overwrite-saved-filter" )}
-                className="mr-3"
                 testID={`SavedSearches.overwrite.${search.key}`}
               />
               <INatIconButton
