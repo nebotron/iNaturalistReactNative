@@ -985,9 +985,29 @@ static NSData *jpegDataFromCroppedImage(
   return jpegDataIsDecodable( data ) && !jpegDataIsBlack( data ) ? data : nil;
 }
 
+// An 8-bit RGB copy of image with applyBrightnessMultiplyBuffer's gain k
+// applied, or NULL. The caller releases it.
+static CGImageRef brightenedImage( CGImageRef image, float k )
+{
+  size_t W = CGImageGetWidth( image );
+  size_t H = CGImageGetHeight( image );
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    NULL, W, H, 8, 4 * W, cs, kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGColorSpaceRelease( cs );
+  if ( !bmp ) return NULL;
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), image );
+  applyBrightnessMultiplyBuffer( (unsigned char *)CGBitmapContextGetData( bmp ), (int)( W * H ), k );
+  CGImageRef adjusted = CGBitmapContextCreateImage( bmp );
+  CGContextRelease( bmp );
+  return adjusted;
+}
+
 // JPEG of cropRect (display coordinates) of image, with the source's
-// metadata, or nil if the decode put no pixels there.
-static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *srcMeta )
+// metadata and brightness gain applied before the one encode, or nil if the
+// decode put no pixels there.
+static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *srcMeta,
+                                float brightness )
 {
   CGImageRef croppedRef = NULL;
   if ( image.imageOrientation == UIImageOrientationUp ) {
@@ -1013,6 +1033,13 @@ static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *s
       CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
                   image.size.width, image.size.height ) );
     if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
+  }
+  if ( croppedRef && brightness != 1.0f ) {
+    // A lazy decode that put no pixels there draws as black here, which the
+    // encode below refuses like any other black frame.
+    CGImageRef adjusted = brightenedImage( croppedRef, brightness );
+    CGImageRelease( croppedRef );
+    croppedRef = adjusted;
   }
 
   NSData *data = croppedRef
@@ -1100,7 +1127,8 @@ RCT_EXPORT_METHOD( cropImage
                   : ( nonnull NSNumber * )originY width
                   : ( nonnull NSNumber * )width height
                   : ( nonnull NSNumber * )height outputPath
-                  : ( NSString * )outputPath resolver
+                  : ( NSString * )outputPath brightness
+                  : ( nonnull NSNumber * )brightness resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -1129,7 +1157,7 @@ RCT_EXPORT_METHOD( cropImage
       input, attemptMs, attemptFreeMB, ^BOOL {
     image = [UIImage imageWithContentsOfFile:input];
     if ( !image ) return YES;
-    data = croppedJpegData( image, cropRect, srcMeta );
+    data = croppedJpegData( image, cropRect, srcMeta, [brightness floatValue] );
     return data != nil;
     } );
     if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
@@ -2686,78 +2714,6 @@ RCT_EXPORT_METHOD( prepareCropSource
   } );
 }
 
-// Multiplies every pixel by the brightness gain (scaled down to fit within
-// maxDimension on its longest side, since this is used for thumbnail display)
-// and writes the result as a JPEG to outputPath.
-RCT_EXPORT_METHOD( adjustImageBrightness
-                  : ( NSString * )inputPath adjustment
-                  : ( nonnull NSNumber * )adjustment maxDimension
-                  : ( nonnull NSNumber * )maxDimension outputPath
-                  : ( NSString * )outputPath resolver
-                  : ( RCTPromiseResolveBlock )resolve rejecter
-                  : ( RCTPromiseRejectBlock )reject )
-{
-  NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  UIImage  *image  = [UIImage imageWithContentsOfFile:input];
-  if ( !image ) { reject( @"BRIGHTNESS_FAILED", @"Could not load image", nil ); return; }
-
-  float k      = [adjustment floatValue];
-  float maxDim = [maxDimension floatValue];
-  float imgW   = (float)image.size.width;
-  float imgH   = (float)image.size.height;
-  float scale  = MIN( 1.0f, maxDim / MAX( imgW, imgH ) );
-  int   W      = MAX( 1, (int)roundf( imgW * scale ) );
-  int   H      = MAX( 1, (int)roundf( imgH * scale ) );
-
-  // drawInRect: applies the UIImage's orientation, so this also normalizes
-  // orientation to "up".
-  UIGraphicsBeginImageContextWithOptions( CGSizeMake( W, H ), YES, 1.0 );
-  [image drawInRect:CGRectMake( 0, 0, W, H )];
-  UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
-  UIGraphicsEndImageContext( );
-  if ( !scaled.CGImage ) { reject( @"BRIGHTNESS_FAILED", @"Could not scale image", nil ); return; }
-
-  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
-  unsigned char  *raw = (unsigned char *)malloc( (size_t)W * H * 4 );
-  CGContextRef    bmp = CGBitmapContextCreate(
-    raw, W, H, 8, (size_t)4 * W, cs,
-    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
-  CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), scaled.CGImage );
-  CGColorSpaceRelease( cs );
-
-  applyBrightnessMultiplyBuffer( raw, W * H, k );
-
-  CGImageRef adjustedRef = CGBitmapContextCreateImage( bmp );
-  CGContextRelease( bmp );
-  free( raw );
-  if ( !adjustedRef ) { reject( @"BRIGHTNESS_FAILED", @"Could not create adjusted image", nil ); return; }
-
-  // Keep the source's EXIF (date, location) -- the crop editor writes this
-  // over the photo it uploads. Orientation was normalized by the redraw above.
-  NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
-  CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
-  if ( src ) {
-    NSDictionary *srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
-    if ( srcMeta ) [metadata addEntriesFromDictionary:srcMeta];
-    CFRelease( src );
-  }
-  updateMetadataForCrop( metadata, W, H );
-  metadata[(NSString *)kCGImageDestinationLossyCompressionQuality] = @( 0.9 );
-  NSData *destData = encodedJpegWithMetadata( adjustedRef, metadata );
-  CGImageRelease( adjustedRef );
-  if ( !destData ) { reject( @"BRIGHTNESS_FAILED", @"Could not encode adjusted image", nil ); return; }
-
-  [[NSFileManager defaultManager]
-    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
-    withIntermediateDirectories:YES attributes:nil error:nil];
-  if ( ![destData writeToFile:output atomically:YES] ) {
-    reject( @"BRIGHTNESS_FAILED", @"Could not write adjusted image", nil ); return;
-  }
-  resolve( output );
-}
-
-
 // How much more memory iOS will let this process allocate before it kills it.
 // A run that dies with the app in the foreground, mid-native-call, is usually
 // one iOS killed for memory — and nothing in the log could say so: the Aug 20
@@ -3690,7 +3646,7 @@ RCT_EXPORT_METHOD( saveCroppedAsset
           [crop[@"x"] doubleValue] * w, [crop[@"y"] doubleValue] * h,
           [crop[@"w"] doubleValue] * w, [crop[@"h"] doubleValue] * h ) );
         data = croppedJpegData( image, CGRectIntersection( rect, CGRectMake( 0, 0, w, h ) ),
-                                srcMeta );
+                                srcMeta, 1.0f );
         return data != nil;
       }
     } );

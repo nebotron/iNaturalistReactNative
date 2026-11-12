@@ -1,7 +1,6 @@
-import { mkdir, unlink } from "@dr.pogodin/react-native-fs";
+import { mkdir } from "@dr.pogodin/react-native-fs";
 import { photoUploadPath } from "appConstants/paths";
 import { NativeModules } from "react-native";
-import adjustImageBrightness from "sharedHelpers/adjustImageBrightness";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import pixelCropFromNormalizedCrop from "sharedHelpers/pixelCropBounds";
@@ -30,6 +29,9 @@ interface ImageCropperModule {
     width: number,
     height: number,
     outputPath: string,
+    // Gain multiplied into each channel before the one encode, as the CSS
+    // brightness() filter on the slider preview does. 1 leaves pixels as is.
+    brightness: number,
   ) => Promise<CropResult>;
 }
 
@@ -77,6 +79,7 @@ const cropImageFile = async (
       pixelCrop.width,
       pixelCrop.height,
       outputPath,
+      brightness,
     );
     const croppedPath = result.path;
     // A crop that turned out black reached the grid with no error behind it.
@@ -94,22 +97,9 @@ const cropImageFile = async (
     }
     // Native ImageCropper copies EXIF/metadata from the source image into the
     // cropped JPEG and updates dimension/orientation tags for the new size.
-    const croppedUri = croppedPath.startsWith( "file://" )
+    return croppedPath.startsWith( "file://" )
       ? croppedPath
       : `file://${croppedPath}`;
-    if ( brightness === 1 ) return croppedUri;
-    const adjustedUri = await adjustImageBrightness(
-      croppedUri,
-      brightness,
-      Number.MAX_SAFE_INTEGER,
-      `${outputDir}/${uuid.v4()}.jpg`,
-    );
-    if ( !adjustedUri ) {
-      logger.warnWithExtra( "crop_brightness_failed", { source: imageUri, brightness } );
-      return croppedUri;
-    }
-    await unlink( stripFilePrefix( croppedUri ) ).catch( ( ) => undefined );
-    return adjustedUri;
   } catch ( error ) {
     // The crop the user framed is lost to a "Something went wrong" alert, so
     // this line is the only record of which photo it was.

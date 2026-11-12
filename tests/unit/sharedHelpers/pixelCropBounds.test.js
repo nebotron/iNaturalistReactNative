@@ -140,16 +140,7 @@ describe( "pixelCropFromNormalizedCrop", ( ) => {
 } );
 
 describe( "cropImageFile bounds", ( ) => {
-  beforeEach( ( ) => {
-    jest.resetModules( );
-  } );
-
-  it( "passes the selected bounds unaligned, snapped to the upload size", async ( ) => {
-    const cropImage = jest.fn( ( ) => Promise.resolve( {
-      path: "/tmp/cropped.jpg",
-      outputLevel: 100,
-      attempts: 1,
-    } ) );
+  const loadCropImageFile = cropImage => {
     jest.doMock( "react-native", ( ) => ( {
       NativeModules: {
         ImageCropper: { cropImage },
@@ -164,8 +155,20 @@ describe( "cropImageFile bounds", ( ) => {
     jest.doMock( "sharedHelpers/tunableParams", ( ) => ( {
       getTunable: ( ) => 2048,
     } ) );
+    return require( "sharedHelpers/cropImageFile" ).default;
+  };
 
-    const cropImageFile = require( "sharedHelpers/cropImageFile" ).default;
+  beforeEach( ( ) => {
+    jest.resetModules( );
+  } );
+
+  it( "passes the selected bounds unaligned, snapped to the upload size", async ( ) => {
+    const cropImage = jest.fn( ( ) => Promise.resolve( {
+      path: "/tmp/cropped.jpg",
+      outputLevel: 100,
+      attempts: 1,
+    } ) );
+    const cropImageFile = loadCropImageFile( cropImage );
 
     await cropImageFile(
       "file:///tmp/source.jpg",
@@ -187,6 +190,7 @@ describe( "cropImageFile bounds", ( ) => {
       50,
       50,
       "/tmp/output/test-crop-id.jpg",
+      1,
     );
 
     cropImage.mockClear( );
@@ -210,6 +214,31 @@ describe( "cropImageFile bounds", ( ) => {
       2048,
       2048,
       "/tmp/output/test-crop-id.jpg",
+      1,
     );
+  } );
+
+  it( "applies brightness in the one native crop, writing one file", async ( ) => {
+    const cropImage = jest.fn( ( ) => Promise.resolve( {
+      path: "/tmp/output/test-crop-id.jpg",
+      outputLevel: 100,
+      attempts: 1,
+    } ) );
+    const cropImageFile = loadCropImageFile( cropImage );
+
+    const uri = await cropImageFile(
+      "file:///tmp/source.jpg",
+      {
+        x: 0, y: 0, w: 1, h: 1,
+      },
+      128,
+      128,
+      "/tmp/output",
+      1.4,
+    );
+
+    expect( cropImage ).toHaveBeenCalledTimes( 1 );
+    expect( cropImage.mock.calls[0][6] ).toBe( 1.4 );
+    expect( uri ).toBe( "file:///tmp/output/test-crop-id.jpg" );
   } );
 } );
