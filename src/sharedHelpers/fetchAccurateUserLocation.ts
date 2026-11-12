@@ -1,5 +1,9 @@
 import type { UserLocation } from "./accuratePositionWatcher";
-import { waitForAccuratePosition } from "./accuratePositionWatcher";
+import {
+  getBestRecentFix,
+  waitForAccuratePosition,
+  watchHasFix,
+} from "./accuratePositionWatcher";
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
 import {
@@ -9,9 +13,17 @@ import {
 } from "./geolocationWrapper";
 
 const fetchAccurateUserLocation = async (): Promise<UserLocation | null> => {
-  const permissionResult = await checkLocationPermissions( );
-  if ( permissionResult === null ) {
-    return null;
+  // A fix from the running watch (the camera keeps one open) already shows
+  // location is allowed. The permission check and the one-shot request below
+  // both ask locationd synchronously on the main thread on iOS, and when that
+  // stalled the app froze on the camera's checkmark until iOS killed it, so
+  // neither runs while the watch can answer instead.
+  const watching = watchHasFix( );
+  if ( !watching ) {
+    const permissionResult = await checkLocationPermissions( );
+    if ( permissionResult === null ) {
+      return null;
+    }
   }
 
   try {
@@ -20,6 +32,10 @@ const fetchAccurateUserLocation = async (): Promise<UserLocation | null> => {
     const accurateResult = await waitForAccuratePosition( );
     if ( accurateResult ) {
       return accurateResult;
+    }
+
+    if ( watching ) {
+      return getBestRecentFix( );
     }
 
     const lowAccuracyResult = await getCurrentPositionWithOptions( lowAccuracyOptions );

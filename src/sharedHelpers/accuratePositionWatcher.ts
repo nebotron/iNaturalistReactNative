@@ -174,6 +174,15 @@ export const getRecentAccurateFix = (
   return location;
 };
 
+// Whether the running watch has delivered a fix, which means the app is
+// allowed to use location. A watch that loses permission errors and stops.
+export const watchHasFix = ( ) => watchId !== null
+  && bestFix !== null
+  && bestFix.receivedAt >= watchStartedAt;
+
+// The most accurate fix the watch has seen that isn't stale, however accurate.
+export const getBestRecentFix = ( ) => getBestFixWithin( MAX_POSITION_AGE_MS );
+
 // Keeps the location radio warm, e.g. while the camera is open, so the fix a
 // photo gets geotagged with has had time to converge.
 export const startPositionWarmup = ( ) => subscribeToPosition( { onLocation: ( ) => {} } );
