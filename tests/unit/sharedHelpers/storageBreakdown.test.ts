@@ -10,10 +10,6 @@ jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
   readDir: jest.fn( ( ) => Promise.resolve( [] ) ),
 } ) );
 
-jest.mock( "react-native-device-info", ( ) => ( {
-  getFreeDiskStorage: jest.fn( ( ) => Promise.resolve( 5000 ) ),
-} ) );
-
 const file = ( dir: string, name: string, size: number ) => ( {
   name, path: `${dir}/${name}`, size, isDirectory: ( ) => false,
 } );
@@ -68,7 +64,6 @@ describe( "getStorageBreakdown", ( ) => {
       { category: "other", bytes: 7 },
     ] );
     expect( breakdown.totalBytes ).toBe( 2057 );
-    expect( breakdown.freeDiskBytes ).toBe( 5000 );
   } );
 
   it( "counts a cache directory shared with tmp once", async ( ) => {

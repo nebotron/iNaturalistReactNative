@@ -8,7 +8,6 @@ import {
 } from "@dr.pogodin/react-native-fs";
 import { Platform } from "react-native";
 import Config from "react-native-config";
-import DeviceInfo from "react-native-device-info";
 import { directoryBytes } from "sharedHelpers/storageMetrics";
 
 export type StorageCategory =
@@ -30,8 +29,6 @@ export interface StorageBreakdown {
   // Largest first, zero-byte categories left out
   categories: { category: StorageCategory; bytes: number }[];
   totalBytes: number;
-  // -1 when the platform won't say
-  freeDiskBytes: number;
 }
 
 // Top-level names in Documents, matched by prefix so a Realm's .lock, .note
@@ -105,8 +102,7 @@ const getStorageBreakdown = async ( ): Promise<StorageBreakdown> => {
     add( "app", await directoryBytes( MainBundlePath ) );
   };
 
-  const [freeDiskBytes] = await Promise.all( [
-    DeviceInfo.getFreeDiskStorage( ).catch( ( ) => -1 ),
+  await Promise.all( [
     documents( ),
     caches( ),
     library( ),
@@ -120,7 +116,6 @@ const getStorageBreakdown = async ( ): Promise<StorageBreakdown> => {
   return {
     categories,
     totalBytes: categories.reduce( ( sum, { bytes: size } ) => sum + size, 0 ),
-    freeDiskBytes,
   };
 };
 

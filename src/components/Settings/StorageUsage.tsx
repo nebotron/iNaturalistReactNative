@@ -1,4 +1,3 @@
-import { formatSizeUnits } from "components/Developer/hooks/useAppSize";
 import {
   ActivityIndicator,
   Body1,
@@ -36,6 +35,26 @@ const categoryText = ( t: TFunction ): Record<StorageCategory, [string, string]>
   other: [t( "Other--storage" ), t( "Other--storage-description" )],
 } );
 
+// One fixed color per category, so a category keeps its color between visits
+const CATEGORY_COLORS: Record<StorageCategory, string> = {
+  photos: "#74AC00",
+  sounds: "#1F77B4",
+  videos: "#9467BD",
+  usbImports: "#8C564B",
+  audioId: "#17BECF",
+  offlineExplore: "#2CA02C",
+  database: "#FF7F0E",
+  appSettings: "#BCBD22",
+  temporaryPhotos: "#E377C2",
+  aiModels: "#D62728",
+  cache: "#7F7F7F",
+  app: "#3A5600",
+  other: "#BFBFBF",
+};
+
+// Every amount in GB with two decimals, so sizes line up and compare at a glance
+export const formatGB = ( bytes: number ) => `${( bytes / 1073741824 ).toFixed( 2 )} GB`;
+
 // How much space the app takes on this device, by what it's for
 const StorageUsage = ( ) => {
   const { t } = useTranslation( );
@@ -68,48 +87,55 @@ const StorageUsage = ( ) => {
   }
 
   const text = categoryText( t );
-  const largest = breakdown.categories[0]?.bytes || 1;
+  const shareOf = ( bytes: number ) => ( breakdown.totalBytes > 0
+    ? ( bytes / breakdown.totalBytes ) * 100
+    : 0 );
 
   return (
     <ScrollViewWrapper>
       <View className="p-4">
         <Heading4>{t( "TOTAL-STORAGE-USED" )}</Heading4>
         <Body1 className="mt-2" testID="StorageUsage.total">
-          {formatSizeUnits( breakdown.totalBytes )}
+          {formatGB( breakdown.totalBytes )}
         </Body1>
-        {breakdown.freeDiskBytes >= 0 && (
-          <Body3 className="mt-1">
-            {t( "Storage-free-on-device", {
-              size: formatSizeUnits( breakdown.freeDiskBytes ),
-            } )}
-          </Body3>
-        )}
+        <View
+          className="flex-row h-6 mt-4 rounded-lg bg-lightGray overflow-hidden"
+          testID="StorageUsage.bar"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          {breakdown.categories.map( ( { category, bytes } ) => (
+            <View
+              key={category}
+              className="basis-0 min-w-[2px]"
+              style={{ flexGrow: bytes, backgroundColor: CATEGORY_COLORS[category] }}
+            />
+          ) )}
+        </View>
         <Heading4 className="mt-[30px] mb-[15px]">{t( "BREAKDOWN--storage" )}</Heading4>
         {breakdown.categories.map( ( { category, bytes } ) => {
           const [label, description] = text[category];
-          const share = breakdown.totalBytes > 0
-            ? Math.round( ( bytes / breakdown.totalBytes ) * 100 )
-            : 0;
+          const size = formatGB( bytes );
           return (
             <View
               key={category}
-              className="mb-5"
+              className="flex-row mb-5"
               accessible
-              accessibilityLabel={`${label}, ${formatSizeUnits( bytes )}`}
+              accessibilityLabel={`${label}, ${size}`}
             >
-              <View className="flex-row justify-between">
-                <Body1 className="shrink">{label}</Body1>
-                <Body1 className="ml-2">{formatSizeUnits( bytes )}</Body1>
-              </View>
-              <View className="h-2 mt-1 rounded-full bg-lightGray overflow-hidden">
-                <View
-                  className="h-2 rounded-full bg-inatGreen"
-                  style={{ width: `${Math.max( ( bytes / largest ) * 100, 1 )}%` }}
-                />
-              </View>
-              <View className="flex-row justify-between mt-1">
-                <Body4 className="shrink">{description}</Body4>
-                <Body4 className="ml-2">{`${share}%`}</Body4>
+              <View
+                className="w-4 h-4 mt-1 mr-3 rounded-sm"
+                style={{ backgroundColor: CATEGORY_COLORS[category] }}
+              />
+              <View className="flex-1">
+                <View className="flex-row justify-between">
+                  <Body1 className="shrink">{label}</Body1>
+                  <Body1 className="ml-2">{size}</Body1>
+                </View>
+                <View className="flex-row justify-between mt-1">
+                  <Body4 className="shrink">{description}</Body4>
+                  <Body4 className="ml-2">{`${Math.round( shareOf( bytes ) )}%`}</Body4>
+                </View>
               </View>
             </View>
           );

@@ -1942,8 +1942,6 @@ Stops-recording-sound = Stops recording sound
 Stops-the-clip = Stops the clip.
 Stops-the-recording = Stops the recording.
 Stops-the-sound = Stops the sound.
-# Free space left on the phone, shown on the storage usage screen
-Storage-free-on-device = { $size } free on this device
 # Settings button and screen title for the breakdown of storage used by the app
 STORAGE-USAGE = STORAGE USAGE
 # Shown on the storage usage screen when folder sizes could not be read
