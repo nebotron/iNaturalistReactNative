@@ -19,8 +19,9 @@
 //   until the user manually reopens the app.
 //
 // Every fix is buffered here rather than pushed at JS, so fixes that arrive
-// while JS is down (or suspended) survive. JS drains the buffer into Realm on
-// startup and on a timer while tracking is on.
+// while JS is down (or suspended) survive. The buffer is a file each fix is
+// appended to. JS drains the buffer into Realm on startup and on a timer while
+// tracking is on.
 @interface INatLocationMonitor : NSObject
 + (instancetype)shared;
 // Whether the user last had location history tracking enabled, persisted so
