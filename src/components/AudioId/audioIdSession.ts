@@ -160,20 +160,23 @@ export const scoreTrim = async (
   }
 };
 
-// Keeps the 5 s clip of the run a call scored best in.
+// Keeps the 5 s clip of the run a call scored best in, and returns its ID.
+// Once the call is found in the 15 s around it and scored as Identify would
+// score it, `onChecked` gets that score (null when it couldn't be).
 const saveCallClip = (
   sp: AudioIdSpecies,
   output: number,
   score: number,
   isNewCall: boolean,
   windowFrame: number,
-) => {
+  onChecked: ( id: string, callScore: number | null ) => void,
+): string => {
   const history = useAudioIdHistory.getState( );
   const existing = callClips.get( sp.taxonId );
   const clip = !isNewCall && existing
     ? history.clips[existing]
     : undefined;
-  if ( clip && score <= clip.confidence ) return;
+  if ( clip && score <= clip.confidence ) return clip.id;
   const id = clip
     ? clip.id
     : history.addClip( sp, score ).id;
@@ -218,11 +221,16 @@ const saveCallClip = (
           ? scoreTrim( contextClipPath( id ), call, sp )
           : null;
       } )
-      .then( score => {
-        if ( score != null ) history.updateClip( id, { callConfidence: score } );
+      .then( callScore => {
+        if ( callScore != null ) history.updateClip( id, { callConfidence: callScore } );
+        onChecked( id, callScore );
       } )
-      .catch( ( e: Error ) => logger.error( `saving context clip failed: ${e.message}` ) );
+      .catch( ( e: Error ) => {
+        logger.error( `saving context clip failed: ${e.message}` );
+        onChecked( id, null );
+      } );
   }, 5000 ) );
+  return id;
 };
 
 // Saves the last 15 s heard as a clip of its own, whether or not anything was
@@ -452,6 +460,62 @@ export const playerStarted = ( ) => AudioBirdId?.setPlayingClip( players.size > 
 
 let runs: ScoresEvent[] = [];
 
+// A detection whose call alone scores below this is dropped. Of 160 labeled
+// detections at a live score of 0.5 or more, it kept 101 of 105 right and 19
+// of 55 wrong; at 0.7 or more, 86 of 87 right and 8 of 19 wrong (see
+// scoreTrim). The check comes 5 s or more after the call, once the audio
+// around it is saved, so alerts wait for it.
+const CALL_THRESHOLD = getTunable( "audioIdCallThreshold" );
+// Each new call's clip until its call is checked: whether it is to alert, and the
+// species' heard entry from before it, to go back to if it's dropped.
+const pendingCalls = new Map<string, { alert: boolean; before?: Heard }>( );
+// When each dropped call was last heard, by taxon ID, so the rest of the
+// call isn't detected again.
+const droppedCalls = new Map<number, number>( );
+
+// Alerts on the call of clip `id` now if it was checked and kept, or else
+// once it is.
+const alertOnCheck = ( id: string ) => {
+  const pending = pendingCalls.get( id );
+  if ( pending ) {
+    pending.alert = true;
+    return;
+  }
+  logger.info( `alert: ${useAudioIdHistory.getState( ).clips[id]?.sp.commonName}` );
+  vibrate( );
+};
+
+const callChecked = ( id: string, callScore: number | null ) => {
+  const pending = pendingCalls.get( id );
+  pendingCalls.delete( id );
+  const history = useAudioIdHistory.getState( );
+  const clip = history.clips[id];
+  if ( !clip ) return;
+  if ( callScore == null || callScore >= CALL_THRESHOLD ) {
+    if ( pending?.alert ) {
+      logger.info( `alert: ${clip.sp.commonName}` );
+      vibrate( );
+    }
+    return;
+  }
+  const { taxonId } = clip.sp;
+  logger.info( `dropped ${clip.sp.commonName} ${clip.confidence.toFixed( 2 )}, `
+    + `call alone ${callScore.toFixed( 2 )}` );
+  history.deleteClip( id );
+  if ( callClips.get( taxonId ) === id ) callClips.delete( taxonId );
+  const { heard } = useAudioIdSession.getState( );
+  droppedCalls.set( taxonId, heard[taxonId]?.lastHeard ?? Date.now( ) );
+  if ( !pending ) return;
+  const { [taxonId]: _dropped, ...others } = heard;
+  if ( pending.before ) {
+    heardStore.put( taxonId, pending.before );
+    useAudioIdSession.setState( { heard: { ...others, [taxonId]: pending.before } } );
+  } else {
+    heardStore.remove( taxonId );
+    useAudioIdSession.setState( { heard: others } );
+  }
+};
+
 // Hermes' heap, which also counts toward the footprint iOS kills the app at.
 const jsHeapMB = ( ): number | null => {
   const stats = ( global as { HermesInternal?: {
@@ -508,22 +572,27 @@ const onScores = ( event: ScoresEvent ) => {
   const now = Date.now( );
   // Alert on a species not confidently heard in the last REALERT_MS, and on
   // every confident call of a species the user hasn't observed at research
-  // grade recently.
-  const alerts: AudioIdSpecies[] = [];
+  // grade recently, once the call is checked.
   let next = heard;
   Object.entries( scores ).forEach( ( [i, s] ) => {
     const sp = sps[Number( i )];
     if ( !isHeard( s ) || !sp ) return;
+    const dropped = droppedCalls.get( sp.taxonId );
+    if ( dropped && now - dropped <= NEW_CALL_GAP_MS ) {
+      droppedCalls.set( sp.taxonId, now );
+      return;
+    }
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > NEW_CALL_GAP_MS;
-    saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame );
+    const id = saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame, callChecked );
+    if ( isNewCall ) pendingCalls.set( id, { alert: false, before: old } );
     const confident = s >= VIBRATE_THRESHOLD;
     const lastConfident = old
       ? old.lastConfident ?? old.lastHeard
       : 0;
     if ( confident && ( !lastConfident || now - lastConfident > REALERT_MS
       || ( now - lastConfident > NEW_CALL_GAP_MS && recent && !recent.has( sp.taxonId ) ) ) ) {
-      alerts.push( sp );
+      alertOnCheck( id );
     }
     const entry: Heard = {
       sp,
@@ -545,10 +614,6 @@ const onScores = ( event: ScoresEvent ) => {
       heardStore.put( sp.taxonId, entry );
     }
   } );
-  if ( alerts.length > 0 ) {
-    logger.info( `alert: ${alerts.map( sp => sp.commonName ).join( ", " )}` );
-    vibrate( );
-  }
   useAudioIdSession.setState( {
     current: scores,
     level,

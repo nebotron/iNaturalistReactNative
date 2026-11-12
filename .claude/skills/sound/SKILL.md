@@ -124,5 +124,10 @@ notes of what did and did not work at the end of this skill.
   trim + `scoreSound` Identify runs), shown in the history and on the clip page (which rescores
   as the trim changes), and uploaded with labels. Suggestions also now takes the geomodel
   week from `observed_on_string`, which new local observations have instead of
-  `time_observed_at`. Not shipped: dropping detections whose call scores < 0.5 (would lose 4
-  right of 96, which breaks the "no right lost" rule; the user's call).
+  `time_observed_at`.
+- **Shipped** at the user's call: a detection whose call alone scores < 0.5
+  (`audioIdCallThreshold`) is dropped, its clip deleted and the species' heard entry restored,
+  and alerts wait for the check (5 s or more after the call). With main listing at 0.5 and
+  vibrating at 0.7: listed right 105 → 101, wrong 55 → 19; alerts right 87 → 86, wrong
+  19 → 8. Dropped detections log "dropped <species> <live>, call alone <score>"; their clips
+  are gone, so they can't be labeled.

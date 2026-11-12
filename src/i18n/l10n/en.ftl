@@ -2107,6 +2107,10 @@ Tunable-audioIdCallPeakRange = Audio ID call peak range
 # Description of a tunable parameter in settings
 Tunable-audioIdCallPeakRange-description = When a call's peak is below the call logit, how far below its peak a moment can be and still count as part of it.
 # Label for a tunable parameter in settings
+Tunable-audioIdCallThreshold = Audio ID call check threshold
+# Description of a tunable parameter in settings
+Tunable-audioIdCallThreshold-description = Minimum score (0-1) the call alone must get, a few seconds after a detection, for the detection to be kept and alerted on.
+# Label for a tunable parameter in settings
 Tunable-audioIdDimAfterSeconds = Audio ID dim after (seconds)
 # Description of a tunable parameter in settings
 Tunable-audioIdDimAfterSeconds-description = Seconds without a touch before the Audio ID screen dims.
