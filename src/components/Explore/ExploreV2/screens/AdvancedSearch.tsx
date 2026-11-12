@@ -353,7 +353,6 @@ const AdvancedSearch = ( ) => {
         />
         <View className="mb-7">
           <IconicTaxonChooser
-            before
             chosen={chosenIconicTaxa}
             onTaxonChosen={( taxonName: string ) => {
               if ( taxonName === "unknown" ) {
