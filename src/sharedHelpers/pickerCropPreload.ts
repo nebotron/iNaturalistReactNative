@@ -12,8 +12,9 @@ import { getTunable } from "sharedHelpers/tunableParams";
 // The first photo of a bulk crop can't be preloaded once Done is tapped: the
 // cropper opens at once and waits for the photo's copy out of the library and
 // then its whole prepare. So the newest photos in the picker are prepared
-// while it is open, before anything is selected. When one of them is
-// imported, aliasPreload (PhotoLibrary) hands its prepare to the imported copy.
+// before anything is selected: while it is open, and before it is opened
+// (preloadNewestPickerPhotos). When one of them is imported, aliasPreload
+// (PhotoLibrary) hands its prepare to the imported copy.
 export const PICKER_PRELOAD_COUNT = getTunable( "pickerPreloadCount" );
 
 const exporter = ( ) => ( NativeModules as {
@@ -22,7 +23,8 @@ const exporter = ( ) => ( NativeModules as {
   };
 } ).ImageCropper?.exportPHAsset;
 
-// Library photos started here and not yet handed to an import, by ph:// URI.
+// Photos started here and not yet handed to an import, by the URI the picker
+// knows them by.
 const pickerPreloads = new Set<string>( );
 
 const extensionOf = ( filename?: string | null ) => {
@@ -37,27 +39,33 @@ const scratchPathFor = ( phUri: string, filename?: string | null ) => {
   return `${cropSourcesPath}/picker_${id}${extensionOf( filename )}`;
 };
 
+const isLibraryAsset = ( uri: string ) => uri.startsWith( "ph://" ) && !uri.startsWith( "ph:///" );
+
+// A Photos library asset, or a staged SD card photo, which is already a file.
 export const canPreloadPickerPhoto = ( uri: string ) => Platform.OS === "ios"
-  && uri.startsWith( "ph://" )
-  && !uri.startsWith( "ph:///" )
-  && !!exporter( );
+  && ( uri.startsWith( "file://" ) || ( isLibraryAsset( uri ) && !!exporter( ) ) );
 
 // The export is of the asset's original bytes (exportPHAsset), the same file
 // the import copies, not the edited version a crop-source export reads: a
 // photo edited in Photos can differ in size and framing from its original, and
 // the prepare has to describe the file that is finally cropped.
-export function preloadPickerPhoto( phUri: string, filename?: string | null ) {
-  const exportPHAsset = exporter( );
-  if ( !exportPHAsset || !canPreloadPickerPhoto( phUri ) || pickerPreloads.has( phUri ) ) {
+export function preloadPickerPhoto( uri: string, filename?: string | null ) {
+  // A prepare something else started (a USB import's own lookahead) is left to
+  // whoever started it, and not released with the picker's.
+  if ( !canPreloadPickerPhoto( uri ) || pickerPreloads.has( uri ) || existingPreload( uri ) ) {
     return;
   }
-  pickerPreloads.add( phUri );
-  const destPath = scratchPathFor( phUri, filename );
-  enqueuePreload( phUri, phUri, null, async ( ) => {
-    await mkdir( cropSourcesPath );
-    await exportPHAsset( phUri, destPath );
-    return `file://${destPath}`;
-  } ).catch( ( ) => null );
+  pickerPreloads.add( uri );
+  const exportPHAsset = exporter( );
+  const exportSource = isLibraryAsset( uri ) && exportPHAsset
+    ? async ( ) => {
+      const destPath = scratchPathFor( uri, filename );
+      await mkdir( cropSourcesPath );
+      await exportPHAsset( uri, destPath );
+      return `file://${destPath}`;
+    }
+    : undefined;
+  enqueuePreload( uri, uri, null, exportSource ).catch( ( ) => null );
 }
 
 // Done was tapped (or the picker closed): the photos being imported keep their

@@ -1,4 +1,8 @@
+import {
+  preloadNewestPickerPhotos,
+} from "components/PhotoImporter/helpers/preloadNewestPickerPhotos";
 import i18next from "i18next";
+import { RealmContext } from "providers/contexts";
 import { useCallback, useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import DeviceInfo from "react-native-device-info";
@@ -34,6 +38,7 @@ import {
 import useUsbImportProgress from "stores/usbImportProgress";
 import useStore from "stores/useStore";
 
+const { useRealm } = RealmContext;
 const logger = log.extend( "useUsbImport" );
 
 // Whether this process has already reported that the watched folder is one the
@@ -133,6 +138,7 @@ const deletePendingFromDevice = async ( ) => {
 // started it; the run is published to that screen through the progress store.
 const useUsbImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
+  const realm = useRealm( );
   const offloading = useRef( false );
   const savesFailingUntil = useRef( 0 );
   // Each remote log line is a network POST, so repeated runs shouldn't repeat
@@ -511,6 +517,10 @@ const useUsbImport = ( ) => {
       progress.setPhase( failed > 0 || abandonReason
         ? "error"
         : "done" );
+      // The card's newest photos are already being prepared (above); this adds
+      // any library photos the picker shows above them, so it opens on photos
+      // that are all prepared.
+      if ( savedPaths.length > 0 ) preloadNewestPickerPhotos( realm );
       notifyUsbImportFinished(
         i18next.t( "USB-import-complete" ),
         deletedFromDevice > 0
@@ -535,7 +545,7 @@ const useUsbImport = ( ) => {
       }
     }
     return started;
-  }, [onboardingShown, logDiag] );
+  }, [onboardingShown, logDiag, realm] );
 
   const run = useCallback( async ( ) => {
     const started = await offload( );
