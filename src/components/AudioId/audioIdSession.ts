@@ -16,7 +16,7 @@ import { prepareAudioId } from "./audioIdModel";
 // The Audio ID listening session, kept outside the screen so it carries on
 // while the user is elsewhere in the app or the app is in the background. The
 // AudioBirdId native module runs BirdNET on the last 5 s of microphone audio
-// every second and emits probabilities for the species likely at the user's
+// every 2.5 s and emits probabilities for the species likely at the user's
 // place and week (see audioIdModel.ts): the top one, and any that clear
 // THRESHOLD. A species counts as heard when its score clears THRESHOLD.
 
@@ -316,7 +316,7 @@ export const useScreenDimmed = create<boolean>( ( ) => false );
 // Whether the screen skips the re-renders the runs would cause: while it's
 // dimmed, and while nobody can see it at all (another screen or tab on top,
 // where it stays mounted, or the app in the background). Re-rendering its
-// list every second while away from it left Fabric shadow trees for Hermes'
+// list on every run while away from it left Fabric shadow trees for Hermes'
 // GC to free, and native memory climbed to the ~3 GB kill limit within an
 // hour or two of listening (killed Nov 9 at 3211 and 3080 MB).
 export const useScreenPaused = create<boolean>( ( ) => true );

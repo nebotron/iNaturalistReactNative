@@ -38,7 +38,9 @@ commits more splits.
 
 ## Accuracy (`report_regions.json`)
 
-Run as the app runs: 5 s windows every second, the geomodel filter, and a
+Run as the app ran until November 2026, when it went from a window every
+second to one every 2.5 s to halve its CPU (not yet re-measured): 5 s
+windows every second, the geomodel filter, and a
 species counts as heard in a window when it scores 0.3+ and is the window's
 top species or scores 0.7+. On the same 923 recordings (600 from
 the Seattle area, 323 from the sets below), that top-species rule cut wrong

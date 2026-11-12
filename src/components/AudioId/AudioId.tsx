@@ -209,7 +209,7 @@ const Spectrogram = ( { paused }: { paused: boolean } ) => (
 );
 
 // A store's value that stops re-rendering the screen while it's dimmed or
-// out of sight (see useScreenPaused), so the runs coming in every second
+// out of sight (see useScreenPaused), so the runs coming in every 2.5 s
 // don't redraw a screen nobody can see. Showing it again subscribes again,
 // which picks up the live value. The selector must return a value already in
 // the store, not a new object.

@@ -16,7 +16,7 @@
 #import "PowerProfile.h"
 
 // Live bird identification by sound. Taps the microphone, resamples to
-// 32 kHz mono, keeps the most recent 5 s in a sliding window, and every second
+// 32 kHz mono, keeps the most recent 5 s in a sliding window, and every 2.5 s
 // runs the bundled audio_id.onnx on it: BirdNET v3.0 (CC BY-SA 4.0, "Powered
 // by BirdNET") cut down to the species iNaturalist has sound observations of,
 // with its weights in audio_id.data<N> (scripts/bird_audio/birdnet/
@@ -34,7 +34,11 @@
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
 #define AB_HIST     512000  // 16 s kept, for 15 s clips around a window saved up to 1 s late
-#define AB_STEP     32000   // run every 1 s of new audio
+// Run every 2.5 s of new audio, so each moment is scored in two windows. Every
+// 1 s scored it in five for 2.5x the CPU; the model can't score each second
+// once and stitch the results, because its spectrogram normalization,
+// squeeze-excitation blocks and attention pooling all span the whole window.
+#define AB_STEP     80000
 #define AB_FRAME_RUNS 16 // runs' frame logits kept, covering a 15 s context clip
 #define AB_SPEC_HOP 400     // spectrogram columns, 80 per second
 #define AB_SPEC_LOG2N 10
