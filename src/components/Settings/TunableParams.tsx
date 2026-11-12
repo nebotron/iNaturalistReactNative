@@ -82,10 +82,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-audioIdDimAfterSeconds" ),
     t( "Tunable-audioIdDimAfterSeconds-description" ),
   ],
-  audioIdFlashSeconds: [
-    t( "Tunable-audioIdFlashSeconds" ),
-    t( "Tunable-audioIdFlashSeconds-description" ),
-  ],
   audioIdNewCallGapSeconds: [
     t( "Tunable-audioIdNewCallGapSeconds" ),
     t( "Tunable-audioIdNewCallGapSeconds-description" ),

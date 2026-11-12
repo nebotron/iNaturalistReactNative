@@ -276,16 +276,15 @@ const vibrate = ( mode: VibrateMode = "auto" ) => {
     .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
 };
 
-// While the screen is focused it dims after DIM_AFTER_MS without a touch, and
-// an alert lifts the dimming for FLASH_MS. Dimming is an overlay on the screen,
-// leaving the device brightness alone.
+// While the screen is focused it goes black after DIM_AFTER_MS without a
+// touch, to save battery: an opaque overlay covers it, the screen stops
+// rendering, and only listening and vibrating carry on. Alerts vibrate
+// without lighting it up; only a touch brings it back. The device brightness
+// is left alone.
 const DIM_AFTER_MS = getTunable( "audioIdDimAfterSeconds" ) * 1000;
-const FLASH_MS = getTunable( "audioIdFlashSeconds" ) * 1000;
 let focused = false;
 let dimmed = false;
-let flashing = false;
 let dimTimer: ReturnType<typeof setTimeout> | undefined;
-let flashTimer: ReturnType<typeof setTimeout> | undefined;
 export const useScreenDimmed = create<boolean>( ( ) => false );
 // Whether the screen skips the re-renders the runs would cause: while it's
 // dimmed, and while nobody can see it at all (another screen or tab on top,
@@ -297,7 +296,7 @@ export const useScreenPaused = create<boolean>( ( ) => true );
 let appActive = AppState.currentState !== "background"
   && AppState.currentState !== "inactive";
 const applyBrightness = ( ) => {
-  const dim = focused && dimmed && !flashing;
+  const dim = focused && dimmed;
   useScreenDimmed.setState( dim, true );
   useScreenPaused.setState( !focused || !appActive || dim, true );
 };
@@ -339,20 +338,9 @@ export const startDimming = ( ) => {
 };
 export const stopDimming = ( ) => {
   clearTimeout( dimTimer );
-  clearTimeout( flashTimer );
   focused = false;
   dimmed = false;
-  flashing = false;
   applyBrightness( );
-};
-const flashScreen = ( ) => {
-  flashing = true;
-  applyBrightness( );
-  clearTimeout( flashTimer );
-  flashTimer = setTimeout( ( ) => {
-    flashing = false;
-    applyBrightness( );
-  }, FLASH_MS );
 };
 
 // A copy of the sound at `uri` at the same level Audio ID clips play at, or
@@ -484,7 +472,6 @@ const onScores = ( event: ScoresEvent ) => {
   if ( alerts.length > 0 ) {
     logger.info( `alert: ${alerts.map( sp => sp.commonName ).join( ", " )}` );
     vibrate( );
-    flashScreen( );
   }
   useAudioIdSession.setState( {
     current: scores,
