@@ -84,7 +84,7 @@ export const TUNABLE_PARAMS = {
   importSectionGapMinutes: def( "uploads", 5, 0.1, 1440, false ),
   importMaxSectionSize: def( "uploads", 100, 2, 1000 ),
 
-  cropCacheDays: def( "storage", 2, 0.1, 60, false ),
+  mediaCacheDays: def( "storage", 2, 0.1, 60, false ),
   remoteImageCacheMb: def( "storage", 500, 10, 10000 ),
   cropSourcesCacheMb: def( "storage", 1024, 10, 20000 ),
   cropPreloadAhead: def( "storage", 10, 0, 100 ),

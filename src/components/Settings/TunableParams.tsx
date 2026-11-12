@@ -206,9 +206,9 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-importMaxSectionSize" ),
     t( "Tunable-importMaxSectionSize-description" ),
   ],
-  cropCacheDays: [
-    t( "Tunable-cropCacheDays" ),
-    t( "Tunable-cropCacheDays-description" ),
+  mediaCacheDays: [
+    t( "Tunable-mediaCacheDays" ),
+    t( "Tunable-mediaCacheDays-description" ),
   ],
   remoteImageCacheMb: [
     t( "Tunable-remoteImageCacheMb" ),

@@ -2143,10 +2143,6 @@ Tunable-autoAdvancedModeObservations = Auto advanced mode observations
 # Description of a tunable parameter in settings
 Tunable-autoAdvancedModeObservations-description = Users with at least this many observations start in advanced mode when signing in.
 # Label for a tunable parameter in settings
-Tunable-cropCacheDays = Crop cache lifetime (days)
-# Description of a tunable parameter in settings
-Tunable-cropCacheDays-description = How long downloaded images for cropping are kept.
-# Label for a tunable parameter in settings
 Tunable-cropPreloadAhead = Photos to preload for cropping
 # Description of a tunable parameter in settings
 Tunable-cropPreloadAhead-description = How many photos ahead of the one on screen the cropper prepares at full resolution, so advancing doesn't wait.
@@ -2240,6 +2236,10 @@ Tunable-maxPhotosPerObservation-description = Maximum number of photos an observ
 Tunable-maxSoundsPerObservation = Max sounds per observation
 # Description of a tunable parameter in settings
 Tunable-maxSoundsPerObservation-description = Maximum number of sounds an observation can have.
+# Label for a tunable parameter in settings
+Tunable-mediaCacheDays = Media cache lifetime (days)
+# Description of a tunable parameter in settings
+Tunable-mediaCacheDays-description = How long brightness-adjusted photos, extracted audio, and photo thumbnails are kept.
 # Label for a tunable parameter in settings
 Tunable-minFreeStorageMb = Minimum free storage (MB)
 # Description of a tunable parameter in settings

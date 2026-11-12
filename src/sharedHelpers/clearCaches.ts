@@ -21,7 +21,7 @@ import { getTunable } from "sharedHelpers/tunableParams";
 import { unlink } from "sharedHelpers/util";
 import useStore from "stores/useStore";
 
-const CROP_CACHE_TTL_MS = getTunable( "cropCacheDays" ) * 24 * 60 * 60 * 1000;
+const MEDIA_CACHE_TTL_MS = getTunable( "mediaCacheDays" ) * 24 * 60 * 60 * 1000;
 const REMOTE_IMAGE_CACHE_MAX_BYTES = getTunable( "remoteImageCacheMb" ) * 1024 * 1024;
 // Full-size exports of USB raws are ~50MB each, so the TTL alone let this reach
 // 5.8GB on device while crops failed for want of disk space.
@@ -157,7 +157,7 @@ const clearRollbackPhotos = async ( ) => {
 
 const clearExpiredFilesByTtl = async (
   dir: string,
-  ttlMs = CROP_CACHE_TTL_MS,
+  ttlMs = MEDIA_CACHE_TTL_MS,
   shouldClear: ( name: string ) => boolean = ( ) => true,
   includeDirectories = false,
 ) => {
@@ -191,7 +191,7 @@ const clearExpiredMediaCaches = async ( ) => {
   await clearExpiredFilesByTtl( brightnessAdjustedPath );
   await clearExpiredFilesByTtl(
     CachesDirectoryPath,
-    CROP_CACHE_TTL_MS,
+    MEDIA_CACHE_TTL_MS,
     name => name.startsWith( "video_audio_" ) || name.startsWith( "shared_audio_" ),
   );
 };
