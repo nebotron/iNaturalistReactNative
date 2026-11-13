@@ -41,6 +41,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { getLatestTrackedLocation } from "sharedHelpers/locationHistoryTracker";
 import { useTranslation } from "sharedHooks";
+import type { HotspotStop } from "stores/createLayoutSlice";
 import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
 
@@ -72,13 +73,7 @@ function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
 }
 
-interface Stop {
-  id: string;
-  text: string;
-  point: LatLng | null;
-  // Set when the stop was added from a hotspot card
-  fromHotspot?: boolean;
-}
+type Stop = HotspotStop;
 
 function isAtPoint( hotspot: Hotspot, point: LatLng ): boolean {
   return hotspot.centerLatitude === point.latitude
@@ -289,10 +284,21 @@ const WildlifeHotspotsScreen = ( {
     [filterParamsKey],
   );
 
-  const [stops, setStops] = useState<Stop[]>( [
-    { id: makeStopId(), text: "", point: null },
-    { id: makeStopId(), text: "", point: null },
-  ] );
+  // The route's stops are kept across visits, so the screen reopens on the
+  // route the user left.
+  const [stops, setStops] = useState<Stop[]>( () => {
+    const saved = useStore.getState( ).layout.hotspotStops;
+    return saved && saved.length >= 2
+      ? saved
+      : [
+        { id: makeStopId(), text: "", point: null },
+        { id: makeStopId(), text: "", point: null },
+      ];
+  } );
+  const setSavedStops = useStore( state => state.layout.setHotspotStops );
+  useEffect( () => {
+    setSavedStops( stops );
+  }, [stops, setSavedStops] );
   const [userLocation, setUserLocation] = useState<LatLng | null>( null );
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
   const [hotspotRouteCoords, setHotspotRouteCoords] = useState<RoutePoint[]>( [] );
@@ -308,14 +314,18 @@ const WildlifeHotspotsScreen = ( {
   // Outcome of the last plan, shown only while the stops are still the ones it
   // was made for
   const [planStatus, setPlanStatus] = useState<{ stops: Stop[]; text: string } | null>( null );
-  // Starts expanded since both stops begin at current location, before the
-  // user has entered a destination; collapses only after an explicit action.
-  const [stopsExpanded, setStopsExpanded] = useState( true );
+  // Starts expanded until every stop has a location (a new route has no
+  // destination yet); otherwise collapses only after an explicit action.
+  const [stopsExpanded, setStopsExpanded] = useState( () => !stops.every( s => s.point ) );
   const [timeLimitPopoverOpen, setTimeLimitPopoverOpen] = useState( false );
   const [showSettingsSheet, setShowSettingsSheet] = useState( false );
   // Stops the user has focused or typed in, which the late-arriving initial
   // location fix must not overwrite.
-  const editedStopIdsRef = useRef( new Set<string>() );
+  // Restored stops count as edited unless empty or following current location.
+  const [initialEditedStopIds] = useState( () => new Set( stops
+    .filter( s => s.text && s.text !== t( "Current-location" ) )
+    .map( s => s.id ) ) );
+  const editedStopIdsRef = useRef( initialEditedStopIds );
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
