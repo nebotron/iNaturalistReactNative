@@ -30,6 +30,8 @@ interface Props {
   // to the square.
   initialCrop?: NormalizedCrop | null;
   size: number;
+  // Exposure multiplier drawn over the photo (1 = unchanged)
+  brightness?: number;
   onCropChange?: (
     crop: NormalizedCrop,
     dims: { width: number; height: number },
@@ -82,6 +84,7 @@ const ObsImageZoomable = ( {
   imageHeight: knownImageHeight,
   initialCrop,
   size,
+  brightness,
   onCropChange,
   testID = "ObsList.photo",
 }: Props ) => {
@@ -164,6 +167,7 @@ const ObsImageZoomable = ( {
       ref={zoomRef}
       uri={uri}
       fullResolution={fullResolution}
+      brightness={brightness}
       style={{ width: size, height: size }}
       // scale 1 renders the whole image contained (letterboxed) in the square, so
       // allowing pinch down to 1 lets the user shrink the photo until it fully fits.

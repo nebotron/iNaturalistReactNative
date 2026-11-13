@@ -39,6 +39,8 @@ interface Props {
   zoomSourceUri?: string;
   zoomCrop?: NormalizedCrop | null;
   onZoomCropChange?: ( crop: NormalizedCrop ) => void;
+  // Exposure multiplier drawn over the pinchable original (1 = unchanged)
+  zoomBrightness?: number;
 }
 
 // A single square device-photo cell, shared by every grid that renders photos
@@ -62,6 +64,7 @@ const DevicePhotoImage = ( {
   zoomSourceUri,
   zoomCrop,
   onZoomCropChange,
+  zoomBrightness,
 }: Props ) => {
   const zoomable = !!onZoomCropChange && !!zoomSourceUri;
   // What the cell draws. A pinchable cell draws the original, at full
@@ -127,6 +130,9 @@ const DevicePhotoImage = ( {
           : undefined}
         onZoomCropChange={zoomable
           ? onZoomCropChange
+          : undefined}
+        brightness={zoomable
+          ? zoomBrightness
           : undefined}
       />
       {children}

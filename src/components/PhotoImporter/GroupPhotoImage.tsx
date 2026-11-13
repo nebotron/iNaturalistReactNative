@@ -12,6 +12,7 @@ import DuplicateUploadBadge from
 import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
+import { getBrightness } from "sharedHelpers/brightnessLog";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
@@ -153,6 +154,11 @@ const GroupPhotoImage = ( {
       // its crop, exactly as if it had been saved in the crop editor.
       zoomSourceUri={photo.image.cropOriginalUri || photo.image.uri}
       zoomCrop={photo.image.crop}
+      // The crop editor bakes its brightness into the cropped file, but the
+      // cell draws the untouched original, so the adjustment is redrawn here.
+      zoomBrightness={photo.image.cropOriginalUri
+        ? getBrightness( photo.image.uri ) ?? 1
+        : 1}
       onZoomCropChange={crop => applyGroupPhotosPinchCrop( photo.image.uri, crop )}
       testID={`GroupPhotos.${photo.image.uri}`}
     >

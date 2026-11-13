@@ -60,6 +60,8 @@ interface Props extends PropsWithChildren {
   // Caller-controlled framing for a single photo (see ObsImage)
   zoomCrop?: NormalizedCrop | null;
   onZoomCropChange?: ( crop: NormalizedCrop ) => void;
+  // Exposure multiplier drawn over a zoomable photo (1 = unchanged)
+  brightness?: number;
   hideGradientOverlay?: boolean;
   squareCorners?: boolean;
 }
@@ -104,6 +106,7 @@ const ObsImagePreview = ( {
   zoomable = false,
   zoomCrop,
   onZoomCropChange,
+  brightness,
   hideGradientOverlay = false,
   squareCorners = false,
 }: Props ) => {
@@ -423,6 +426,7 @@ const ObsImagePreview = ( {
           zoomable={zoomable}
           zoomCrop={zoomCrop}
           onZoomCropChange={onZoomCropChange}
+          brightness={brightness}
           onError={onError}
           opaque={opaque}
           iconicTaxonName={iconicTaxonName}

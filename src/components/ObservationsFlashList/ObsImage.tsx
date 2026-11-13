@@ -35,6 +35,8 @@ interface Props {
   // logging it (Group Photos, which crops the file itself).
   zoomCrop?: NormalizedCrop | null;
   onZoomCropChange?: ( crop: NormalizedCrop ) => void;
+  // Exposure multiplier drawn over a zoomable photo (1 = unchanged)
+  brightness?: number;
 }
 
 const CLASS_NAMES = [
@@ -57,6 +59,7 @@ const ObsImage = ( {
   zoomable = false,
   zoomCrop,
   onZoomCropChange,
+  brightness,
 }: Props ) => {
   const [containerSize, setContainerSize] = useState<number | null>(
     initialContainerSize ?? null,
@@ -145,6 +148,7 @@ const ObsImage = ( {
             : detection?.crop}
           onCropChange={onZoomCropChange}
           size={containerSize}
+          brightness={brightness}
         />
       ) }
       { opaque && (
