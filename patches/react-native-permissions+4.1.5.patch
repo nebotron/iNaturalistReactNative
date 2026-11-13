@@ -1,0 +1,88 @@
+diff --git a/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm b/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm
+index 00b734f..0e8ad8f 100644
+--- a/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm
++++ b/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm
+@@ -22,17 +22,28 @@
+ 
+ - (void)checkWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
+                  rejecter:(void (__unused ^ _Nonnull)(NSError * _Nonnull))reject {
+-  switch ([CLLocationManager authorizationStatus]) {
+-    case kCLAuthorizationStatusNotDetermined:
+-      return resolve(RNPermissionStatusNotDetermined);
+-    case kCLAuthorizationStatusRestricted:
+-      return resolve(RNPermissionStatusRestricted);
+-    case kCLAuthorizationStatusAuthorizedWhenInUse:
+-    case kCLAuthorizationStatusDenied:
+-      return resolve(RNPermissionStatusDenied);
+-    case kCLAuthorizationStatusAuthorizedAlways:
+-      return resolve(RNPermissionStatusAuthorized);
+-  }
++  // iNaturalist patch: +authorizationStatus asks locationd synchronously, and
++  // RNPermissions runs every method on the main queue. When locationd is slow
++  // (a busy device, often just as the app goes to the background) the main
++  // thread waited on it past iOS's 10 s scene-update watchdog, which killed
++  // the app (metrickit_crash, 0x8BADF00D). Read it off the main thread, and
++  // resolve back on the main queue, where RNPermissions' handler locks live.
++  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
++    CLAuthorizationStatus status = [CLLocationManager authorizationStatus];
++    dispatch_async(dispatch_get_main_queue(), ^{
++      switch (status) {
++        case kCLAuthorizationStatusNotDetermined:
++          return resolve(RNPermissionStatusNotDetermined);
++        case kCLAuthorizationStatusRestricted:
++          return resolve(RNPermissionStatusRestricted);
++        case kCLAuthorizationStatusAuthorizedWhenInUse:
++        case kCLAuthorizationStatusDenied:
++          return resolve(RNPermissionStatusDenied);
++        case kCLAuthorizationStatusAuthorizedAlways:
++          return resolve(RNPermissionStatusAuthorized);
++      }
++    });
++  });
+ }
+ 
+ - (void)requestWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
+diff --git a/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm b/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm
+index df174c5..b1b100d 100644
+--- a/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm
++++ b/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm
+@@ -22,17 +22,28 @@
+ 
+ - (void)checkWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
+                  rejecter:(void (__unused ^ _Nonnull)(NSError * _Nonnull))reject {
+-  switch ([CLLocationManager authorizationStatus]) {
+-    case kCLAuthorizationStatusNotDetermined:
+-      return resolve(RNPermissionStatusNotDetermined);
+-    case kCLAuthorizationStatusRestricted:
+-      return resolve(RNPermissionStatusRestricted);
+-    case kCLAuthorizationStatusDenied:
+-      return resolve(RNPermissionStatusDenied);
+-    case kCLAuthorizationStatusAuthorizedWhenInUse:
+-    case kCLAuthorizationStatusAuthorizedAlways:
+-      return resolve(RNPermissionStatusAuthorized);
+-  }
++  // iNaturalist patch: +authorizationStatus asks locationd synchronously, and
++  // RNPermissions runs every method on the main queue. When locationd is slow
++  // (a busy device, often just as the app goes to the background) the main
++  // thread waited on it past iOS's 10 s scene-update watchdog, which killed
++  // the app (metrickit_crash, 0x8BADF00D). Read it off the main thread, and
++  // resolve back on the main queue, where RNPermissions' handler locks live.
++  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
++    CLAuthorizationStatus status = [CLLocationManager authorizationStatus];
++    dispatch_async(dispatch_get_main_queue(), ^{
++      switch (status) {
++        case kCLAuthorizationStatusNotDetermined:
++          return resolve(RNPermissionStatusNotDetermined);
++        case kCLAuthorizationStatusRestricted:
++          return resolve(RNPermissionStatusRestricted);
++        case kCLAuthorizationStatusDenied:
++          return resolve(RNPermissionStatusDenied);
++        case kCLAuthorizationStatusAuthorizedWhenInUse:
++        case kCLAuthorizationStatusAuthorizedAlways:
++          return resolve(RNPermissionStatusAuthorized);
++      }
++    });
++  });
+ }
+ 
+ - (void)requestWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
