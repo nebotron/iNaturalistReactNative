@@ -11,7 +11,7 @@ import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLim
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
+import { computeContainRect, isSameCrop } from "sharedHelpers/normalizedCropTypes";
 
 const MAX_SCALE = 100;
 
@@ -29,6 +29,10 @@ interface Props {
   // The framing to start from. Without one the whole photo is shown, fitted
   // to the square.
   initialCrop?: NormalizedCrop | null;
+  // The caller owns the framing (Group Photos): a different crop arriving
+  // later, such as a re-crop saved in the crop editor, reframes the photo even
+  // after it has been pinched.
+  followCrop?: boolean;
   size: number;
   // Exposure multiplier drawn over the photo (1 = unchanged)
   brightness?: number;
@@ -83,6 +87,7 @@ const ObsImageZoomable = ( {
   imageWidth: knownImageWidth,
   imageHeight: knownImageHeight,
   initialCrop,
+  followCrop = false,
   size,
   brightness,
   onCropChange,
@@ -115,6 +120,11 @@ const ObsImageZoomable = ( {
   // Once the user has framed the photo by hand, nothing arriving later (a
   // logged crop resolving, the image dimensions loading) may reframe it.
   const interactedRef = useRef( false );
+  // The crop last applied and the ones pinches have reported since. A crop
+  // prop matching one of these is the tile's own framing coming back (a quick
+  // second pinch can report before the first one's crop is saved), not a new
+  // one to apply.
+  const knownCropsRef = useRef<NormalizedCrop[]>( [] );
 
   // On gesture end, report the framed region. Logged by logUri (the canonical
   // photo URL) rather than uri (which may be a tone-mapped or thumbnail file)
@@ -131,6 +141,7 @@ const ObsImageZoomable = ( {
       size,
       zoomRef.current.readTransform( ),
     );
+    knownCropsRef.current = [...knownCropsRef.current.slice( -4 ), crop];
     if ( logUri ) saveAnimalCrop( logUri, crop );
     onCropChange?.( crop, { width: imageWidth, height: imageHeight } );
   }, [logUri, imageWidth, imageHeight, onCropChange, size] );
@@ -141,10 +152,16 @@ const ObsImageZoomable = ( {
   // single time per photo; the engine keeps the live transform thereafter. A
   // photo with no crop yet starts whole (the engine's resting state), and
   // still takes a crop that turns up later (a framing logged elsewhere
-  // resolving) until the user pinches.
+  // resolving) until the user pinches. With followCrop, any crop different
+  // from the one shown is applied.
   const appliedRef = useRef( false );
   useEffect( ( ) => {
-    if ( appliedRef.current || interactedRef.current || !initialCrop ) return;
+    if ( !initialCrop ) return;
+    if ( followCrop ) {
+      if ( knownCropsRef.current.some( crop => isSameCrop( crop, initialCrop ) ) ) return;
+    } else if ( appliedRef.current || interactedRef.current ) {
+      return;
+    }
     const zoom = zoomRef.current;
     if ( !zoom ) return;
     if ( size <= 0 || imageWidth <= 0 || imageHeight <= 0 ) return;
@@ -159,8 +176,9 @@ const ObsImageZoomable = ( {
       focalY: clamp( framed.focalY, limits.minTotalTranslateY, limits.maxTotalTranslateY ),
     } );
     appliedRef.current = true;
+    knownCropsRef.current = [initialCrop];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uri, size, imageWidth, imageHeight, initialCrop] );
+  }, [uri, size, imageWidth, imageHeight, initialCrop, followCrop] );
 
   return (
     <SharedZoomableImage

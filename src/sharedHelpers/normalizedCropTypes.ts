@@ -7,6 +7,17 @@ export interface NormalizedCrop {
 
 const MIN_CROP_FRACTION = 0.05;
 
+const CROP_TOLERANCE = 0.002;
+
+// Two crops close enough to be the same framing (a crop that round-trips
+// through a gesture or the store can drift by rounding).
+export const isSameCrop = ( a: NormalizedCrop, b: NormalizedCrop ) => (
+  Math.abs( a.x - b.x ) < CROP_TOLERANCE
+  && Math.abs( a.y - b.y ) < CROP_TOLERANCE
+  && Math.abs( a.w - b.w ) < CROP_TOLERANCE
+  && Math.abs( a.h - b.h ) < CROP_TOLERANCE
+);
+
 export function defaultSquareCrop(
   imageWidth: number,
   imageHeight: number,

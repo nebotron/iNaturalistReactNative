@@ -146,6 +146,7 @@ const ObsImage = ( {
           initialCrop={cropControlled
             ? zoomCrop
             : detection?.crop}
+          followCrop={cropControlled}
           onCropChange={onZoomCropChange}
           size={containerSize}
           brightness={brightness}

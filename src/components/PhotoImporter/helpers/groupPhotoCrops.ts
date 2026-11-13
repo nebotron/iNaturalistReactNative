@@ -7,6 +7,7 @@ import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import imageFileSize from "sharedHelpers/imageFileSize";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { isSameCrop } from "sharedHelpers/normalizedCropTypes";
 import { trackGroupPhotoCrop } from "sharedHelpers/pendingGroupPhotoCrops";
 import { recordStagedImportCrop } from "sharedHelpers/usbStaging";
 import useStore from "stores/useStore";
@@ -112,8 +113,6 @@ const renamedDisplayUris = new Map<string, string>( );
 // is still being written waits for that crop's rename to land.
 let pinchCropQueue: Promise<void> = Promise.resolve( );
 
-const CROP_TOLERANCE = 0.002;
-
 const resolveDisplayUri = ( uri: string ): string => {
   let current = uri;
   const seen = new Set<string>( );
@@ -123,13 +122,6 @@ const resolveDisplayUri = ( uri: string ): string => {
   }
   return current;
 };
-
-const isSameCrop = ( a: NormalizedCrop, b: NormalizedCrop ) => (
-  Math.abs( a.x - b.x ) < CROP_TOLERANCE
-  && Math.abs( a.y - b.y ) < CROP_TOLERANCE
-  && Math.abs( a.w - b.w ) < CROP_TOLERANCE
-  && Math.abs( a.h - b.h ) < CROP_TOLERANCE
-);
 
 const isWholeFrame = ( crop: NormalizedCrop ) => isSameCrop( crop, {
   x: 0, y: 0, w: 1, h: 1,
