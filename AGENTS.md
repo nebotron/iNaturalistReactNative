@@ -288,6 +288,10 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
   ```
   Never run `--clear`. Entries carry the `commit` they came from, so check
   whether a crash predates the fix before chasing it.
+- **TestFlight crash reports** (tester comments, build, device, and the crash
+  log when the device uploaded one) come from App Store Connect:
+  `python3 scripts/testflight_crashes.py` (`--log N` prints one report's log).
+  Needs the App Store Connect API key variables in the environment or `.env`.
 - **Battery use** comes from iOS MetricKit, once a day per device:
   `python3 scripts/power_report.py` tabulates `metrickit_daily` (CPU, GPU,
   location, network, disk writes), `metrickit_signpost` (the same split by
