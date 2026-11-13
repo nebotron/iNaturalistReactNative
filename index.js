@@ -7,7 +7,7 @@ import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import { Alert, AppRegistry } from "react-native";
+import { Alert, AppRegistry, Platform } from "react-native";
 import { getCurrentRoute } from "navigation/navigationUtils";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 import {
@@ -121,29 +121,35 @@ setJSExceptionHandler( jsErrorHandler, true );
 // tested this by raising an exception in RNGestureHandler.m
 // https://stackoverflow.com/questions/63270492/how-to-raise-native-error-in-react-native-app
 // https://github.com/a7ul/react-native-exception-handler#react-native-navigation-wix
-setNativeExceptionHandler(
-  async exceptionString => {
-    try {
-      const crashData = {
-        error: exceptionString,
-        screen: getCurrentRoute()?.name || "",
-        memoryUsage: await DeviceInfo.getUsedMemory(),
-        timestamp: new Date().toISOString(),
-        appVersion: await DeviceInfo.getVersion(),
-      };
+// Android only. On iOS the handler catches the crash, holds the app for 5 s
+// and then kills it itself, so iOS's crash report (TestFlight, MetricKit)
+// shows that kill() instead of where the app actually crashed. AppDelegate's
+// MetricKit subscriber records iOS crashes in the app log instead.
+if ( Platform.OS === "android" ) {
+  setNativeExceptionHandler(
+    async exceptionString => {
+      try {
+        const crashData = {
+          error: exceptionString,
+          screen: getCurrentRoute()?.name || "",
+          memoryUsage: await DeviceInfo.getUsedMemory(),
+          timestamp: new Date().toISOString(),
+          appVersion: await DeviceInfo.getVersion(),
+        };
 
-      // Store crash data for retrieval on next app launch
-      installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+        // Store crash data for retrieval on next app launch
+        installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
 
-      logger.error( `Native Error: ${exceptionString}`, JSON.stringify( crashData ) );
-    } catch ( e ) {
-      // Last-ditch attempt to log something
-      logger.error( `Native Error: ${exceptionString} (failed to save context): ${e}` );
-    }
-  },
-  true, // Force quit the app to prevent zombie states
-  true, // Enable on iOS
-);
+        logger.error( `Native Error: ${exceptionString}`, JSON.stringify( crashData ) );
+      } catch ( e ) {
+        // Last-ditch attempt to log something
+        logger.error( `Native Error: ${exceptionString} (failed to save context): ${e}` );
+      }
+    },
+    true, // Force quit the app to prevent zombie states
+    true, // Also run the previously installed handler
+  );
+}
 
 initI18next();
 
