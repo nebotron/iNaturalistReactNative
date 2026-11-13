@@ -48,8 +48,9 @@ export interface MyObservationsSlice {
 
   // State that only relevant while its view is the active view. Kept out
   // of myObservations because the map writes on every pan, and everything
-  // reading myObservations would re-render along with it. Cleared when the user
-  // switches views.
+  // reading myObservations would re-render along with it. The closed categories
+  // are cleared when the user switches views; the map region survives view
+  // switches and is cleared only when the searched taxon changes.
   myObservationsMapRegion: Region | null;
   setMyObservationsMapRegion: ( _region: Region | null ) => void;
   myObservationsClosedIconicTaxaCategories: Set<ICONIC_TAXA_GROUP>;

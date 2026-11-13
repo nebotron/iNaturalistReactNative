@@ -95,6 +95,9 @@ const MyObservationsResults = ( ) => {
   const myObsOffsetToRestore = useStore( state => state.myObsOffsetToRestore );
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
   const clearMyObservationsViewState = useStore( state => state.clearMyObservationsViewState );
+  const setMyObservationsClosedIconicTaxaCategories = useStore(
+    state => state.setMyObservationsClosedIconicTaxaCategories,
+  );
   const uploadStatus = useStore( state => state.uploadStatus );
   const justFinishedSignup: boolean = useStore( state => state.layout.justFinishedSignup );
   // As soon as we leave this screen, the user is no longer considered as just finished signup
@@ -206,11 +209,11 @@ const MyObservationsResults = ( ) => {
   };
 
   const updateObservationsView = ( value: string ) => {
-    // Map position and closed/expanded taxa categories belong to the view the user was in.
-    // Returning to MyObs from elsewhere in the app should restore the view you left, but
-    // switching views should reset the view to its default state.
+    // Closed/expanded taxa categories belong to the view the user was in, so switching
+    // views resets them. The map viewport is kept: going grid -> map should put the
+    // user back where they left the map.
     if ( value !== layout ) {
-      clearMyObservationsViewState( );
+      setMyObservationsClosedIconicTaxaCategories( new Set( ) );
     }
     writeLayoutToStorage( value );
   };
