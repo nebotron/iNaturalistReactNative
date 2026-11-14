@@ -81,7 +81,6 @@ interface Props {
   ref?: React.Ref<MapView>;
   regionToAnimate?: Region;
   scrollEnabled?: boolean;
-  showScaleBar?: boolean;
   showCurrentLocationButton?: boolean;
   showsCompass?: boolean;
   showSwitchMapTypeButton?: boolean;
@@ -117,7 +116,6 @@ const Map = ( {
   ref,
   regionToAnimate,
   scrollEnabled = true,
-  showScaleBar,
   showCurrentLocationButton,
   showsCompass,
   showSwitchMapTypeButton,
@@ -560,9 +558,7 @@ const Map = ( {
         onMapReady={handleMapReady}
         onPanDrag={handlePanDrag}
         onPress={handleMapPress}
-        onRegionChange={showScaleBar
-          ? handleRegionChange
-          : undefined}
+        onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
         onUserLocationChange={handleUserLocationChange}
         pitchEnabled={false}
@@ -573,7 +569,6 @@ const Map = ( {
         scrollEnabled={scrollEnabled}
         showsCompass={showsCompass}
         showsMyLocationButton={false}
-        showsScale={!showScaleBar}
         showsUserLocation={showsUserLocation && hasPermissions && isFocused}
         style={style}
         testID={testID || "Map.MapView"}
@@ -615,13 +610,11 @@ const Map = ( {
         onPermissionGranted={onPermissionGranted}
         onPress={handleCurrentLocationPress}
       />
-      {showScaleBar && (
-        <ScaleBar
-          region={scaleRegion || mapRegion || initialRegion}
-          mapWidth={screenWidth}
-          liveRegionRef={setLiveScaleRegion}
-        />
-      )}
+      <ScaleBar
+        region={scaleRegion || mapRegion || initialRegion}
+        mapWidth={mapSize?.width || screenWidth}
+        liveRegionRef={setLiveScaleRegion}
+      />
       <SwitchMapTypeButton
         mapType={mapType}
         showSwitchMapTypeButton={showSwitchMapTypeButton}

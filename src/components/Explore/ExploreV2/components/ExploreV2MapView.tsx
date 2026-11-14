@@ -196,7 +196,6 @@ const ExploreV2MapView = ( {
         showCurrentLocationButton
         showsCompass={false}
         showSwitchMapTypeButton
-        showScaleBar
         showsUserLocation
         switchMapTypeButtonClassName="right-5 bottom-20"
         tileMapParams={queryParams}

@@ -220,7 +220,6 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
         showCurrentLocationButton
         showsCompass={false}
         showSwitchMapTypeButton
-        showScaleBar
         showsUserLocation
         switchMapTypeButtonClassName="right-5 bottom-20"
         mapChildren={(

@@ -982,7 +982,6 @@ const WildlifeHotspotsScreen = ( {
           // Called on any map press; used here only to dismiss the popover
           openMapScreen={() => setTimeLimitPopoverOpen( false )}
           showCurrentLocationButton
-          showScaleBar
           showSwitchMapTypeButton
           showsUserLocation
           mapChildren={(
