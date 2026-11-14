@@ -30,6 +30,8 @@ interface MediaApiResponse {
   total_results: number;
   results: {
     id: number;
+    // Photos only: the uploaded photo's square URL.
+    url?: string;
   }[];
 }
 
@@ -147,6 +149,12 @@ const uploadSingleEvidence = async (
 
   if ( !response ) {
     throw new Error( `Failed to upload ${type} ${evidenceUUID}: no response from server` );
+  }
+
+  if ( type === "Photo" && action === "upload" ) {
+    // Before marking the photo uploaded: that switches every screen to the
+    // remote URL, which should already be in the cache by then.
+    await Photo.seedImageCache( response.results?.[0]?.url, localFilePath );
   }
 
   if ( response && observationUUID ) {

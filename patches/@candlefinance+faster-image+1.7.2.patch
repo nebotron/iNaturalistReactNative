@@ -120,18 +120,20 @@ index e1cb690..a7a2235 100644
      }
  }
 diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
-index a8401df..7e51b7a 100644
+index a8401df..3ccf6a2 100644
 --- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
 +++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
-@@ -12,4 +12,6 @@ RCT_EXTERN_METHOD(clearCache:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromis
+@@ -12,4 +12,8 @@ RCT_EXTERN_METHOD(clearCache:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromis
  
  RCT_EXTERN_METHOD(prefetch:(NSArray *)sources withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
  
 +RCT_EXTERN_METHOD(cachedSources:(NSArray *)sources withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
 +
++RCT_EXTERN_METHOD(seedCache:(NSArray *)sources fromPath:(NSString *)path withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
++
  @end
 diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
-index d653e1c..5472406 100644
+index d653e1c..cfbee83 100644
 --- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 @@ -15,6 +15,9 @@ final class FasterImageViewManager: RCTViewManager {
@@ -144,7 +146,7 @@ index d653e1c..5472406 100644
        DataLoader.sharedUrlCache.removeAllCachedResponses()
        URLSession.shared.invalidateAndCancel()
        DispatchQueue.main.async {
-@@ -23,14 +26,33 @@ final class FasterImageViewManager: RCTViewManager {
+@@ -23,14 +26,55 @@ final class FasterImageViewManager: RCTViewManager {
      }
    }
    
@@ -176,6 +178,28 @@ index d653e1c..5472406 100644
 +      guard let url = URL(string: source) else { return false }
 +      return pipeline.cache.containsCachedImage(for: ImageRequest(url: url))
 +    })
++  }
++
++  // Store a local file's bytes in the disk cache under each of `sources`, so a
++  // photo the app has just uploaded loads from disk under its new remote URL
++  // instead of downloading the bytes it already has. Resolves once the data is
++  // staged, at which point DataCache serves it to readers.
++  @objc(seedCache:fromPath:withResolver:withRejecter:)
++  func seedCache(sources: [String],
++                 path: String,
++                 resolve: @escaping RCTPromiseResolveBlock,
++                 reject: @escaping RCTPromiseRejectBlock) {
++    DispatchQueue.global(qos: .utility).async {
++      guard let data = FileManager.default.contents(atPath: path) else {
++        resolve(false)
++        return
++      }
++      let cache = CachePolicy.dataCachePipeline.cache
++      for url in sources.compactMap(URL.init(string:)) {
++        cache.storeCachedData(data, for: ImageRequest(url: url))
++      }
++      resolve(true)
++    }
 +  }
  }
  

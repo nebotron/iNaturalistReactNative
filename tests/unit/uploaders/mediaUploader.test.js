@@ -1,8 +1,10 @@
 import { createOrUpdateEvidence } from "api/observations";
 import inatjs from "inaturalistjs";
+import Photo from "realmModels/Photo";
 import prepareMediaForUpload from "uploaders/dataTransformation/prepareMediaForUpload";
 import { attachMediaToObservation, uploadObservationMedia } from "uploaders/mediaUploader";
 import { trackEvidenceUpload } from "uploaders/utils/progressTracker";
+import markRecordUploaded from "uploaders/utils/realmSync";
 
 jest.mock( "api/observations" );
 jest.mock( "inaturalistjs" );
@@ -13,6 +15,7 @@ jest.mock( "uploaders/utils/progressTracker" );
 const mockedCreateOrUpdateEvidence = jest.mocked( createOrUpdateEvidence );
 const mockedPrepareMediaForUpload = jest.mocked( prepareMediaForUpload );
 const mockedTrackEvidenceUpload = jest.mocked( trackEvidenceUpload );
+const mockedMarkRecordUploaded = jest.mocked( markRecordUploaded );
 
 describe( "mediaUploader", () => {
   beforeEach( () => {
@@ -85,6 +88,35 @@ describe( "mediaUploader", () => {
         modifiedPhotosNeedingReupload: [],
         unsyncedObservationSounds: [],
       } );
+    } );
+
+    it( "seeds the image cache before marking an uploaded photo synced", async () => {
+      const calls = [];
+      const seedSpy = jest.spyOn( Photo, "seedImageCache" )
+        .mockImplementation( async ( ) => { calls.push( "seed" ); } );
+      mockedMarkRecordUploaded.mockImplementation( ( ) => { calls.push( "mark" ); } );
+      mockedCreateOrUpdateEvidence.mockResolvedValue( {
+        results: [{ id: 7, url: "https://example.org/photos/7/square.jpg" }],
+      } );
+      const observation = {
+        uuid: "obs-uuid-123",
+        observationPhotos: [
+          {
+            wasSynced: () => false,
+            photo: { uuid: "photo-uuid-1", localFilePath: "photoUploads/photo1.jpg" },
+          },
+        ],
+        observationSounds: [],
+      };
+
+      await uploadObservationMedia( observation, { api_token: "test-token" }, {} );
+
+      expect( seedSpy ).toHaveBeenCalledWith(
+        "https://example.org/photos/7/square.jpg",
+        "photoUploads/photo1.jpg",
+      );
+      expect( calls ).toEqual( ["seed", "mark"] );
+      seedSpy.mockRestore( );
     } );
 
     it( "should handle photos that need updates", async () => {

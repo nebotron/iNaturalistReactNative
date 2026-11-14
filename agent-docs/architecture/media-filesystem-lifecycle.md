@@ -110,6 +110,7 @@ Staging dirs are cleared on every deferred startup (see below).
 
 - **Display:** `Photo.getLocalPhotoUri(localFilePath)` normalizes stored paths to `file://${photoUploadPath}/${filename}` so photos remain accessible after app updates.
 - **Upload:** `prepareMediaForUpload` → `ObservationPhoto.mapPhotoForUpload` → `Photo.getLocalPhotoUri` → `FileUpload`.
+- **Image cache seeding:** once a photo is synced, `displayLocalOrRemote*Photo` returns its remote URL rather than the local file. So that the switch is not a cold download, `uploadSingleEvidence` calls `Photo.seedImageCache` right after `photos.create` returns, and before `markRecordUploaded` sets `_synced_at`. It stores the uploaded file in faster-image's shared Nuke `DataCache` under the photo's `original` and `large` URLs, via the `seedCache` native method added in `patches/@candlefinance+faster-image+1.7.2.patch`. This is iOS only; on Android the method is absent and the call does nothing.
 - **Resize:** `Photo.resizeImageForUpload` caps the longest side at `uploadMaxDimension` (2048). On iOS it calls `ImageCropper.resizeForUpload`, which copies an upright JPEG already within the cap byte-for-byte (every crop, since `cropImage` scales to the cap in the same pass), and otherwise downsamples through ImageIO and encodes once at full quality, keeping the photo's colour space (Display P3 included). Android, and iOS when the native method fails, use `resizeImage` (JPEG, quality 100, `onlyScaleDown: true`).
 - **Image quality rules:** every decode/encode costs a JPEG generation, so new code must not re-encode a file it could copy, must draw in the source's colour space (`drawingColorSpaceFor` in `ImageCropper.m`) rather than device RGB, and must write metadata losslessly (`ImageCropper.writeSubjectDistance` uses `CGImageDestinationCopyImageSource`; `Exify.write` on iOS re-encodes the whole image). iNaturalist keeps embedded ICC profiles, so wide-gamut uploads display correctly.
 
@@ -172,7 +173,7 @@ Media cache cleanup is **not** in `StartupService`. It runs from `useDeferredSta
 Used by `clearSyncedMediaForUpload` for `photoUploads` and `soundUploads`:
 
 1. **Keep list:** Filenames from unsynced observations (`observationPhotos._synced_at == nil` / `observationSounds._synced_at == nil`).
-2. **30-day skip:** Files modified in the last 30 days (`TRASHABLE_VINTAGE_MS`) are never deleted — avoids race where the file was written just before the observation was saved to Realm.
+2. **60-second skip:** Files modified in the last 60 seconds (`TRASHABLE_VINTAGE_MS`) are never deleted — avoids race where the file was written just before the observation was saved to Realm. Synced photos are therefore deleted on the next launch; by then they are served from the image cache seeded at upload.
 **5GB overflow (currently unreachable):** Intended to delete largest-then-oldest files — excluding keep-list entries and files modified in the last 24h — when kept + skipped files exceed 5GB. As written the branch never runs: `deletionPromises` is not awaited, so `totalSize` is still `0` when compared against the limit and the function returns early. Don't plan around this rule until it's fixed.
 
 ## Manual Deletion
