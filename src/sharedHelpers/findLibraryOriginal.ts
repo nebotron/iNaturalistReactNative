@@ -161,19 +161,15 @@ const copyDevicePhoto = async ( uri: string, tempBase: string ): Promise<string 
   }
 };
 
-// A temp copy of the photo's untouched original from the device library (the
-// one recorded, else the one matched to it), for sharing in place of the
-// iNaturalist copy. Null when there's no original to be had.
+// A temp copy of the photo's untouched original from the device library, for
+// sharing in place of the iNaturalist copy. Only the original the app recorded
+// at import, never one matched by time and location, which could be the wrong
+// photo. Null when there's no original to be had.
 export const copyLibraryOriginal = async (
   query: Query,
   tempBase: string,
-): Promise<string | null> => {
-  if ( query.deviceUri ) {
-    const recorded = await copyDevicePhoto( query.deviceUri, tempBase );
-    if ( recorded ) return recorded;
-  }
-  const match = await findLibraryOriginal( query );
-  return match && match !== query.deviceUri
-    ? copyDevicePhoto( match, tempBase )
-    : null;
-};
+): Promise<string | null> => (
+  query.deviceUri
+    ? copyDevicePhoto( query.deviceUri, tempBase )
+    : null
+);
