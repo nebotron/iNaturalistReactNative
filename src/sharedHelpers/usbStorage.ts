@@ -14,6 +14,9 @@ import useUsbImportProgress from "stores/usbImportProgress";
 interface UsbImageRef {
   relativePath: string;
   fileSize: number | null;
+  // Videos are saved straight into the Photos library rather than staged
+  // (see usbVideoImport.ts).
+  isVideo?: boolean;
 }
 
 // Why a list produced no images, surfaced for diagnostics. "ok" means the drive

@@ -1,6 +1,7 @@
 import { renderHook } from "@testing-library/react-native";
 import useUsbImport from "components/hooks/useUsbImport";
 import useUsbImportProgress from "stores/usbImportProgress";
+import useStore from "stores/useStore";
 
 const mockListNewUsbImages = jest.fn( );
 const mockCopyUsbImageToFile = jest.fn( );
@@ -46,6 +47,17 @@ jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
 jest.mock( "sharedHelpers/usbStaging", ( ) => ( {
   stagedPathFor: relativePath => `/staging/${relativePath}`,
   takeUnofferedStagedGroups: async ( ) => [],
+} ) );
+
+const mockSaveUsbVideoToLibrary = jest.fn( async ( ) => undefined );
+jest.mock( "sharedHelpers/usbVideoImport", ( ) => ( {
+  saveUsbVideoToLibrary: ( ...args ) => mockSaveUsbVideoToLibrary( ...args ),
+  usbVideoTimeoutMs: ( ) => 60_000,
+} ) );
+
+const mockRequestWriteMediaPermission = jest.fn( async ( ) => true );
+jest.mock( "sharedHelpers/permissions", ( ) => ( {
+  requestWriteMediaPermission: ( ) => mockRequestWriteMediaPermission( ),
 } ) );
 
 jest.mock( "sharedHelpers/queuedDeletionAlbum", ( ) => ( {
@@ -111,7 +123,10 @@ describe( "useUsbImport", ( ) => {
       extensions: { cr3: 40 },
     } );
   } );
-  afterEach( ( ) => jest.useRealTimers( ) );
+  afterEach( ( ) => {
+    jest.useRealTimers( );
+    useStore.getState( ).layout.setUsbDeleteAfterImport( false );
+  } );
 
   // A wedged Photos library makes every save burn the full 30s timeout in
   // turn. Left to run, a 122-photo card is an hour of grinding to save
@@ -397,6 +412,8 @@ describe( "useUsbImport", ( ) => {
   // suspends in between leaves those photos on the card for good: invisible to
   // the scan, and never deleted by anyone.
   it( "deletes what a suspended run saved but never removed", async ( ) => {
+    // Keeping files on the drive (the default) only stops tracking them.
+    useStore.getState( ).layout.setUsbDeleteAfterImport( true );
     mockPendingDeletes.push( "IMG_LEFTOVER.CR3" );
     // The scan finds nothing new, exactly as it would once the dead run's files
     // are all marked imported.
@@ -423,6 +440,8 @@ describe( "useUsbImport", ( ) => {
   // The drive being gone is the one delete failure worth retrying — it is the
   // unplugged-mid-run case, and the card still holds the files.
   it( "keeps leftovers pending when the drive is gone", async ( ) => {
+    // Keeping files on the drive (the default) only stops tracking them.
+    useStore.getState( ).layout.setUsbDeleteAfterImport( true );
     mockPendingDeletes.push( "IMG_LEFTOVER.CR3" );
     mockListNewUsbImages.mockResolvedValue( {
       available: true,
@@ -454,5 +473,72 @@ describe( "useUsbImport", ( ) => {
     expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
     expect( mockRefreshUsbCardState ).toHaveBeenCalledTimes( 1 );
     expect( useUsbImportProgress.getState( ).startImport ).toBeDefined( );
+  } );
+  describe( "videos", ( ) => {
+    const cardWithVideo = {
+      available: true,
+      reason: "ok",
+      images: [
+        { relativePath: "DCIM/100CANON/MVI_0001.MP4", fileSize: 1000, isVideo: true },
+        { relativePath: "DCIM/100CANON/IMG_0002.JPG", fileSize: 10 },
+      ],
+      imageFileCount: 1,
+      alreadyImportedCount: 0,
+      knownCount: 0,
+      regularFileCount: 2,
+      extensions: { mp4: 1, jpg: 1 },
+    };
+    beforeEach( ( ) => {
+      mockListNewUsbImages.mockResolvedValue( cardWithVideo );
+      mockCopyUsbImageToFile.mockResolvedValue( { copied: true } );
+    } );
+
+    it( "saves a video into Photos instead of staging it", async ( ) => {
+      startImport( );
+      await jest.advanceTimersByTimeAsync( 0 );
+
+      expect( mockSaveUsbVideoToLibrary ).toHaveBeenCalledWith( "DCIM/100CANON/MVI_0001.MP4" );
+      expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 1 );
+      expect( mockCopyUsbImageToFile ).toHaveBeenCalledWith(
+        "DCIM/100CANON/IMG_0002.JPG",
+        expect.any( String ),
+      );
+      expect( mockMarkUsbImagesImported ).toHaveBeenCalledWith( ["DCIM/100CANON/MVI_0001.MP4"] );
+    } );
+
+    it( "deletes an imported video from the drive when set to", async ( ) => {
+      useStore.getState( ).layout.setUsbDeleteAfterImport( true );
+      mockDeleteUsbSourceImages.mockResolvedValue( { deleted: 2, failed: 0, available: true } );
+
+      startImport( );
+      await jest.advanceTimersByTimeAsync( 0 );
+
+      expect( mockDeleteUsbSourceImages ).toHaveBeenCalledWith( expect.arrayContaining( [
+        "DCIM/100CANON/MVI_0001.MP4",
+      ] ) );
+    } );
+
+    it( "keeps an imported video on the drive when set to", async ( ) => {
+      startImport( );
+      await jest.advanceTimersByTimeAsync( 0 );
+
+      expect( mockSaveUsbVideoToLibrary ).toHaveBeenCalled( );
+      expect( mockDeleteUsbSourceImages ).not.toHaveBeenCalled( );
+      expect( mockPendingDeletes ).toEqual( [] );
+    } );
+
+    it( "leaves videos on the drive, unimported, without Photos permission", async ( ) => {
+      mockRequestWriteMediaPermission.mockResolvedValueOnce( false );
+
+      startImport( );
+      await jest.advanceTimersByTimeAsync( 0 );
+
+      expect( mockSaveUsbVideoToLibrary ).not.toHaveBeenCalled( );
+      expect( mockMarkUsbImagesImported ).not.toHaveBeenCalledWith(
+        ["DCIM/100CANON/MVI_0001.MP4"],
+      );
+      // The photos still import.
+      expect( mockMarkUsbImagesImported ).toHaveBeenCalledWith( ["DCIM/100CANON/IMG_0002.JPG"] );
+    } );
   } );
 } );

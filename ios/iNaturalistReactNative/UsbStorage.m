@@ -186,10 +186,23 @@ static BOOL isImageFile( NSString *name )
   return [exts containsObject:name.pathExtension.lowercaseString];
 }
 
-// Enumerates images under the saved folder whose relative paths are not in
-// knownNames, newest first, capped at maxCount. Returns lightweight metadata
-// only ({ relativePath, fileSize }) — nothing is copied here, so a full card
-// can be listed cheaply. Resolves with { available, reason, images, ...diag }.
+// Videos a camera writes that the Photos library accepts. These are not
+// staged like photos: JS saves them straight into Photos (see
+// usbVideoImport.ts), so only containers PhotoKit imports are listed.
+static BOOL isVideoFile( NSString *name )
+{
+  static NSSet<NSString *> *exts;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    exts = [NSSet setWithArray:@[@"mov", @"mp4", @"m4v"]];
+  } );
+  return [exts containsObject:name.pathExtension.lowercaseString];
+}
+
+// Enumerates images and videos under the saved folder whose relative paths are
+// not in knownNames, newest first, capped at maxCount. Returns lightweight
+// metadata only ({ relativePath, fileSize, isVideo }) — nothing is copied
+// here, so a full card can be listed cheaply. Resolves with { available, reason, images, ...diag }.
 RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
                         maxCount:(double)maxCount
                          resolve:(RCTPromiseResolveBlock)resolve
@@ -251,8 +264,10 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
       // scan can't reach.
       directoryCount++;
     }
-    if ( !isRegular.boolValue || !isImageFile( file.lastPathComponent ) ) continue;
-    imageFileCount++;
+    if ( !isRegular.boolValue ) continue;
+    BOOL isVideo = isVideoFile( file.lastPathComponent );
+    if ( !isVideo && !isImageFile( file.lastPathComponent ) ) continue;
+    if ( !isVideo ) imageFileCount++;
     // Relative path is the stable identity of a file on the drive; camera
     // filenames like DSC_0001.JPG repeat across DCIM subfolders.
     NSString *relativePath = [file.path substringFromIndex:folderPathLength + 1];
@@ -268,6 +283,7 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
       @"relativePath": relativePath,
       @"modified": modified ?: [NSDate distantPast],
       @"fileSize": fileSize ?: [NSNull null],
+      @"isVideo": @( isVideo ),
     }];
   }
 
@@ -284,6 +300,7 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
     [images addObject:@{
       @"relativePath": candidate[@"relativePath"],
       @"fileSize": candidate[@"fileSize"],
+      @"isVideo": candidate[@"isVideo"],
     }];
   }
 

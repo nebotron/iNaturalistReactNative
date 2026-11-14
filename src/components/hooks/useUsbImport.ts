@@ -13,6 +13,7 @@ import {
 import { PRELOAD_LOOKAHEAD } from "sharedHelpers/imageCropPreload";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
+import { requestWriteMediaPermission } from "sharedHelpers/permissions";
 import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import { stagedPathFor } from "sharedHelpers/usbStaging";
 import {
@@ -35,6 +36,7 @@ import {
   takeUnfinishedUsbOffload,
   updateUsbOffloadProgress,
 } from "sharedHelpers/usbStorage";
+import { saveUsbVideoToLibrary, usbVideoTimeoutMs } from "sharedHelpers/usbVideoImport";
 import useUsbImportProgress from "stores/usbImportProgress";
 import useStore from "stores/useStore";
 
@@ -130,10 +132,12 @@ const deletePendingFromDevice = async ( ) => {
 
 // Imports from the user's chosen USB folder (see UsbImportSetting) when they
 // press the import button on My Observations (UsbImportButton). New
-// images are copied into the app's staging folder (see usbStaging.ts), then —
-// once the whole batch is safely copied — deleted from the source device. They
-// then appear in the photo picker. Only photos on faved observations ever
-// reach the Photos library. A progress overlay (UsbImportProgress) reflects
+// images are copied into the app's staging folder (see usbStaging.ts), and new
+// videos are saved straight into the Photos library (see usbVideoImport.ts),
+// then — once the whole batch is safely copied — deleted from the source
+// device if the user's setting says to. Both then appear in the photo picker.
+// Of the photos, only those on faved observations ever reach the Photos
+// library. A progress overlay (UsbImportProgress) reflects
 // the run. Mounted once in App so a run outlives the Settings screen that
 // started it; the run is published to that screen through the progress store.
 const useUsbImport = ( ) => {
@@ -221,7 +225,17 @@ const useUsbImport = ( ) => {
           directories: result.directoryCount ?? -1,
         } );
       }
-      const { images } = result;
+      let { images } = result;
+      // Videos go into the Photos library, which needs permission to add to
+      // it. Without that they are left on the drive, unimported, for a later
+      // run, rather than failing one by one and abandoning the photos with
+      // them.
+      const videoCount = images.filter( image => image.isVideo ).length;
+      if ( videoCount > 0 && !( await requestWriteMediaPermission( ) ) ) {
+        logger.warn( `USB offload: skipping ${videoCount} video(s), `
+          + "no permission to add to Photos" );
+        images = images.filter( image => !image.isVideo );
+      }
       if ( images.length === 0 ) {
         // Nothing new to save, but an earlier run may still have files sitting
         // on the card that it saved and never got to delete. This return is the
@@ -239,7 +253,8 @@ const useUsbImport = ( ) => {
         return false;
       }
 
-      logger.info( `USB offload: copying ${images.length} photos to staging` );
+      logger.info( `USB offload: copying ${images.length} files `
+        + `(${images.filter( image => image.isVideo ).length} videos)` );
       started = true;
       progress.start( images.length );
       markUsbOffloadStarted( images.length );
@@ -290,7 +305,12 @@ const useUsbImport = ( ) => {
         return freeDiskBytes < 0 || freeDiskBytes >= ( fileSize ?? 0 );
       };
       for ( let i = 0; i < images.length; i += 1 ) {
-        const { relativePath, fileSize } = images[i];
+        const { relativePath, isVideo } = images[i];
+        // What the free-space checks wait for: a video briefly needs room for
+        // two copies of itself.
+        const fileSize = ( images[i].fileSize ?? 0 ) * ( isVideo
+          ? 2
+          : 1 );
         if ( abandonReason ) {
           abandoned = images.length - i;
           break;
@@ -335,18 +355,25 @@ const useUsbImport = ( ) => {
             AppState.currentState,
             availableMemoryMb( ),
           );
-          const stagedPath = stagedPathFor( relativePath );
-          // eslint-disable-next-line no-await-in-loop
-          await withTimeout(
-            copyUsbImageToFile( relativePath, stagedPath ),
-            SAVE_TIMEOUT_MS,
-          );
+          if ( isVideo ) {
+            // eslint-disable-next-line no-await-in-loop
+            await withTimeout(
+              saveUsbVideoToLibrary( relativePath ),
+              usbVideoTimeoutMs( images[i].fileSize ),
+            );
+          } else {
+            // eslint-disable-next-line no-await-in-loop
+            await withTimeout(
+              copyUsbImageToFile( relativePath, stagedPathFor( relativePath ) ),
+              SAVE_TIMEOUT_MS,
+            );
+          }
           savedPaths.push( relativePath );
           // The drive is listed newest first, so the photos the picker opens
           // on land first: prepare them as they land, by the same path a
           // finished batch takes (PhotoLibrary carries each prepare over to
           // the copy Done makes, via aliasPreload).
-          if ( savedPaths.length <= PRELOAD_LOOKAHEAD ) {
+          if ( !isVideo && savedPaths.length <= PRELOAD_LOOKAHEAD ) {
             preloadNewestPickerPhotos( realm );
           }
           // Mark imported immediately, not after the whole batch: if the app
