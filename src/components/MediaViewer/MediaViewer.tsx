@@ -9,6 +9,7 @@ import * as Exify from "@lodev09/react-native-exify";
 import { WarningSheet } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { format } from "date-fns";
+import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useEffect,
@@ -21,6 +22,7 @@ import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Photo from "realmModels/Photo";
 import { BREAKPOINTS } from "sharedHelpers/breakpoint";
+import { copyLibraryOriginal, findObservationPhoto } from "sharedHelpers/findLibraryOriginal";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
@@ -29,6 +31,8 @@ import MainMediaDisplay from "./MainMediaDisplay";
 import MediaSelector from "./MediaSelector";
 import MediaViewerHeader from "./MediaViewerHeader";
 import PhotoCameraInfo from "./PhotoCameraInfo";
+
+const { useRealm } = RealmContext;
 
 interface MediaToDelete {
   type: "sound" | "photo";
@@ -90,6 +94,7 @@ const MediaViewer = ( {
   uri,
 }: Props ) => {
   const insets = useSafeAreaInsets();
+  const realm = useRealm( );
   const uris = useMemo( ( ) => ( [
     ...photos.map( photo => photo.url || Photo.getLocalPhotoUri( photo.localFilePath ) ),
     ...sounds.map( sound => sound.file_url ),
@@ -182,8 +187,26 @@ const MediaViewer = ( {
   const buildSharePhoto = useCallback( async ( photoUri: string ): Promise<string> => {
     // Unique per prep so an in-flight prep for a previous photo can't clobber
     // the file mid-write, which would produce a broken image iOS can't save.
-    const tempPath = `${TemporaryDirectoryPath}/share_photo_${Date.now()}`
-      + `_${Math.random().toString( 36 ).slice( 2 )}.jpg`;
+    const tempBase = `${TemporaryDirectoryPath}/share_photo_${Date.now()}`
+      + `_${Math.random().toString( 36 ).slice( 2 )}`;
+    const tempPath = `${tempBase}.jpg`;
+
+    // Share the untouched original from the device library when there is one,
+    // rather than iNaturalist's resized, metadata-stripped copy. Looked up
+    // before any await, while the Realm objects are valid.
+    const photo = photos.find(
+      item => Photo.displayLocalOrRemoteOriginalPhoto( item ) === photoUri,
+    );
+    const library = photo
+      ? findObservationPhoto( realm, {
+        uri: Photo.getLocalPhotoUri( photo.localFilePath ),
+        url: photo.url,
+      } )?.library
+      : null;
+    if ( library ) {
+      const original = await copyLibraryOriginal( library, tempBase );
+      if ( original ) return original;
+    }
 
     // Get a local file we can annotate and share
     if ( photoUri.startsWith( "file://" ) ) {
@@ -213,7 +236,7 @@ const MediaViewer = ( {
     }
 
     return tempPath;
-  }, [latitude, longitude, timeObservedAt] );
+  }, [latitude, longitude, photos, realm, timeObservedAt] );
 
   // Cache of the in-flight/prepared share file for a single photo uri so the
   // share button can present the sheet without waiting on file work.

@@ -6,9 +6,8 @@ import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, { useEffect, useMemo, useState } from "react";
 import { useWindowDimensions } from "react-native";
-import type { RealmObservation } from "realmModels/types";
 import {
-  libraryOriginalQuery, readLibraryCameraInfo,
+  findObservationPhoto, readLibraryCameraInfo,
 } from "sharedHelpers/findLibraryOriginal";
 import type { GearKind } from "sharedHelpers/gearNicknames";
 import type { PhotoCameraInfo as Info } from "sharedHelpers/photoCameraInfo";
@@ -38,27 +37,17 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
   const [renaming, setRenaming] = useState<{ kind: GearKind; name: string } | null>( null );
 
   const { library, stored } = useMemo( ( ) => {
-    const query = url
-      ? ["ANY observationPhotos.photo.url == $0", url]
-      : uri && ["ANY observationPhotos.photo.localFilePath ENDSWITH $0", uri.split( "/" ).pop( )];
-    if ( !query ) return { library: null, stored: null };
-    const observation = realm.objects<RealmObservation>( "Observation" )
-      .filtered( query[0], query[1] )[0];
-    const obsPhoto = observation?.observationPhotos?.find( op => ( url
-      ? op.photo?.url === url
-      : op.photo?.localFilePath?.endsWith( query[1] as string ) ) );
+    const found = findObservationPhoto( realm, { uri, url } );
     let storedInfo: Info | null = null;
     try {
-      storedInfo = obsPhoto?.cameraInfo
-        ? JSON.parse( obsPhoto.cameraInfo )
+      storedInfo = found?.obsPhoto.cameraInfo
+        ? JSON.parse( found.obsPhoto.cameraInfo )
         : null;
     } catch {
       storedInfo = null;
     }
     return {
-      library: obsPhoto
-        ? libraryOriginalQuery( obsPhoto, observation )
-        : null,
+      library: found?.library ?? null,
       stored: storedInfo,
     };
   }, [realm, uri, url] );

@@ -1,8 +1,12 @@
+import { copyFile } from "@dr.pogodin/react-native-fs";
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import { NativeModules, Platform } from "react-native";
+import type Realm from "realm";
 import type { RealmObservation, RealmObservationPhotoPojo } from "realmModels/types";
 import { log } from "sharedHelpers/logger";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
 import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { readableUriForDevicePhoto } from "sharedHelpers/usbStaging";
 
 const logger = log.extend( "findLibraryOriginal" );
@@ -62,6 +66,27 @@ export const libraryOriginalQuery = (
   };
 };
 
+// The observation photo shown at a local uri or remote url, with what to look
+// its library original up by.
+export const findObservationPhoto = (
+  realm: Realm,
+  { uri, url }: { uri?: string | null; url?: string | null },
+): { obsPhoto: RealmObservationPhotoPojo; library: Query } | null => {
+  const fileName = uri?.split( "/" ).pop( );
+  const query = url
+    ? ["ANY observationPhotos.photo.url == $0", url]
+    : fileName && ["ANY observationPhotos.photo.localFilePath ENDSWITH $0", fileName];
+  if ( !query ) return null;
+  const observation = realm.objects<RealmObservation>( "Observation" )
+    .filtered( query[0], query[1] )[0];
+  const obsPhoto = observation?.observationPhotos?.find( op => ( url
+    ? op.photo?.url === url
+    : op.photo?.localFilePath?.endsWith( fileName as string ) ) );
+  return obsPhoto
+    ? { obsPhoto, library: libraryOriginalQuery( obsPhoto, observation ) }
+    : null;
+};
+
 // The library photo an observation photo was imported from, when the app never
 // recorded its uri or the one recorded is gone: the one taken at exactly the
 // observation's time and location, or the only one taken in that second, else
@@ -106,5 +131,49 @@ export const readLibraryCameraInfo = async ( query: Query ): Promise<PhotoCamera
   const match = await findLibraryOriginal( query );
   return match && match !== query.deviceUri
     ? readCameraInfo( match )
+    : null;
+};
+
+const extensionOf = ( path: string ) => {
+  const name = path.split( "?" )[0].split( "/" ).pop( ) ?? "";
+  const dot = name.lastIndexOf( "." );
+  return dot > 0
+    ? name.slice( dot + 1 ).toLowerCase( )
+    : "jpg";
+};
+
+// Copies one device photo uri to a new temp file, or resolves null when it is
+// gone or unreadable.
+const copyDevicePhoto = async ( uri: string, tempBase: string ): Promise<string | null> => {
+  try {
+    let source = uri;
+    if ( uri.startsWith( "ph://" ) ) {
+      const data = await CameraRoll.iosGetImageDataById( uri.slice( "ph://".length ) );
+      source = data?.node?.image?.filepath ?? "";
+      if ( !source ) return null;
+    }
+    const dest = `${tempBase}.${extensionOf( source )}`;
+    await copyFile( stripFilePrefix( source ), dest );
+    return dest;
+  } catch ( error ) {
+    logger.info( "library_original_copy_failed", error );
+    return null;
+  }
+};
+
+// A temp copy of the photo's untouched original from the device library (the
+// one recorded, else the one matched to it), for sharing in place of the
+// iNaturalist copy. Null when there's no original to be had.
+export const copyLibraryOriginal = async (
+  query: Query,
+  tempBase: string,
+): Promise<string | null> => {
+  if ( query.deviceUri ) {
+    const recorded = await copyDevicePhoto( query.deviceUri, tempBase );
+    if ( recorded ) return recorded;
+  }
+  const match = await findLibraryOriginal( query );
+  return match && match !== query.deviceUri
+    ? copyDevicePhoto( match, tempBase )
     : null;
 };
