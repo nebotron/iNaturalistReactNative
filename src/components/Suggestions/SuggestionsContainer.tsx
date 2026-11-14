@@ -280,7 +280,6 @@ const SuggestionsContainer = ( ) => {
   );
 
   const {
-    resetTimeout,
     suggestions,
     usingOfflineSuggestions,
     tryOfflineSuggestions,
@@ -358,14 +357,12 @@ const SuggestionsContainer = ( ) => {
     if ( previous.crop === selectedCrop ) return;
     // Only the online request is built from the cropped image.
     if ( !selectedPhotoUri || preferOfflineModel ) return;
-    resetTimeout( );
     createUploadParams( selectedPhotoUri, shouldUseEvidenceLocation ).then( params => {
       dispatch( { type: "RECROP_PHOTO", scoreImageParams: params } );
     } );
   }, [
     createUploadParams,
     preferOfflineModel,
-    resetTimeout,
     selectedCrop,
     selectedPhotoUri,
     shouldUseEvidenceLocation,
@@ -379,7 +376,6 @@ const SuggestionsContainer = ( ) => {
 
   const toggleLocation = useCallback( async ( { showLocation }: { showLocation: boolean } ) => {
     const newImageParams = await createUploadParams( selectedPhotoUri, showLocation );
-    resetTimeout( );
     dispatch( {
       type: "TOGGLE_LOCATION",
       shouldUseEvidenceLocation: showLocation,
@@ -393,7 +389,6 @@ const SuggestionsContainer = ( ) => {
     }
   }, [
     createUploadParams,
-    resetTimeout,
     selectedPhotoUri,
     preferOfflineModel,
   ] );
@@ -403,14 +398,11 @@ const SuggestionsContainer = ( ) => {
       return;
     }
     setPreferOfflineModel( nextUseOfflineModel );
-    // Switching to the online model is an explicit request for online
-    // suggestions, so give it the longer retry timeout
-    resetTimeout( { isRetry: !nextUseOfflineModel } );
     dispatch( {
       type: "SWITCH_SUGGESTIONS_MODEL",
       useOfflineModel: nextUseOfflineModel,
     } );
-  }, [resetTimeout, preferOfflineModel] );
+  }, [preferOfflineModel] );
 
   const hideLocationToggleButton = usingOfflineSuggestions
     || isLoading

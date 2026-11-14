@@ -25,8 +25,6 @@ const useSuggestions = (
     error: onlineSuggestionsError,
     onlineSuggestions,
     refetch: refetchOnlineSuggestions,
-    timedOut,
-    resetTimeout,
   } = useOnlineSuggestions( {
     onFetchError,
     onFetched,
@@ -41,8 +39,6 @@ const useSuggestions = (
     onlineSuggestionsUpdatedAt,
     onlineSuggestionsError,
     onlineSuggestions,
-    timedOut,
-    resetTimeout,
   };
 
   // 20240815 amanda - it's conceivable that we would want to use a cached image here eventually,

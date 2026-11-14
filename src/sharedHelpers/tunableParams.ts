@@ -43,7 +43,6 @@ export const TUNABLE_PARAMS = {
   topSuggestionScoreThreshold: def( "ai", 78, 0, 100 ),
   matchHighConfidence: def( "ai", 93, 0, 100 ),
   matchLikelyConfidence: def( "ai", 50, 0, 100 ),
-  onlineSuggestionsTimeoutSeconds: def( "ai", 5, 1, 60 ),
   subjectCropPadding: def( "ai", 0.1, 0, 1, false ),
   subjectCropFrameFraction: def( "ai", 0.8, 0.1, 1, false ),
 

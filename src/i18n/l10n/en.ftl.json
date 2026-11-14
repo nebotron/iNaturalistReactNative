@@ -1352,8 +1352,6 @@
   "Tunable-offlineMaxMapPins-description": "Maximum number of pins shown on the offline Explore map.",
   "Tunable-offlineMaxTileZoom": "Offline map max zoom",
   "Tunable-offlineMaxTileZoom-description": "Highest map zoom level downloaded for offline Explore.",
-  "Tunable-onlineSuggestionsTimeoutSeconds": "Online suggestions timeout (seconds)",
-  "Tunable-onlineSuggestionsTimeoutSeconds-description": "How long to wait for online ID suggestions before falling back to offline ones.",
   "TUNABLE-PARAMETERS": "TUNABLE PARAMETERS",
   "Tunable-parameters-restart-note": "Changes take effect after restarting the app. Values outside the allowed range are clamped.",
   "Tunable-placeSearchMaxSuggestions": "Place search suggestions",

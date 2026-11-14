@@ -51,8 +51,6 @@ export interface UseSuggestionsResult {
     results: UseSuggestionsOnlineSuggestion[];
     commonAncestor?: UseSuggestionsOnlineSuggestion;
   };
-  timedOut: boolean;
-  resetTimeout: ( options?: { isRetry?: boolean } ) => void;
 }
 
 type MaybeLatLng = { lat: number; lng: number } | { lat: undefined; lng: undefined };

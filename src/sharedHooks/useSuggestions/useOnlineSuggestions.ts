@@ -1,11 +1,8 @@
-import {
-  useNetInfo,
-} from "@react-native-community/netinfo";
 import scoreImage from "api/computerVision";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useEffect, useMemo, useRef,
 } from "react";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
@@ -15,24 +12,15 @@ import {
   onlineSuggestionsCacheKey,
   setCachedSuggestions,
 } from "sharedHelpers/suggestionsCache";
-import { getTunable } from "sharedHelpers/tunableParams";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
 } from "sharedHooks";
 import useStore from "stores/useStore";
 
-import { log } from "../../../react-native-logs.config";
 import { startOfflineExperimentInBackground } from "./suggestionComparisonExperiment";
 import type { ScoreImageParams, UseSuggestionsOnlineSuggestion } from "./types";
 import { predictOffline } from "./useOfflineSuggestions";
-
-const logger = log.extend( "useOnlineSuggestions" );
-
-// Keep the first request short so we fall back to offline suggestions quickly,
-// but if the user explicitly retries, allow more time to get online suggestions
-export const INITIAL_SCORE_IMAGE_TIMEOUT = getTunable( "onlineSuggestionsTimeoutSeconds" ) * 1000;
-export const RETRY_SCORE_IMAGE_TIMEOUT = INITIAL_SCORE_IMAGE_TIMEOUT * 2;
 
 const { useRealm } = RealmContext;
 
@@ -50,9 +38,7 @@ interface UseOnlineSuggestionsResponse {
     results: UseSuggestionsOnlineSuggestion[];
     common_ancestor?: UseSuggestionsOnlineSuggestion;
   };
-  timedOut: boolean;
   error: Error | null;
-  resetTimeout: ( options?: { isRetry?: boolean } ) => void;
   refetch: () => void;
 }
 
@@ -98,9 +84,6 @@ const useOnlineSuggestions = (
     shouldFetchOnlineSuggestions,
   } = options;
 
-  const [timedOut, setTimedOut] = useState( false );
-  const [timeoutMs, setTimeoutMs] = useState( INITIAL_SCORE_IMAGE_TIMEOUT );
-  const { isConnected } = useNetInfo( );
   const currentUser = useCurrentUser();
   // Use locale in case there is no user session
   const locale = i18n?.language ?? "en";
@@ -124,7 +107,6 @@ const useOnlineSuggestions = (
     data: fetchedOnlineSuggestions,
     dataUpdatedAt,
     refetch,
-    fetchStatus,
     error,
   } = useAuthenticatedQuery<OnlineSuggestionsQueryResponse>(
     queryKey,
@@ -185,43 +167,6 @@ const useOnlineSuggestions = (
 
   const onlineSuggestions = fetchedOnlineSuggestions ?? cachedOnlineSuggestions;
 
-  // Stop blocking the UI on online suggestions after a timeout so the offline
-  // suggestions are shown. We intentionally do NOT cancel the query: a slow
-  // request is left running so its results still replace the offline ones once
-  // they arrive instead of being abandoned (which left online IDs never
-  // loading on slow connections). We also only start the timer once the request
-  // is actually in flight, so preparing the image (resizing) doesn't eat into
-  // the timeout window.
-  useEffect( ( ) => {
-    if ( fetchStatus !== "fetching" ) {
-      return ( ) => { };
-    }
-    const timer = setTimeout( ( ) => {
-      if ( onlineSuggestions === undefined ) {
-        logger.info( `score_image soft_timeout ms=${timeoutMs}, showing offline` );
-        onFetchError( { isOnline: true } );
-        setTimedOut( true );
-      }
-    }, timeoutMs );
-
-    return ( ) => {
-      clearTimeout( timer );
-    };
-  }, [fetchStatus, onlineSuggestions, onFetchError, timeoutMs] );
-
-  const resetTimeout = useCallback( ( { isRetry = false }: { isRetry?: boolean } = {} ) => {
-    setTimedOut( false );
-    setTimeoutMs( isRetry
-      ? RETRY_SCORE_IMAGE_TIMEOUT
-      : INITIAL_SCORE_IMAGE_TIMEOUT );
-  }, [] );
-
-  useEffect( () => {
-    if ( isConnected === false ) {
-      setTimedOut( true );
-    }
-  }, [isConnected] );
-
   useEffect( ( ) => {
     if ( onlineSuggestions !== undefined ) {
       // we're already getting all this taxon information anytime we make this API
@@ -250,20 +195,10 @@ const useOnlineSuggestions = (
     }
   }, [onFetchError, onlineSuggestions, error, onFetched, realm] );
 
-  const queryObject = {
+  return {
     dataUpdatedAt,
     error,
     refetch,
-    timedOut,
-    resetTimeout,
-    fetchStatus,
-  };
-
-  // Always surface online suggestions once they exist. Even after a timeout we
-  // want a slow response to replace the offline suggestions when it lands,
-  // rather than being hidden permanently.
-  return {
-    ...queryObject,
     onlineSuggestions,
   };
 };

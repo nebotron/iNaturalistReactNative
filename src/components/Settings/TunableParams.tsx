@@ -62,10 +62,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-matchLikelyConfidence" ),
     t( "Tunable-matchLikelyConfidence-description" ),
   ],
-  onlineSuggestionsTimeoutSeconds: [
-    t( "Tunable-onlineSuggestionsTimeoutSeconds" ),
-    t( "Tunable-onlineSuggestionsTimeoutSeconds-description" ),
-  ],
   subjectCropPadding: [
     t( "Tunable-subjectCropPadding" ),
     t( "Tunable-subjectCropPadding-description" ),

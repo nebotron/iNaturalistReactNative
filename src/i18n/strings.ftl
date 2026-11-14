@@ -2280,10 +2280,6 @@ Tunable-offlineMaxMapPins-description = Maximum number of pins shown on the offl
 Tunable-offlineMaxTileZoom = Offline map max zoom
 # Description of a tunable parameter in settings
 Tunable-offlineMaxTileZoom-description = Highest map zoom level downloaded for offline Explore.
-# Label for a tunable parameter in settings
-Tunable-onlineSuggestionsTimeoutSeconds = Online suggestions timeout (seconds)
-# Description of a tunable parameter in settings
-Tunable-onlineSuggestionsTimeoutSeconds-description = How long to wait for online ID suggestions before falling back to offline ones.
 # Settings button and screen title for adjusting hard-coded app parameters
 TUNABLE-PARAMETERS = TUNABLE PARAMETERS
 # Note at the top of the tunable parameters settings screen
