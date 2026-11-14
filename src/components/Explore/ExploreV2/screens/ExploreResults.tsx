@@ -276,7 +276,11 @@ const ExploreResults = ( ) => {
     status: observationsStatus,
     totalBounds,
     totalResults,
-  } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
+  } = useInfiniteExploreScroll( {
+    params: queryParams,
+    // Only the observations view uses this search
+    enabled: canFetch && state.activeTab === OBSERVATIONS_TAB,
+  } );
 
   // Only the user's own local photos have a subject distance, so loaded results are
   // sorted on device and everyone else's come last
@@ -377,7 +381,8 @@ const ExploreResults = ( ) => {
 
   const speciesCount = useSpeciesCount(
     baseSearchParams,
-    { enabled: canFetch, keyPrefix: "exploreV2SpeciesCount" },
+    // Only shown in the species view's header
+    { enabled: canFetch && state.activeTab === SPECIES_TAB, keyPrefix: "exploreV2SpeciesCount" },
   );
 
   const exploreViews: Record<ExploreV2Tab, {

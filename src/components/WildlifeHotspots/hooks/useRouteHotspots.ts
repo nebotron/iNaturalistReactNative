@@ -159,6 +159,47 @@ function routeBbox( coords: RoutePoint[], paddingKm: number ) {
   };
 }
 
+// Bbox edges are rounded outward to 0.01° (about 1 km), so a slightly different
+// route asks iNaturalist the same question and is answered from the cache below
+function roundBboxOutward( bbox: ReturnType<typeof routeBbox> ) {
+  const round = ( v: number, fn: ( x: number ) => number ) => Number(
+    ( fn( v * 100 ) / 100 ).toFixed( 2 ),
+  );
+  return {
+    swlat: round( bbox.swlat, Math.floor ),
+    swlng: round( bbox.swlng, Math.floor ),
+    nelat: round( bbox.nelat, Math.ceil ),
+    nelng: round( bbox.nelng, Math.ceil ),
+  };
+}
+
+// Observation pages already fetched, keyed on the full request, so reopening
+// the Hotspots view, reordering stops, or changing a setting that only affects
+// clustering or ranking doesn't search iNaturalist again.
+const OBSERVATION_CACHE_TTL_MS = 15 * 60 * 1000;
+const OBSERVATION_CACHE_MAX_ENTRIES = 30;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const observationPageCache = new Map<string, { at: number; promise: Promise<any> }>();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function cachedSearchObservations( params: Record<string, unknown> ): Promise<any> {
+  const key = JSON.stringify( params );
+  const now = Date.now();
+  const hit = observationPageCache.get( key );
+  if ( hit && now - hit.at < OBSERVATION_CACHE_TTL_MS ) return hit.promise;
+  const promise = searchObservations( params );
+  observationPageCache.set( key, { at: now, promise } );
+  // A failed request must not be served from the cache
+  promise.catch( () => observationPageCache.delete( key ) );
+  // Map keeps insertion order, so the first key is the oldest
+  while ( observationPageCache.size > OBSERVATION_CACHE_MAX_ENTRIES ) {
+    const oldest = observationPageCache.keys().next().value;
+    if ( oldest === undefined ) break;
+    observationPageCache.delete( oldest );
+  }
+  return promise;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getObsCoords( obs: any ): { lat: number; lng: number } | null {
   const coords = obs?.geojson?.coordinates;
@@ -449,7 +490,7 @@ export function useRouteHotspots() {
 
         // 2. iNaturalist calls for the whole route bounding box, paginating until
         // we reach the requested total (each page is capped at 200 by the API)
-        const bbox = routeBbox( routePoints, bboxPaddingKm );
+        const bbox = roundBboxOutward( routeBbox( routePoints, bboxPaddingKm ) );
         const nonApiParamKeys = [
           "swlat", "swlng", "nelat", "nelng", "lat", "lng", "radius", "place_id",
           "per_page", "page",
@@ -458,7 +499,7 @@ export function useRouteHotspots() {
         const nonLocationParams = Object.fromEntries(
           Object.entries( filterParams ).filter( ( [key] ) => !nonApiParamKeys.includes( key ) ),
         );
-        const fetchPage = ( page: number ) => searchObservations( {
+        const fetchPage = ( page: number ) => cachedSearchObservations( {
           ...bbox,
           per_page: API_PAGE_SIZE,
           page,
