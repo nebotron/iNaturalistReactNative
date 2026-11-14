@@ -13,6 +13,7 @@ import React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import factory from "tests/factory";
 import { renderComponent } from "tests/helpers/render";
+import { savedSearch, setSavedSearches } from "tests/helpers/savedSearch";
 
 const mockGoBack = jest.fn( );
 const mockPopTo = jest.fn( );
@@ -141,6 +142,7 @@ beforeEach( ( ) => {
   useCurrentUser.mockReturnValue( CURRENT_USER );
   useIconicTaxa.mockReturnValue( iconicTaxaCollection( [BIRDS, PLANTS] ) );
   setExploreState( );
+  setSavedSearches( [] );
 } );
 
 describe( "AdvancedSearch screen", ( ) => {
@@ -527,6 +529,37 @@ describe( "AdvancedSearch screen", ( ) => {
 
       await pressSearch( );
       expect( committedFilters( ) ).toMatchObject( { months: [6] } );
+    } );
+
+    it( "blocks the search when the saved search it excludes was renamed", async ( ) => {
+      setSavedSearches( [{ ...savedSearch( ), name: "Back yard" }] );
+      setExploreState( { filters: { excludeSpeciesInSavedSearch: "Backyard" } } );
+      renderComponent( <AdvancedSearch /> );
+
+      expect( screen.getByTestId( "AdvancedSearch.excludeSavedSearchMissing" ) ).toBeVisible( );
+      expect( screen.getByTestId( "AdvancedSearch.searchButton" ) ).toBeDisabled( );
+
+      await actor.press( screen.getByLabelText( t( "Stop-excluding-saved-search" ) ) );
+
+      expect( screen.getByTestId( "AdvancedSearch.searchButton" ) ).not.toBeDisabled( );
+      await pressSearch( );
+      expect( committedFilters( ) ).toMatchObject( { excludeSpeciesInSavedSearch: null } );
+    } );
+  } );
+
+  describe( "excluding the species in a saved search", ( ) => {
+    it( "commits the saved search by name", async ( ) => {
+      setSavedSearches( [{ ...savedSearch( ), name: "Backyard" }] );
+      setExploreState( { filters: { excludeSpeciesInSavedSearch: "Backyard" } } );
+      renderComponent( <AdvancedSearch /> );
+
+      expect( screen.getByText( i18next.t( "Excluding-species-in-saved-search", {
+        name: "Backyard",
+      } ) ) ).toBeVisible( );
+      expect( screen.queryByTestId( "AdvancedSearch.excludeSavedSearchMissing" ) ).toBeNull( );
+
+      await pressSearch( );
+      expect( committedFilters( ) ).toMatchObject( { excludeSpeciesInSavedSearch: "Backyard" } );
     } );
   } );
 } );

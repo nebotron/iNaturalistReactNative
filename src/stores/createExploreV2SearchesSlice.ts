@@ -34,6 +34,16 @@ export type SavedSearch = {
 
 export type SavedSearchInput = Omit<SavedSearch, "savedAt" | "datesAsOf">;
 
+// Saved search names are unique ignoring case and surrounding space
+const normalizedName = ( name: string ) => name.trim( ).toLowerCase( );
+
+export const findSavedSearchByName = (
+  searches: SavedSearch[],
+  name: string,
+): SavedSearch | undefined => searches.find(
+  search => !!search.name && normalizedName( search.name ) === normalizedName( name ),
+);
+
 const today = ( ) => format( new Date( ), "yyyy-MM-dd" );
 
 export interface ExploreV2SearchesSlice {
@@ -41,6 +51,7 @@ export interface ExploreV2SearchesSlice {
     searches: SavedSearch[];
     saveSearch: ( _search: SavedSearchInput ) => void;
     updateSearch: ( _key: string, _search: ExploreV2SearchWithTab ) => void;
+    renameSearch: ( _key: string, _name: string ) => void;
     removeSearch: ( _key: string ) => void;
     clearSavedSearches: ( ) => void;
   };
@@ -68,6 +79,14 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
           ? {
             ...saved, ...search, key, datesAsOf: today( ),
           }
+          : saved ) ),
+      },
+    } ) ),
+    renameSearch: ( key, name ) => set( state => ( {
+      exploreSavedSearches: {
+        ...state.exploreSavedSearches,
+        searches: state.exploreSavedSearches.searches.map( saved => ( saved.key === key
+          ? { ...saved, name }
           : saved ) ),
       },
     } ) ),

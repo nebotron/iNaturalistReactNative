@@ -64,6 +64,7 @@ const filtersKey = ( filters: ExploreV2Filters ): string => {
       : "",
     user: String( filters.user?.id ?? "" ),
     unobservedByUser: String( filters.unobservedByUser?.id ?? "" ),
+    excludeSpeciesInSavedSearch: filters.excludeSpeciesInSavedSearch ?? "",
     project: String( filters.project?.id ?? "" ),
     taxonFilters: ( filters.taxonFilters || [] )
       .map( filter => `${filter.exclude

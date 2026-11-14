@@ -14,6 +14,7 @@ import {
 const mockOnSelect = jest.fn( );
 const mockOnDelete = jest.fn( );
 const mockOnSave = jest.fn( );
+const mockOnRename = jest.fn( );
 
 const savedSearch = ( id, name ) => ( {
   ...buildSavedSearch( { subject: taxonSubject( id ), savedAt: id } ),
@@ -26,6 +27,7 @@ const renderSection = currentSearch => renderComponent(
   <SavedSearches
     currentSearch={currentSearch}
     onDelete={mockOnDelete}
+    onRename={mockOnRename}
     onSave={mockOnSave}
     onSelect={mockOnSelect}
   />,
@@ -94,7 +96,9 @@ describe( "SavedSearchSheets", ( ) => {
         currentSearch={searchFields( search )}
         onCloseDelete={onCloseDelete}
         onCloseSave={jest.fn( )}
+        onCloseRename={jest.fn( )}
         searchToDelete={search}
+        searchToRename={null}
         showSaveSheet={false}
       />,
     );
@@ -102,5 +106,29 @@ describe( "SavedSearchSheets", ( ) => {
 
     expect( searches( ) ).toEqual( [] );
     expect( onCloseDelete ).toHaveBeenCalled( );
+  } );
+
+  it( "renames a search, keeping everything else", async ( ) => {
+    const search = savedSearch( 1, "Cup plants" );
+    setSavedSearches( [search] );
+    const actor = userEvent.setup( );
+
+    renderComponent(
+      <SavedSearchSheets
+        currentSearch={searchFields( search )}
+        onCloseDelete={jest.fn( )}
+        onCloseSave={jest.fn( )}
+        onCloseRename={jest.fn( )}
+        searchToDelete={null}
+        searchToRename={search}
+        showSaveSheet={false}
+      />,
+    );
+    const input = await screen.findByDisplayValue( "Cup plants" );
+    await actor.clear( input );
+    await actor.type( input, "Silphium" );
+    await actor.press( screen.getByText( "SAVE" ) );
+
+    expect( searches( ) ).toEqual( [{ ...search, name: "Silphium" }] );
   } );
 } );

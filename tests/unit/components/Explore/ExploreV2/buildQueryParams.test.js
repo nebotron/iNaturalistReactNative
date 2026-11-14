@@ -81,6 +81,19 @@ describe( "buildExploreV2QueryParams", ( ) => {
       expect( params.without_taxon_id ).toBe( "3,5" );
     } );
 
+    it( "excludes the species of a saved search", ( ) => {
+      const state = {
+        ...initialExploreV2State,
+        filters: {
+          ...initialExploreV2State.filters,
+          excludeSpeciesInSavedSearch: "Backyard",
+          taxonFilters: [{ taxon: { id: 3 }, exclude: true }],
+        },
+      };
+      const params = buildExploreV2QueryParams( state, undefined, 99, [3, 8] );
+      expect( params.without_taxon_id ).toBe( "3,8" );
+    } );
+
     it( "maps an unknown subject to iconic_taxa=[unknown]", ( ) => {
       const state = {
         ...initialExploreV2State,

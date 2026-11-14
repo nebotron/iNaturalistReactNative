@@ -1,7 +1,7 @@
 import { defaultExploreV2Filters } from "providers/ExploreV2Context";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import { SPECIES_SORT } from "sharedHelpers/speciesSort";
-import { subjectKey } from "stores/createExploreV2SearchesSlice";
+import { findSavedSearchByName, subjectKey } from "stores/createExploreV2SearchesSlice";
 import useStore, { zustandStorage } from "stores/useStore";
 import { savedSearch as search, taxonSubject } from "tests/helpers/savedSearch";
 
@@ -44,6 +44,21 @@ describe( "exploreSavedSearches", ( ) => {
     expect( saved( ).searches ).toHaveLength( 1 );
     expect( saved( ).searches[0] ).toMatchObject( { key, name: "Cup plants" } );
     expect( saved( ).searches[0].subject.taxon.id ).toEqual( 13 );
+  } );
+
+  it( "renames a search by key", ( ) => {
+    saved( ).saveSearch( { ...search( ), name: "Cup plants" } );
+    saved( ).renameSearch( saved( ).searches[0].key, "Silphium" );
+
+    expect( saved( ).searches[0].name ).toEqual( "Silphium" );
+  } );
+
+  it( "finds a search by name ignoring case and surrounding space", ( ) => {
+    saved( ).saveSearch( { ...search( ), name: "Cup plants" } );
+
+    expect( findSavedSearchByName( saved( ).searches, " cup PLANTS " )?.name )
+      .toEqual( "Cup plants" );
+    expect( findSavedSearchByName( saved( ).searches, "Cup" ) ).toBeUndefined( );
   } );
 
   it( "removes a search by key", ( ) => {

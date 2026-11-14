@@ -13,6 +13,8 @@ import {
   SPECIES_TAB,
 } from "appConstants/tabs";
 import CameraStatsView from "components/Explore/CameraStatsView";
+import ExcludedSpeciesError
+  from "components/Explore/ExploreV2/components/ExcludedSpeciesError";
 import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
@@ -21,10 +23,10 @@ import GridOverlaysSheet
   from "components/Explore/ExploreV2/components/GridOverlaysSheet";
 import type { NearbyCoords }
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import buildExploreV2QueryParams, { unobservedByUserId }
+import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import useObservedSpeciesSync
-  from "components/Explore/ExploreV2/hooks/useObservedSpeciesSync";
+import useExcludedSpecies
+  from "components/Explore/ExploreV2/hooks/useExcludedSpecies";
 import ExploreV2IdentificationsView
   from "components/Explore/ExploreV2/screens/ExploreV2IdentificationsView";
 import ExploreV2SpeciesView
@@ -221,25 +223,27 @@ const ExploreResults = ( ) => {
 
   const needsPermission = isNearby && hasPermissions === false && !hasBlockedPermissions;
   const nearbyResolved = !isNearby || nearbyCoords !== undefined;
-  // "Unobserved by me" can't be applied until the user's observed species are
-  // synced (or the previous list is read), and nothing is fetched until then
-  const unobservedUserId = unobservedByUserId( state );
-  const observedSpeciesIds = useObservedSpeciesSync(
-    unobservedUserId,
-    appliedSearchCount,
-    isConnected === false,
-  );
-  const observedSpeciesReady = !unobservedUserId || !!observedSpeciesIds;
-  const canFetch = !needsPermission && nearbyResolved && observedSpeciesReady;
+  // Excluded species ("Unobserved by me", or those in a saved search) can't be
+  // applied until they're resolved, and nothing is fetched until then
+  const excludedSpecies = useExcludedSpecies( state, {
+    searchCount: appliedSearchCount,
+    offline: isConnected === false,
+    nearbyCoords,
+    currentUserId,
+    enabled: nearbyResolved,
+  } );
+  const excludedSpeciesIds = excludedSpecies.ids;
+  const excludedSpeciesReady = !excludedSpecies.active || !!excludedSpeciesIds;
+  const canFetch = !needsPermission && nearbyResolved && excludedSpeciesReady;
 
   const queryParams = useMemo(
     ( ) => buildExploreV2QueryParams(
       state,
       nearbyCoords,
       currentUserId,
-      observedSpeciesIds,
+      excludedSpeciesIds,
     ),
-    [state, nearbyCoords, currentUserId, observedSpeciesIds],
+    [state, nearbyCoords, currentUserId, excludedSpeciesIds],
   );
 
   const offlineResults = useOfflineExploreResults( queryParams );
@@ -619,7 +623,11 @@ const ExploreResults = ( ) => {
 
   const renderContent = ( ) => {
     // Before anything else, offline results included: they're filtered by it too
-    if ( !observedSpeciesReady ) {
+    // A saved search it excludes was renamed or deleted, or couldn't be loaded
+    if ( excludedSpecies.error ) {
+      return <ExcludedSpeciesError error={excludedSpecies.error} />;
+    }
+    if ( !excludedSpeciesReady ) {
       return (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator testID="ExploreResults.syncingObservedSpecies" />

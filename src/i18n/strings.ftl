@@ -298,6 +298,8 @@ Change-hotspot-settings = Change hotspot settings
 # Accessibility label for a button that allows users to sort observations
 Change-observations-sort-order = Change observations sort order
 Change-project = Change project
+# Accessibility label for the row in Advanced Search naming the saved search whose species are excluded; opens a picker to choose another
+Change-saved-search-to-exclude = Change saved search to exclude
 # Accessibility label for a button that allows users to sort taxa
 Change-species-sort-order = Change species sort order
 # Label for a button that changes a selected start date
@@ -663,6 +665,10 @@ EDIT-LOCATION-PERMISSIONS = EDIT LOCATION PERMISSIONS
 Edit-Observation = Edit Observation
 # Accessibility label for the collapsed one-line summary of route stops, which expands them for editing
 Edit-route-stops = Edit route stops
+# Button on Explore results when the search can't run, opening Advanced Search to fix it
+EDIT-SEARCH = EDIT SEARCH
+# Accessibility label for a button opening Advanced Search to fix a search that can't run
+Edit-search = Edit search
 Edit-your-profile-change-your-settings = Edit your profile, change your notifications settings, and manage all other parts of your account.
 # Accessibility hint for button that edits an observation's taxon
 Edits-this-observations-taxon = Edits this observation's taxon
@@ -715,7 +721,21 @@ EVIDENCE-TYPE = EVIDENCE TYPE
 Exact-Date = Exact Date
 EXACT-DATE = EXACT DATE
 except = except
+# Button and sheet heading in Advanced Search for leaving out every species another saved search finds
+EXCLUDE-SPECIES-IN-A-SAVED-SEARCH = EXCLUDE SPECIES IN A SAVED SEARCH
+# Accessibility label for the button that picks a saved search whose species are left out of this search
+Exclude-species-in-a-saved-search = Exclude species in a saved search
 Exclude-taxon = Exclude
+# Error when saved searches exclude each other's species in a loop, so none can be worked out. name is a saved search's name
+Excluded-saved-search-excludes-itself = The saved search “{ $name }” ends up excluding its own species. Choose a different saved search to exclude.
+# Error when the saved search whose species are excluded no longer exists, e.g. because it was renamed or deleted. name is the name the search refers to
+Excluded-saved-search-not-found = This search excludes species in the saved search “{ $name }”, but there’s no saved search with that name. It may have been renamed or deleted. Edit the search to choose another or remove it.
+# Error on Explore when offline and the search excludes species found by a saved search, which needs the internet. name is the saved search's name
+Excluded-saved-search-offline = The species in the saved search “{ $name }” can’t be loaded offline, so this search can’t exclude them. Connect to the internet and try again.
+# Error on Explore when the species a search excludes couldn't be loaded
+Excluded-species-could-not-be-loaded = The species this search excludes couldn’t be loaded. Try again later or edit the search.
+# Advanced Search row naming the saved search whose species are left out. name is the saved search's name
+Excluding-species-in-saved-search = Excluding species in “{ $name }”
 EXPAND-MAP = EXPAND MAP
 # Onboarding carousel second screen description
 Experts-help-verify-and-improve-IDs = Experts help verify and improve IDs
@@ -1684,6 +1704,8 @@ Removes-this-observations-taxon = Removes this observation's taxon
 Removes-your-vote-of-agreement = Removes your vote of agreement
 # Hint for a button that removes a vote of disagreement
 Removes-your-vote-of-disagreement = Removes your vote of disagreement
+# Button and sheet heading for renaming a saved search
+Rename-saved-filter = Rename saved filter
 # Accessibility hint for a camera or lens that can be renamed
 Renames-this-camera-or-lens = Renames this camera or lens.
 # Accessibility label for the drag handle used to reorder a stop on a multi-stop route
@@ -1944,6 +1966,8 @@ Still-loading = Still loading...
 Still-need-help = Still need help? You can file a support request here.
 # Accessibility label for a button that stops audio playback
 Stop--audio = Stop
+# Accessibility label for removing the saved search whose species are excluded
+Stop-excluding-saved-search = Stop excluding species in this saved search
 # Button that stops Audio ID listening to the microphone
 STOP-LISTENING = STOP LISTENING
 # Noun label for an unnamed waypoint on a multi-stop route, followed by a number, e.g. "Stop 2"

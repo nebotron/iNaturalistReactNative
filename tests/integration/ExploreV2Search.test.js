@@ -6,7 +6,9 @@ import {
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
+import isEqual from "lodash/isEqual";
 import { syncUserObservations } from "sharedHelpers/userObservationsCache";
+import useStore from "stores/useStore";
 import factory, { makeResponse } from "tests/factory";
 import {
   addTaxonFilter,
@@ -19,6 +21,7 @@ import {
 } from "tests/helpers/exploreV2";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
+import { savedSearch, setSavedSearches } from "tests/helpers/savedSearch";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
@@ -169,6 +172,55 @@ describe( "searching from Advanced Search", ( ) => {
         expect( exploreSearchCalls( ).at( -1 )?.without_taxon_id )
           .toEqual( expect.stringContaining( String( mockOtherTaxon.id ) ) );
       } );
+    } );
+  } );
+
+  describe( "excluding the species in a saved search", ( ) => {
+    // The species fetch asks for just enough to find each taxon's species
+    const isSpeciesFetch = params => isEqual( params?.fields, {
+      taxon: { id: true, rank_level: true, ancestor_ids: true },
+    } );
+
+    beforeEach( ( ) => {
+      inatjs.observations.speciesCounts.mockClear( );
+      setSavedSearches( [{
+        ...savedSearch( { subject: { type: "taxon", taxon: { id: 47126, name: "Plantae" } } } ),
+        key: "saved-backyard",
+        name: "Backyard",
+      }] );
+    } );
+
+    afterEach( ( ) => setSavedSearches( [] ) );
+
+    it( "leaves out the saved search's species, and fails clearly once renamed", async ( ) => {
+      renderApp( );
+      await navigateToExplore( );
+      await openAdvancedSearch( );
+
+      await actor.press( screen.getByLabelText( "Exclude species in a saved search" ) );
+      // The saved search list shows it too; the sheet comes last
+      await actor.press( ( await screen.findAllByText( "Backyard" ) ).at( -1 ) );
+      await actor.press( screen.getByText( "CONFIRM" ) );
+      expect( await screen.findByText( "Excluding species in “Backyard”" ) ).toBeVisible( );
+      await submitAdvancedSearch( );
+
+      await waitFor( ( ) => {
+        expect( lastObservationsSearchParams( ) ).toMatchObject( {
+          without_taxon_id: String( mockTaxon.id ),
+        } );
+      } );
+      const speciesFetch = inatjs.observations.speciesCounts.mock.calls
+        .map( call => call[0] )
+        .find( isSpeciesFetch );
+      expect( speciesFetch ).toMatchObject( { taxon_id: 47126 } );
+
+      setSavedSearches( [{
+        ...useStore.getState( ).exploreSavedSearches.searches[0],
+        name: "Back yard",
+      }] );
+
+      expect( await screen.findByTestId( "ExploreResults.excludedSpeciesError" ) ).toBeVisible( );
+      expect( screen.getByText( /there’s no saved search with that name/ ) ).toBeVisible( );
     } );
   } );
 

@@ -117,6 +117,10 @@ export interface ExploreV2Filters {
   // User / project, in ExploreV2 parlance we always consider taxon to be the "subject"
   user?: ApiUser | null;
   unobservedByUser?: ApiUser | null;
+  // Name of a saved search whose species are left out of this one. Kept by name rather
+  // than copied, so editing that saved search changes this one too; if it's renamed or
+  // deleted the search fails with an error rather than quietly dropping the exclusion.
+  excludeSpeciesInSavedSearch?: string | null;
   project?: ApiProjectSummary | null;
   // Taxa searched for beyond the subject taxon, and excluded taxa
   taxonFilters?: ExploreTaxonFilter[] | null;

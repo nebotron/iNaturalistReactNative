@@ -28,13 +28,14 @@ import {
   draftFromV2State,
   searchTaxonFilters,
 } from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
-import buildExploreV2QueryParams, { unobservedByUserId }
+import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
+import { resolveExcludedSpeciesIds } from "components/Explore/ExploreV2/helpers/excludedSpecies";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import useApplySavedSearch from "components/Explore/ExploreV2/hooks/useApplySavedSearch";
+import { fetchNearbyCoords } from "components/Explore/ExploreV2/hooks/useExcludedSpecies";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
-import { syncResearchGradeSpeciesIds } from "components/Explore/helpers/withoutObservedSpecies";
 import ExploreLocationSearchModal from "components/Explore/Modals/ExploreLocationSearchModal";
 import ExploreProjectSearchModal from "components/Explore/Modals/ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "components/Explore/Modals/ExploreTaxonSearchModal";
@@ -79,13 +80,14 @@ import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
 import useStoredLayout from "sharedHooks/useStoredLayout";
 import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
+import { findSavedSearchByName } from "stores/createExploreV2SearchesSlice";
 import useStore from "stores/useStore";
 
 // Please don't change these to aliased paths or the e2e mocks will not get used
 import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLocation";
 import { getLatestTrackedLocation } from "../../../../sharedHelpers/locationHistoryTracker";
 
-type SheetName = "hrank" | "lrank" | "photoLicense";
+type SheetName = "hrank" | "lrank" | "photoLicense" | "excludeSavedSearch";
 
 type PickerKind = "taxon" | "user" | "project" | "location";
 
@@ -119,9 +121,11 @@ const AdvancedSearch = ( ) => {
 
   const { layout: observationsLayout } = useStoredLayout( "exploreV2ObservationsLayout" );
   const gridOverlays = useStore( state => state.layout.exploreGridOverlays );
+  const savedSearches = useStore( state => state.exploreSavedSearches.searches );
   const [pendingExit, setPendingExit] = useState( false );
   const [showSaveSheet, setShowSaveSheet] = useState( false );
   const [searchToDelete, setSearchToDelete] = useState<SavedSearch | null>( null );
+  const [searchToRename, setSearchToRename] = useState<SavedSearch | null>( null );
   const currentSearch = {
     subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
   };
@@ -168,6 +172,11 @@ const AdvancedSearch = ( ) => {
     },
   } );
 
+  const updateExcludeSpeciesInSavedSearch = ( name: string | null ) => dispatch( {
+    type: "SET_EXCLUDE_SPECIES_IN_SAVED_SEARCH",
+    name,
+  } );
+
   const updateProject = ( selectedProject: ApiProjectSummary | null ) => dispatch( {
     type: "SET_PROJECT",
     project: selectedProject,
@@ -203,12 +212,14 @@ const AdvancedSearch = ( ) => {
       nearbyCoords = { lat: coords.latitude, lng: coords.longitude };
     }
     const search = { ...v2State, ...currentSearch };
-    const unobservedUserId = unobservedByUserId( search );
-    const observedSpeciesIds = unobservedUserId
-      ? await syncResearchGradeSpeciesIds( unobservedUserId, { api_token: await getJWT( ) } )
-      : undefined;
+    const excludedSpeciesIds = await resolveExcludedSpeciesIds( search, {
+      savedSearches,
+      apiToken: await getJWT( ),
+      currentUserId: currentUser?.id,
+      getNearbyCoords: async ( ) => nearbyCoords ?? fetchNearbyCoords( ),
+    } );
     return {
-      ...buildExploreV2QueryParams( search, nearbyCoords, currentUser?.id, observedSpeciesIds ),
+      ...buildExploreV2QueryParams( search, nearbyCoords, currentUser?.id, excludedSpeciesIds ),
     };
   };
 
@@ -240,9 +251,19 @@ const AdvancedSearch = ( ) => {
     researchGrade,
     reviewedFilter,
     unobservedByUser,
+    excludeSpeciesInSavedSearch,
     user,
     wildStatus,
   } = filters;
+
+  // Saved searches are referenced by name, so only named ones can be picked
+  const namedSavedSearches = savedSearches.filter( saved => !!saved.name?.trim( ) );
+  const excludedSavedSearchMissing = !!excludeSpeciesInSavedSearch
+    && !findSavedSearchByName( savedSearches, excludeSpeciesInSavedSearch );
+  const excludeSavedSearchValues = Object.fromEntries( namedSavedSearches.map( saved => [
+    saved.key,
+    { label: saved.name as string, value: saved.name as string },
+  ] ) );
 
   const taxonFilters = searchTaxonFilters( subject, filters );
   const taxonUnknown = subject?.type === "unknown";
@@ -326,7 +347,8 @@ const AdvancedSearch = ( ) => {
   // silently run an unfiltered search; block Search until a month is selected.
   const noMonthsSelected = dateObserved === DATE_OBSERVED.MONTHS
     && ( months || [] ).length === 0;
-  const hasError = observedEndBeforeStart || uploadedEndBeforeStart || noMonthsSelected;
+  const hasError = observedEndBeforeStart || uploadedEndBeforeStart || noMonthsSelected
+    || excludedSavedSearchMissing;
 
   return (
     <SharedStackViewWrapper testID="AdvancedSearch">
@@ -342,6 +364,7 @@ const AdvancedSearch = ( ) => {
         <SavedSearches
           currentSearch={currentSavedSearch}
           onDelete={setSearchToDelete}
+          onRename={setSearchToRename}
           onSave={( ) => setShowSaveSheet( true )}
           onSelect={applySavedSearch}
         />
@@ -391,6 +414,43 @@ const AdvancedSearch = ( ) => {
               />
             </View>
           )}
+          <View className="px-4 mt-5" testID="AdvancedSearch.excludeSavedSearch">
+            {excludeSpeciesInSavedSearch
+              ? (
+                <>
+                  <SelectedFilterRow
+                    accessibilityLabel={t( "Change-saved-search-to-exclude" )}
+                    onEdit={() => setOpenSheet( "excludeSavedSearch" )}
+                    onRemove={() => updateExcludeSpeciesInSavedSearch( null )}
+                    removeAccessibilityLabel={t( "Stop-excluding-saved-search" )}
+                  >
+                    <Body3 className="flex-1">
+                      {t( "Excluding-species-in-saved-search", {
+                        name: excludeSpeciesInSavedSearch,
+                      } )}
+                    </Body3>
+                  </SelectedFilterRow>
+                  {excludedSavedSearchMissing && (
+                    <Body3
+                      className="mt-2 text-warningRed"
+                      testID="AdvancedSearch.excludeSavedSearchMissing"
+                    >
+                      {t( "Excluded-saved-search-not-found", {
+                        name: excludeSpeciesInSavedSearch,
+                      } )}
+                    </Body3>
+                  )}
+                </>
+              )
+              : namedSavedSearches.length > 0 && (
+                <Button
+                  level="neutral"
+                  text={t( "EXCLUDE-SPECIES-IN-A-SAVED-SEARCH" )}
+                  onPress={() => setOpenSheet( "excludeSavedSearch" )}
+                  accessibilityLabel={t( "Exclude-species-in-a-saved-search" )}
+                />
+              )}
+          </View>
         </View>
         <View className="px-4 pb-4">
           {/* Location Section */}
@@ -747,6 +807,18 @@ const AdvancedSearch = ( ) => {
           selectedValue={photoLicense}
         />
       )}
+      {openSheet === "excludeSavedSearch" && (
+        <RadioButtonSheet
+          headerText={t( "EXCLUDE-SPECIES-IN-A-SAVED-SEARCH" )}
+          confirm={( name: string ) => {
+            updateExcludeSpeciesInSavedSearch( name );
+            closeSheet();
+          }}
+          onPressClose={closeSheet}
+          radioValues={excludeSavedSearchValues}
+          selectedValue={excludeSpeciesInSavedSearch ?? ""}
+        />
+      )}
       {openPicker === "taxon" && (
         <ExploreTaxonSearchModal
           showModal
@@ -788,7 +860,9 @@ const AdvancedSearch = ( ) => {
         currentSearch={currentSavedSearch}
         onCloseDelete={( ) => setSearchToDelete( null )}
         onCloseSave={( ) => setShowSaveSheet( false )}
+        onCloseRename={( ) => setSearchToRename( null )}
         searchToDelete={searchToDelete}
+        searchToRename={searchToRename}
         showSaveSheet={showSaveSheet}
       />
       {pendingExit && (

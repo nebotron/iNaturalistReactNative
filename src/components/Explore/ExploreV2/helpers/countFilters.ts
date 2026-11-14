@@ -5,6 +5,7 @@ const countedDefaults = {
   ...defaultExploreV2Filters,
   user: null,
   unobservedByUser: null,
+  excludeSpeciesInSavedSearch: null,
   project: null,
   taxonFilters: null,
   evidenceTypes: null,

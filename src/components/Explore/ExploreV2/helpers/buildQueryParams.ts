@@ -44,22 +44,30 @@ export interface NearbyCoords {
   lng: number;
 }
 
+type SubjectAndFilters = Pick<ExploreV2State, "subject" | "filters">;
+
 // Whose observed species "Unobserved by me" hides, if it's on
-export const unobservedByUserId = ( state: ExploreV2State ): number | undefined => (
+export const unobservedByUserId = ( state: SubjectAndFilters ): number | undefined => (
   state.subject?.type === "unobserved"
     ? state.subject.user.id
     : state.filters.unobservedByUser?.id
 ) ?? undefined;
+
+// Whether the search leaves out a list of species: those observed by a user
+// ("Unobserved by me") and/or those found by a saved search. See excludedSpecies.
+export const excludesSpecies = ( state: SubjectAndFilters ): boolean => (
+  !!unobservedByUserId( state ) || !!state.filters.excludeSpeciesInSavedSearch
+);
 
 const buildExploreV2QueryParams = (
   state: ExploreV2State,
   nearbyCoords?: NearbyCoords,
   // The signed-in user's id, needed by the reviewed filter (viewer_id param).
   currentUserId?: number | null,
-  // Species the unobserved-by user has research-grade observations of, freshly
-  // synced (see useObservedSpeciesSync). Callers mustn't fetch with the
-  // unobserved filter on until they have these.
-  observedSpeciesIds?: number[],
+  // Species the search leaves out (see excludesSpecies and excludedSpecies),
+  // freshly resolved. Callers mustn't fetch while excludesSpecies is true until
+  // they have these.
+  excludedSpeciesIds?: number[],
 ): ExploreV2QueryParams => {
   const params: ExploreV2QueryParams = {
     per_page: PER_PAGE,
@@ -130,13 +138,13 @@ const buildExploreV2QueryParams = (
     delete paramsWithFilters.verifiable;
   }
 
-  // Applied locally from research-grade species rather than by the API's
-  // filter; see withoutObservedSpecies
-  if ( paramsWithFilters.unobserved_by_user_id ) {
-    delete paramsWithFilters.unobserved_by_user_id;
+  // Applied as a list of species rather than by the API's unobserved_by_user_id
+  // filter; see withoutObservedSpecies and excludedSpecies
+  delete paramsWithFilters.unobserved_by_user_id;
+  if ( excludesSpecies( state ) ) {
     const withoutTaxonId = withoutObservedSpecies(
       paramsWithFilters.without_taxon_id,
-      observedSpeciesIds ?? [],
+      excludedSpeciesIds ?? [],
     );
     if ( withoutTaxonId !== undefined ) paramsWithFilters.without_taxon_id = withoutTaxonId;
   }

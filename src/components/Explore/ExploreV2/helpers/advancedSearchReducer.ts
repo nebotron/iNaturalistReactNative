@@ -93,6 +93,7 @@ export type AdvancedSearchAction =
   | { type: "SET_LOCATION_WORLDWIDE" }
   | { type: "SET_USER"; user: ApiUser | null }
   | { type: "SET_UNOBSERVED_BY_USER"; user: ApiUser | null }
+  | { type: "SET_EXCLUDE_SPECIES_IN_SAVED_SEARCH"; name: string | null }
   | { type: "SET_PROJECT"; project: ApiProjectSummary | null }
   | { type: "TOGGLE_RESEARCH_GRADE" }
   | { type: "TOGGLE_NEEDS_ID" }
@@ -168,6 +169,8 @@ export const advancedSearchReducer = (
       return withFilters( draft, { user: action.user } );
     case "SET_UNOBSERVED_BY_USER":
       return withFilters( draft, { unobservedByUser: action.user } );
+    case "SET_EXCLUDE_SPECIES_IN_SAVED_SEARCH":
+      return withFilters( draft, { excludeSpeciesInSavedSearch: action.name } );
     case "SET_PROJECT":
       return withFilters( draft, { project: action.project } );
     case "TOGGLE_RESEARCH_GRADE":

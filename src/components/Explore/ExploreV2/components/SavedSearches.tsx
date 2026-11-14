@@ -18,6 +18,7 @@ import React from "react";
 import { Alert } from "react-native";
 import useTranslation from "sharedHooks/useTranslation";
 import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
+import { findSavedSearchByName } from "stores/createExploreV2SearchesSlice";
 import useStore from "stores/useStore";
 
 type T = ReturnType<typeof useTranslation>["t"];
@@ -36,31 +37,58 @@ interface SheetsProps {
   currentSearch: ExploreV2SearchWithTab;
   onCloseDelete: ( ) => void;
   onCloseSave: ( ) => void;
+  onCloseRename: ( ) => void;
   searchToDelete: SavedSearch | null;
+  searchToRename: SavedSearch | null;
   showSaveSheet: boolean;
 }
 
 // Rendered outside the screen's ScrollView so the sheets overlay the screen
 export const SavedSearchSheets = ( {
-  currentSearch, onCloseDelete, onCloseSave, searchToDelete, showSaveSheet,
+  currentSearch,
+  onCloseDelete,
+  onCloseRename,
+  onCloseSave,
+  searchToDelete,
+  searchToRename,
+  showSaveSheet,
 }: SheetsProps ) => {
   const { t } = useTranslation( );
   const searches = useStore( state => state.exploreSavedSearches.searches );
   const saveSearch = useStore( state => state.exploreSavedSearches.saveSearch );
   const removeSearch = useStore( state => state.exploreSavedSearches.removeSearch );
+  const renameSearch = useStore( state => state.exploreSavedSearches.renameSearch );
 
-  const saveCurrentSearch = ( name: string ) => {
-    const trimmedName = name.trim( );
-    if ( !trimmedName ) { return false; }
-    const lowerName = trimmedName.toLowerCase( );
-    if ( searches.some( search => search.name?.trim( ).toLowerCase( ) === lowerName ) ) {
+  // A usable name, or null after explaining why it isn't. The search being
+  // renamed may keep its own name in a different case.
+  const validName = ( name: string | undefined, ownKey?: string ): string | null => {
+    const trimmedName = name?.trim( );
+    if ( !trimmedName ) { return null; }
+    const existing = findSavedSearchByName( searches, trimmedName );
+    if ( existing && existing.key !== ownKey ) {
       Alert.alert(
         t( "Saved-filter-already-exists-title" ),
         t( "Saved-filter-already-exists-description" ),
       );
-      return false;
+      return null;
     }
+    return trimmedName;
+  };
+
+  const saveCurrentSearch = ( name: string | undefined ) => {
+    const trimmedName = validName( name );
+    if ( !trimmedName ) { return false; }
     saveSearch( { ...currentSearch, key: `saved-${Date.now( )}`, name: trimmedName } );
+    return true;
+  };
+
+  // Searches that exclude this one's species keep the old name, and show an error until
+  // they're pointed at it again
+  const renameSavedSearch = ( name: string | undefined ) => {
+    if ( !searchToRename ) { return false; }
+    const trimmedName = validName( name, searchToRename.key );
+    if ( !trimmedName ) { return false; }
+    renameSearch( searchToRename.key, trimmedName );
     return true;
   };
 
@@ -73,6 +101,18 @@ export const SavedSearchSheets = ( {
           headerText={t( "Save-current-filters" )}
           multiline={false}
           onPressClose={onCloseSave}
+          placeholder={t( "Saved-filter-name-placeholder" )}
+          maxLength={100}
+        />
+      )}
+      {searchToRename && (
+        <TextInputSheet
+          buttonText={t( "SAVE" )}
+          confirm={renameSavedSearch}
+          headerText={t( "Rename-saved-filter" )}
+          initialInput={searchToRename.name ?? ""}
+          multiline={false}
+          onPressClose={onCloseRename}
           placeholder={t( "Saved-filter-name-placeholder" )}
           maxLength={100}
         />
@@ -99,12 +139,13 @@ export const SavedSearchSheets = ( {
 interface Props {
   currentSearch: ExploreV2SearchWithTab;
   onDelete: ( search: SavedSearch ) => void;
+  onRename: ( search: SavedSearch ) => void;
   onSave: ( ) => void;
   onSelect: ( search: SavedSearch ) => void;
 }
 
 const SavedSearches = ( {
-  currentSearch, onDelete, onSave, onSelect,
+  currentSearch, onDelete, onRename, onSave, onSelect,
 }: Props ) => {
   const { t } = useTranslation( );
   const searches = useStore( state => state.exploreSavedSearches.searches );
@@ -143,6 +184,13 @@ const SavedSearches = ( {
               >
                 <Body1>{searchName( search, t )}</Body1>
               </Pressable>
+              <INatIconButton
+                icon="label-outline"
+                onPress={( ) => onRename( search )}
+                size={20}
+                accessibilityLabel={t( "Rename-saved-filter" )}
+                testID={`SavedSearches.rename.${search.key}`}
+              />
               <INatIconButton
                 icon="pencil-outline"
                 onPress={( ) => updateSearch( search.key, currentSearch )}
