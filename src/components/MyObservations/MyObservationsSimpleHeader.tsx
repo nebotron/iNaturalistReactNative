@@ -1,4 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   HeaderUser,
   Heading3,
@@ -16,7 +17,10 @@ import React from "react";
 import { Alert } from "react-native";
 import Observation from "realmModels/Observation";
 import type { UserPojo } from "realmModels/User";
-import { hasCachedOnlineSuggestions } from "sharedHelpers/prefetchObservationSuggestions";
+import {
+  hasCachedOnlineSuggestions,
+  restartFailedOnlineSuggestions,
+} from "sharedHelpers/prefetchObservationSuggestions";
 import { useTranslation } from "sharedHooks";
 import {
   MANUAL_SYNC_IN_PROGRESS,
@@ -54,6 +58,7 @@ const MyObservationsSimpleHeader = ( {
     MyObservationsStackScreenProps<"MyObservationsResults">["navigation"]
   >( );
   const realm = useRealm( );
+  const queryClient = useQueryClient( );
   const { state: myObsState } = useMyObservations( );
   const searchActive = myObsState.searchedTaxon !== null;
   const setObservations = useStore( state => state.setObservations );
@@ -84,6 +89,8 @@ const MyObservationsSimpleHeader = ( {
     // Open an observation whose online suggestions are already cached first,
     // so the flow starts on a screen that's ready instead of on a network wait.
     const observations = Array.from( unknownUnsyncedObs );
+    // A new session is a fresh chance for online IDs that gave up earlier
+    restartFailedOnlineSuggestions( queryClient, observations, realm );
     const firstCachedIndex = observations.findIndex(
       observation => hasCachedOnlineSuggestions( observation, realm ),
     );

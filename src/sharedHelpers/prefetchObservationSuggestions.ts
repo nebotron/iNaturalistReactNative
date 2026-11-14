@@ -7,7 +7,9 @@ import type Realm from "realm";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import type { RealmObservationPojo } from "realmModels/types";
 import User from "realmModels/User";
-import { createRequestTimeoutSignal } from "sharedHelpers/logging";
+import {
+  createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
+} from "sharedHelpers/logging";
 import {
   getCachedSuggestions,
   offlineSuggestionsCacheKey,
@@ -19,6 +21,7 @@ import type { OfflineSuggestionsResponse } from "sharedHooks/useSuggestions/useO
 import { predictOffline } from "sharedHooks/useSuggestions/useOfflineSuggestions";
 import type {
   OnlineSuggestionsApiResponse,
+  OnlineSuggestionsQueryResponse,
 } from "sharedHooks/useSuggestions/useOnlineSuggestions";
 import {
   shimApiResponseForCommonAncestor,
@@ -121,13 +124,23 @@ const prefetchOnlineSuggestions = async (
   }
   const userLoggedIn = await isLoggedIn( );
   const authQueryKey = [...queryKey, true, userLoggedIn];
+  let attempt = 0;
 
+  // React Query shares one request per key, so a prefetch that lands while the
+  // Suggestions screen (or another prefetch) is scoring this photo joins that
+  // request instead of sending a second one.
   await queryClient.prefetchQuery( {
     // The key deliberately mirrors useOnlineSuggestions so the prefetch shares
     // its cache entry; the extra queryFn values are inputs, not cache identity.
     // eslint-disable-next-line @tanstack/query/exhaustive-deps
     queryKey: authQueryKey,
     queryFn: async ( ) => {
+      // The screen may have scored this photo while the image was resizing
+      const cached = getCachedSuggestions<OnlineSuggestionsQueryResponse>( onlineKey );
+      if ( cached ) {
+        return cached;
+      }
+      attempt += 1;
       const apiToken = await getJWT( true );
       // Without a deadline a stalled prefetch holds its connection forever,
       // and the request the user is actually waiting on queues behind it.
@@ -140,7 +153,7 @@ const prefetchOnlineSuggestions = async (
             ...( !hasCurrentUser && { locale } ),
           },
           { api_token: apiToken, signal },
-          { source: "prefetch" },
+          { source: "prefetch", attempt },
         ) as OnlineSuggestionsApiResponse;
       } finally {
         clear( );
@@ -150,9 +163,15 @@ const prefetchOnlineSuggestions = async (
       setCachedSuggestions( onlineKey, shimmed );
       return shimmed;
     },
-    // Nothing is on screen waiting for this, and a retry would only take a
-    // slot from the observation the user is looking at.
-    retry: false,
+    // Same retry policy as useAuthenticatedQuery, so the Suggestions screen
+    // gets normal retries when it joins a prefetch that is still running.
+    retry: ( failureCount, error ) => reactQueryRetry( failureCount, error, {
+      queryKey: authQueryKey,
+    } ),
+    retryDelay: handleRetryDelay,
+    // A result already in memory is final; without this a prefetch arriving
+    // just after the screen's own request succeeded would send it again.
+    staleTime: Infinity,
   } );
 };
 
@@ -201,6 +220,41 @@ const createLimiter = ( limit: number ) => {
 // requests are network bound and run three at a time.
 const offlineLimiter = createLimiter( 1 );
 const onlineLimiter = createLimiter( 3 );
+
+// Whether this observation's online request has given up: it ran out of
+// retries, or they were stopped when the screen waiting on it closed. A request
+// that is still running or waiting for a connection doesn't count.
+const onlineSuggestionsFailed = (
+  queryClient: QueryClient,
+  observation: RealmObservationPojo,
+): boolean => {
+  const { photoUri, shouldUseEvidenceLocation } = scoreParamsForObservation( observation );
+  if ( !photoUri ) {
+    return false;
+  }
+  return queryClient.getQueryCache( ).findAll( {
+    queryKey: onlineSuggestionsQueryKey( photoUri, shouldUseEvidenceLocation ),
+  } ).some( query => query.state.status === "error" && query.state.fetchStatus === "idle" );
+};
+
+// Start the online request again, through the shared queue, for each
+// observation whose earlier request failed for good. Returns how many were
+// restarted.
+export const restartFailedOnlineSuggestions = (
+  queryClient: QueryClient,
+  observations: RealmObservationPojo[],
+  realm: Realm,
+): number => {
+  const failed = observations.filter(
+    observation => onlineSuggestionsFailed( queryClient, observation ),
+  );
+  failed.forEach( observation => {
+    onlineLimiter(
+      ( ) => prefetchOnlineSuggestions( queryClient, observation, realm ),
+    ).catch( ( ) => undefined );
+  } );
+  return failed.length;
+};
 
 export interface PrefetchTimings {
   count: number;
