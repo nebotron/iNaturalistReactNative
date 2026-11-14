@@ -30,7 +30,8 @@ export const { AudioBirdId } = NativeModules as {
     start: (
       outputs: number[],
       minScore: number,
-    ) => Promise<{ sampleRate: number; channels: number }>;
+    ) => Promise<{ sampleRate: number; channels: number; outputsGeneration: number }>;
+    setOutputs: ( outputs: number[] ) => Promise<number>;
     stop: ( ) => void;
     scoreSound: ( uri: string, outputs: number[] ) => Promise<number[]>;
     setPlayingClip: ( playing: boolean ) => void;
@@ -70,6 +71,8 @@ interface ScoresEvent {
   level: number;
   // Native sample count at the window's end, for saving its clip
   windowFrame: number;
+  // Which outputs the run scored, as start and setOutputs return it
+  outputsGeneration?: number;
   inferMs: number;
   memMB: number;
   // malloc's bytes in use and held from the system, and what handing freed
@@ -282,6 +285,13 @@ const markListening = ( detail: string | null ) => {
   else listeningMarker.clearAll( );
 };
 let sessionStarted = "";
+let starting = false;
+let sessionId = 0;
+// Every species, unfiltered by place, for scoring until the user is located
+let allSpecies: AudioIdSetup | null = null;
+// The outputs generation runs must have scored to count, null until the
+// session's species are settled.
+let scoringGeneration: number | null = null;
 
 // What was heard is kept across app restarts, one key per species
 const heardStore = createMmkvRecordStore<Heard>( AUDIO_ID_HEARD_MMKV_ID );
@@ -303,25 +313,54 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
       set( { error: i18n.t( "Audio-ID-is-only-available-on-iOS" ) } );
       return;
     }
-    if ( get( ).listening ) return;
+    if ( get( ).listening || starting ) return;
+    starting = true;
+    sessionId += 1;
+    const id = sessionId;
     set( { error: null } );
     callClips.clear( );
+    // The mic starts at once, scoring every species, while the user's place
+    // and the species likely there are worked out (a location fix can take
+    // seconds); runs until then only move the level meter.
+    scoringGeneration = null;
+    const located = prepareAudioId( AudioBirdId.geo );
+    located.catch( ( ) => undefined );
+    let mic: Awaited<ReturnType<typeof AudioBirdId.start>>;
     try {
-      const s = await prepareAudioId( AudioBirdId.geo );
-      set( { setup: s } );
-      sessionLocation = s.location;
-      const mic = await AudioBirdId.start( s.outputs, THRESHOLD );
-      logger.info( `started, ${s.species.length} species, located ${s.located}, `
-        + `mic ${mic.sampleRate} Hz x${mic.channels}` );
-      set( { listening: true } );
-      sessionStarted = new Date( ).toISOString( );
-      markListening( `started ${sessionStarted}, no summary yet` );
+      allSpecies ||= await prepareAudioId( AudioBirdId.geo, null );
+      mic = await AudioBirdId.start( allSpecies.outputs, THRESHOLD );
     } catch ( e ) {
       logger.error( `start failed: ${( e as Error ).message}` );
       set( { error: ( e as Error ).message } );
+      return;
+    } finally {
+      starting = false;
     }
+    set( { listening: true } );
+    sessionStarted = new Date( ).toISOString( );
+    markListening( `started ${sessionStarted}, no summary yet` );
+    logger.info( `mic started, ${mic.sampleRate} Hz x${mic.channels}` );
+    const current = ( ) => sessionId === id && get( ).listening;
+    let s: AudioIdSetup = allSpecies;
+    let generation = mic.outputsGeneration;
+    try {
+      const local = await located;
+      if ( !current( ) ) return;
+      if ( local.located ) {
+        generation = await AudioBirdId.setOutputs( local.outputs );
+        s = local;
+      }
+    } catch ( e ) {
+      logger.error( `locating failed, scoring every species: ${( e as Error ).message}` );
+    }
+    if ( !current( ) ) return;
+    sessionLocation = s.location;
+    scoringGeneration = generation;
+    set( { setup: s } );
+    logger.info( `scoring ${s.species.length} species, located ${s.located}` );
   },
   stop: ( ) => {
+    scoringGeneration = null;
     AudioBirdId?.stop( );
     markListening( null );
     set( { listening: false } );
@@ -485,6 +524,11 @@ const mb = ( n: number | null | undefined ) => ( n == null
 
 const onScores = ( event: ScoresEvent ) => {
   const { level } = event;
+  // Scored before the session's species were settled, against other outputs
+  if ( scoringGeneration == null || event.outputsGeneration !== scoringGeneration ) {
+    useAudioIdSession.setState( { level } );
+    return;
+  }
   const {
     setup, recent, heard,
   } = useAudioIdSession.getState( );

@@ -286,6 +286,9 @@ static AVAudioPCMBuffer *ABReadMono( NSURL *url, NSError **error )
   OrtEnv           *_env;
   OrtSession       *_session;
   NSArray<NSNumber *> *_outputs;
+  // Bumped by start and setOutputs; each run's scores carry the one it ran
+  // with, so JS can tell which outputs their indices are into.
+  NSInteger         _outputsGeneration;
   // The last AB_FRAME_RUNS runs' per-frame logits, for finding a call's span:
   // @[windowFrame, float data (outputs x frames), frames per output]
   NSMutableArray<NSArray *> *_frameRuns;
@@ -604,8 +607,11 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
+  __block NSInteger generation = 0;
   dispatch_sync( _inferQueue, ^{
     self->_outputs = [outputs copy];
+    self->_outputsGeneration += 1;
+    generation = self->_outputsGeneration;
     self->_frameRuns = [NSMutableArray array];
     self->_minScore = (float)minScore;
   } );
@@ -635,9 +641,25 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
         if ( self->_checkCoreML ) [self checkCoreML];
       } );
       AVAudioFormat *f = [self->_engine.inputNode outputFormatForBus:0];
-      resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ) } );
+      resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ),
+                  @"outputsGeneration": @( generation ) } );
     } );
   }];
+}
+
+// Changes which outputs the next runs score, while listening, and resolves
+// with the generation their scores will carry. The runs' frames kept for
+// timelines are dropped, since their rows are for the old outputs.
+RCT_EXPORT_METHOD( setOutputs:( NSArray<NSNumber *> * )outputs
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( _inferQueue, ^{
+    self->_outputs = [outputs copy];
+    self->_outputsGeneration += 1;
+    self->_frameRuns = [NSMutableArray array];
+    resolve( @( self->_outputsGeneration ) );
+  } );
 }
 
 // Saves `seconds` (up to 16) of audio ending at sample `endFrame` (a run's
@@ -1408,6 +1430,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
       NSString *inferError = nil;
       NSData *frames = nil;
       NSInteger frameCount = 0;
+      NSInteger generation = self->_outputsGeneration;
       CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
       NSData *probs = [self run:self->_session input:(const float *)window.bytes length:AB_WIN
                       inputName:"input" outputName:"output" outputs:self->_outputs
@@ -1442,6 +1465,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                          body:@{ @"scores": scores,
                                  @"level": @( level ),
                                  @"windowFrame": @( windowFrame ),
+                                 @"outputsGeneration": @( generation ),
                                  @"inferMs": @( ms ),
                                  @"memMB": @( memMB ),
                                  @"heapUsedMB": @( heap.size_in_use / 1048576.0 ),
