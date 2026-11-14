@@ -364,9 +364,27 @@ const applyBrightness = ( ) => {
   useScreenDimmed.setState( dim, true );
   useScreenPaused.setState( !focused || !appActive || dim, true );
 };
+// Opens the Audio ID screen, unless it or one of its own screens is showing.
+const openAudioId = ( ) => {
+  if ( !navigationRef.isReady( ) ) return;
+  if ( navigationRef.getCurrentRoute( )?.name.startsWith( "AudioId" ) ) return;
+  navigationRef.navigate( "TabNavigator", {
+    screen: "MenuTab",
+    params: { screen: "AudioId" },
+  } );
+};
+let lastAppState = AppState.currentState;
 AppState.addEventListener( "change", state => {
   appActive = state === "active";
   applyBrightness( );
+  // Opening the app while it listens in the background goes straight to
+  // Audio ID. Coming back from "inactive" (Control Center, a system prompt)
+  // isn't opening it, so that leaves the user where they were.
+  if ( state === "active" && lastAppState === "background"
+    && useAudioIdSession.getState( ).listening ) {
+    openAudioId( );
+  }
+  lastAppState = state;
 } );
 // Renders of the screen since the last summary line, so a screen that keeps
 // rendering while paused shows up in the app log.
@@ -564,13 +582,7 @@ if ( AudioBirdId ) {
   const emitter = new NativeEventEmitter( AudioBirdId as never );
   emitter.addListener( "AudioBirdIdScores", onScores );
   emitter.addListener( "AudioBirdIdStatus", ( message: string ) => logger.info( message ) );
-  emitter.addListener( "AudioBirdIdOpen", ( ) => {
-    if ( !navigationRef.isReady( ) ) return;
-    navigationRef.navigate( "TabNavigator", {
-      screen: "MenuTab",
-      params: { screen: "AudioId" },
-    } );
-  } );
+  emitter.addListener( "AudioBirdIdOpen", openAudioId );
 }
 
 export default useAudioIdSession;
