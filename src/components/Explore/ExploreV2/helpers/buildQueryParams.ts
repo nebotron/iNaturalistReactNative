@@ -44,19 +44,9 @@ export interface NearbyCoords {
   lng: number;
 }
 
-type SubjectAndFilters = Pick<ExploreV2State, "subject" | "filters">;
-
-// Whose observed species "Unobserved by me" hides, if it's on
-export const unobservedByUserId = ( state: SubjectAndFilters ): number | undefined => (
-  state.subject?.type === "unobserved"
-    ? state.subject.user.id
-    : state.filters.unobservedByUser?.id
-) ?? undefined;
-
-// Whether the search leaves out a list of species: those observed by a user
-// ("Unobserved by me") and/or those found by a saved search. See excludedSpecies.
-export const excludesSpecies = ( state: SubjectAndFilters ): boolean => (
-  !!unobservedByUserId( state ) || !!state.filters.excludeSpeciesInSavedSearch
+// Whether the search leaves out the species a saved search finds. See excludedSpecies.
+export const excludesSpecies = ( state: Pick<ExploreV2State, "filters"> ): boolean => (
+  !!state.filters.excludeSpeciesInSavedSearch
 );
 
 const buildExploreV2QueryParams = (
@@ -138,9 +128,7 @@ const buildExploreV2QueryParams = (
     delete paramsWithFilters.verifiable;
   }
 
-  // Applied as a list of species rather than by the API's unobserved_by_user_id
-  // filter; see withoutObservedSpecies and excludedSpecies
-  delete paramsWithFilters.unobserved_by_user_id;
+  // Applied as a list of species; see excludedSpecies
   if ( excludesSpecies( state ) ) {
     const withoutTaxonId = withoutObservedSpecies(
       paramsWithFilters.without_taxon_id,

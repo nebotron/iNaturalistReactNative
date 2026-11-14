@@ -3,22 +3,12 @@ import {
   referencedSavedSearches,
   resolveExcludedSpeciesIds,
 } from "components/Explore/ExploreV2/helpers/excludedSpecies";
-import { syncResearchGradeSpeciesIds } from "components/Explore/helpers/withoutObservedSpecies";
 import { defaultExploreV2Filters, EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import { savedSearch } from "tests/helpers/savedSearch";
 
 jest.mock( "api/observations", ( ) => ( {
   fetchSpeciesCounts: jest.fn( ),
 } ) );
-
-jest.mock( "components/Explore/helpers/withoutObservedSpecies", ( ) => {
-  const actual = jest.requireActual( "components/Explore/helpers/withoutObservedSpecies" );
-  return {
-    __esModule: true,
-    default: actual.default,
-    syncResearchGradeSpeciesIds: jest.fn( ),
-  };
-} );
 
 const SPECIES_LEVEL = 10;
 
@@ -48,7 +38,6 @@ const context = ( savedSearches, overrides = {} ) => ( {
 
 beforeEach( ( ) => {
   fetchSpeciesCounts.mockReset( );
-  syncResearchGradeSpeciesIds.mockReset( );
 } );
 
 describe( "resolveExcludedSpeciesIds", ( ) => {
@@ -113,25 +102,48 @@ describe( "resolveExcludedSpeciesIds", ( ) => {
   } );
 
   it( "applies a saved search's own exclusions when finding its species", async ( ) => {
-    syncResearchGradeSpeciesIds.mockResolvedValue( [77] );
-    fetchSpeciesCounts.mockResolvedValue( { total_results: 1, results: [species( 10 )] } );
-    const notMine = named( "Not mine", { unobservedByUser: { id: 5 } } );
+    fetchSpeciesCounts
+      .mockResolvedValueOnce( { total_results: 1, results: [species( 77 )] } )
+      .mockResolvedValueOnce( { total_results: 1, results: [species( 10 )] } );
+    const mine = named( "Mine", {}, { subject: null } );
+    const notMine = named( "Not mine", { excludeSpeciesInSavedSearch: "Mine" } );
 
-    const ids = await resolveExcludedSpeciesIds( excluding( "Not mine" ), context( [notMine] ) );
+    const ids = await resolveExcludedSpeciesIds(
+      excluding( "Not mine" ),
+      context( [mine, notMine] ),
+    );
 
     expect( ids ).toEqual( [10] );
-    expect( fetchSpeciesCounts.mock.calls[0][0].without_taxon_id ).toEqual( "77" );
+    expect( fetchSpeciesCounts.mock.calls[1][0].without_taxon_id ).toEqual( "77" );
   } );
 
-  it( "combines unobserved by me with a saved search", async ( ) => {
-    syncResearchGradeSpeciesIds.mockResolvedValue( [77] );
-    fetchSpeciesCounts.mockResolvedValue( { total_results: 1, results: [species( 10 )] } );
-    const search = excluding( "A" );
-    search.filters.unobservedByUser = { id: 5 };
+  it( "fails rather than truncating more than 10,000 species", async ( ) => {
+    fetchSpeciesCounts.mockResolvedValue( {
+      total_results: 10001,
+      results: Array.from( { length: 500 }, ( _, i ) => species( i + 1 ) ),
+    } );
 
-    const ids = await resolveExcludedSpeciesIds( search, context( [named( "A" )] ) );
+    await expect( resolveExcludedSpeciesIds(
+      excluding( "Everything" ),
+      context( [named( "Everything" )] ),
+    ) ).rejects.toMatchObject( { reason: "too-many", savedSearchName: "Everything" } );
+    expect( fetchSpeciesCounts ).toHaveBeenCalledTimes( 1 );
+  } );
 
-    expect( ids.sort( ) ).toEqual( [10, 77] );
+  it( "fetches exactly 10,000 species", async ( ) => {
+    let next = 0;
+    fetchSpeciesCounts.mockImplementation( async ( ) => ( {
+      total_results: 10000,
+      results: Array.from( { length: 500 }, ( ) => { next += 1; return species( next ); } ),
+    } ) );
+
+    const ids = await resolveExcludedSpeciesIds(
+      excluding( "Big" ),
+      context( [named( "Big" )] ),
+    );
+
+    expect( fetchSpeciesCounts ).toHaveBeenCalledTimes( 20 );
+    expect( ids ).toHaveLength( 10000 );
   } );
 
   it( "searches a nearby saved search around the current location", async ( ) => {

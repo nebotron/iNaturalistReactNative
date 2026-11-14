@@ -204,6 +204,24 @@ export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.GO_BACK }
   | { type: EXPLORE_V2_ACTION.RESET };
 
+// "Unobserved by me" was replaced by excluding the species in a saved search.
+// Searches saved or restored from before then drop it, rather than carrying a
+// filter Advanced Search can no longer show or remove.
+export function withoutUnobservedFilter<S extends Pick<ExploreV2State, "subject" | "filters">>(
+  search: S,
+): S {
+  if ( search.subject?.type !== "unobserved" && !search.filters?.unobservedByUser ) {
+    return search;
+  }
+  return {
+    ...search,
+    subject: search.subject?.type === "unobserved"
+      ? null
+      : search.subject,
+    filters: { ...search.filters, unobservedByUser: null },
+  };
+}
+
 export const initialExploreV2State: ExploreV2State = {
   subject: null,
   location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY },

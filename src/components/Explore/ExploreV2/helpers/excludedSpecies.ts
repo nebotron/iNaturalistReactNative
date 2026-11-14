@@ -1,6 +1,5 @@
 import { fetchSpeciesCounts } from "api/observations";
 import type { ApiTaxon } from "api/types";
-import { syncResearchGradeSpeciesIds } from "components/Explore/helpers/withoutObservedSpecies";
 import type { ExploreV2Search } from "providers/ExploreV2Context";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import { speciesIdFromTaxon } from "sharedHelpers/userObservationsCache";
@@ -8,25 +7,25 @@ import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
 import { findSavedSearchByName } from "stores/createExploreV2SearchesSlice";
 
 import type { NearbyCoords } from "./buildQueryParams";
-import buildExploreV2QueryParams, { excludesSpecies, unobservedByUserId } from "./buildQueryParams";
+import buildExploreV2QueryParams from "./buildQueryParams";
 import relativeSavedSearch from "./relativeSavedSearch";
 
-// A search can leave out two lists of species, which are combined:
-//  - "Unobserved by me": species the user has a research-grade observation of,
-//    from their synced observation history (see withoutObservedSpecies)
-//  - "Exclude species in a saved search": the species the named saved search
-//    finds, fetched from species_counts. The saved search is looked up by name
-//    each time, so editing it changes every search that excludes it. It can
-//    itself exclude species, so it's resolved recursively.
+// A search can leave out every species another saved search finds, e.g. a
+// saved search for your own research-grade observations makes "unobserved by
+// me". The species come from species_counts. The saved search is looked up by
+// name each time, so editing it changes every search that excludes it. It can
+// itself exclude species, so it's resolved recursively.
 
-type SearchToResolve = Pick<ExploreV2Search, "subject" | "filters">;
+type SearchToResolve = Pick<ExploreV2Search, "filters">;
 
 // Why a saved search's species can't be excluded:
 //  - missing: no saved search has the name, e.g. it was renamed or deleted
 //  - cycle: saved searches exclude each other's species, so none can be resolved
 //  - offline: species_counts can't be fetched offline, and there's no stored copy
+//  - too-many: it finds more species than the API will list, so the list would
+//    be incomplete
 export class ExcludedSavedSearchError extends Error {
-  reason: "missing" | "cycle" | "offline";
+  reason: "missing" | "cycle" | "offline" | "too-many";
 
   savedSearchName: string;
 
@@ -51,7 +50,7 @@ export interface ExcludedSpeciesContext {
 // Max species_counts page size
 const SPECIES_PAGE_SIZE = 500;
 // The API won't page past 10,000 results
-const MAX_SPECIES_PAGES = 20;
+export const MAX_EXCLUDED_SPECIES = 10000;
 
 const SPECIES_FIELDS = {
   taxon: {
@@ -84,11 +83,12 @@ export const referencedSavedSearches = (
 };
 
 const fetchSpeciesIds = async (
+  name: string,
   params: Record<string, unknown>,
   apiToken: string | null,
 ): Promise<number[]> => {
   const ids = new Set<number>( );
-  for ( let page = 1; page <= MAX_SPECIES_PAGES; page += 1 ) {
+  for ( let page = 1; ; page += 1 ) {
     // eslint-disable-next-line no-await-in-loop
     const response = await fetchSpeciesCounts<SpeciesCountsPage>( {
       ...params,
@@ -100,13 +100,15 @@ const fetchSpeciesIds = async (
     if ( !Array.isArray( results ) ) {
       throw new Error( "Unreadable species_counts response" );
     }
+    const total = response?.total_results ?? 0;
+    // Fail rather than exclude only the first 10,000
+    if ( total > MAX_EXCLUDED_SPECIES ) throw new ExcludedSavedSearchError( "too-many", name );
     results.forEach( ( { taxon } ) => {
       // An observation identified below species level is still an observation
-      // of the species, as with "Unobserved by me"
+      // of the species
       const speciesId = speciesIdFromTaxon( taxon );
       if ( speciesId ) ids.add( speciesId );
     } );
-    const total = response?.total_results ?? 0;
     if ( results.length < SPECIES_PAGE_SIZE || page * SPECIES_PAGE_SIZE >= total ) break;
   }
   return Array.from( ids );
@@ -136,7 +138,7 @@ const savedSearchSpeciesIds = async (
   const {
     per_page: _perPage, order: _order, order_by: _orderBy, ...params
   } = buildExploreV2QueryParams( search, nearbyCoords, context.currentUserId, nestedIds );
-  return fetchSpeciesIds( { ...params }, context.apiToken );
+  return fetchSpeciesIds( name, { ...params }, context.apiToken );
 };
 
 // Every species the search leaves out. Empty when it leaves none out. Throws
@@ -147,21 +149,8 @@ export const resolveExcludedSpeciesIds = async (
   context: ExcludedSpeciesContext,
   resolving: string[] = [],
 ): Promise<number[]> => {
-  if ( !excludesSpecies( search ) ) return [];
-  const ids = new Set<number>( );
-  const userId = unobservedByUserId( search );
-  if ( userId ) {
-    const observed = await syncResearchGradeSpeciesIds(
-      userId,
-      { api_token: context.apiToken },
-      { offline: context.offline },
-    );
-    observed.forEach( id => ids.add( id ) );
-  }
   const name = search.filters.excludeSpeciesInSavedSearch;
-  if ( name ) {
-    const found = await savedSearchSpeciesIds( name, context, resolving );
-    found.forEach( id => ids.add( id ) );
-  }
-  return Array.from( ids );
+  return name
+    ? savedSearchSpeciesIds( name, context, resolving )
+    : [];
 };

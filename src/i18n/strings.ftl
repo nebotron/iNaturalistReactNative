@@ -732,6 +732,8 @@ Excluded-saved-search-excludes-itself = The saved search “{ $name }” ends up
 Excluded-saved-search-not-found = This search excludes species in the saved search “{ $name }”, but there’s no saved search with that name. It may have been renamed or deleted. Edit the search to choose another or remove it.
 # Error on Explore when offline and the search excludes species found by a saved search, which needs the internet. name is the saved search's name
 Excluded-saved-search-offline = The species in the saved search “{ $name }” can’t be loaded offline, so this search can’t exclude them. Connect to the internet and try again.
+# Error on Explore when the saved search whose species are excluded finds more than 10,000 species, more than can be excluded. name is the saved search's name
+Excluded-saved-search-too-many-species = The saved search “{ $name }” finds more than 10,000 species, too many to exclude. Choose a narrower saved search to exclude.
 # Error on Explore when the species a search excludes couldn't be loaded
 Excluded-species-could-not-be-loaded = The species this search excludes couldn’t be loaded. Try again later or edit the search.
 # Advanced Search row naming the saved search whose species are left out. name is the saved search's name
@@ -1704,8 +1706,6 @@ Removes-this-observations-taxon = Removes this observation's taxon
 Removes-your-vote-of-agreement = Removes your vote of agreement
 # Hint for a button that removes a vote of disagreement
 Removes-your-vote-of-disagreement = Removes your vote of disagreement
-# Button and sheet heading for renaming a saved search
-Rename-saved-filter = Rename saved filter
 # Accessibility hint for a camera or lens that can be renamed
 Renames-this-camera-or-lens = Renames this camera or lens.
 # Accessibility label for the drag handle used to reorder a stop on a multi-stop route

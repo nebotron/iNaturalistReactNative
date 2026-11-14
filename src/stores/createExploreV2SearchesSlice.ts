@@ -51,7 +51,6 @@ export interface ExploreV2SearchesSlice {
     searches: SavedSearch[];
     saveSearch: ( _search: SavedSearchInput ) => void;
     updateSearch: ( _key: string, _search: ExploreV2SearchWithTab ) => void;
-    renameSearch: ( _key: string, _name: string ) => void;
     removeSearch: ( _key: string ) => void;
     clearSavedSearches: ( ) => void;
   };
@@ -79,14 +78,6 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
           ? {
             ...saved, ...search, key, datesAsOf: today( ),
           }
-          : saved ) ),
-      },
-    } ) ),
-    renameSearch: ( key, name ) => set( state => ( {
-      exploreSavedSearches: {
-        ...state.exploreSavedSearches,
-        searches: state.exploreSavedSearches.searches.map( saved => ( saved.key === key
-          ? { ...saved, name }
           : saved ) ),
       },
     } ) ),

@@ -46,13 +46,6 @@ describe( "exploreSavedSearches", ( ) => {
     expect( saved( ).searches[0].subject.taxon.id ).toEqual( 13 );
   } );
 
-  it( "renames a search by key", ( ) => {
-    saved( ).saveSearch( { ...search( ), name: "Cup plants" } );
-    saved( ).renameSearch( saved( ).searches[0].key, "Silphium" );
-
-    expect( saved( ).searches[0].name ).toEqual( "Silphium" );
-  } );
-
   it( "finds a search by name ignoring case and surrounding space", ( ) => {
     saved( ).saveSearch( { ...search( ), name: "Cup plants" } );
 

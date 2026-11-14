@@ -10,6 +10,16 @@ const withDates = ( filters, extra = {} ) => ( {
 const tomorrow = new Date( 2026, 10, 11, 9 );
 
 describe( "relativeSavedSearch", ( ) => {
+  it( "drops the removed Unobserved by me filter and subject", ( ) => {
+    const byFilter = withDates( { unobservedByUser: { id: 7 } } );
+    const bySubject = {
+      ...savedSearch( { subject: { type: "unobserved", user: { id: 7 } } } ),
+    };
+
+    expect( relativeSavedSearch( byFilter ).filters.unobservedByUser ).toBeNull( );
+    expect( relativeSavedSearch( bySubject ).subject ).toBeNull( );
+  } );
+
   it( "moves a search saved for today to the day it's opened", ( ) => {
     const search = withDates( { observed_on: "2026-11-10" }, { datesAsOf: "2026-11-10" } );
 

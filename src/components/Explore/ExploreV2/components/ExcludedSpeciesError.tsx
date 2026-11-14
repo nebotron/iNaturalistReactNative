@@ -21,6 +21,8 @@ const excludedSpeciesErrorMessage = ( error: Error, t: T ): string => {
       return t( "Excluded-saved-search-excludes-itself", { name } );
     case "offline":
       return t( "Excluded-saved-search-offline", { name } );
+    case "too-many":
+      return t( "Excluded-saved-search-too-many-species", { name } );
     default: {
       const _exhaustive: never = error.reason;
       return _exhaustive;

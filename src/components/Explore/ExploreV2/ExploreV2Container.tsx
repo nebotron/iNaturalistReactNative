@@ -7,6 +7,7 @@ import {
   initialExploreV2State,
   initialStateFromEntryParams,
   useExploreV2,
+  withoutUnobservedFilter,
 } from "providers/ExploreV2Context";
 import React, { useEffect } from "react";
 import useStore from "stores/useStore";
@@ -33,7 +34,8 @@ const ExploreV2Container = ( ) => {
   const isRootExplore = name === "RootExplore";
   const restoreLastSearch = isRootExplore && !params?.subject && !params?.location;
   const [initialState] = React.useState( ( ) => {
-    const lastSearch = useStore.getState( ).lastExploreSearch;
+    const storedSearch = useStore.getState( ).lastExploreSearch;
+    const lastSearch = storedSearch && withoutUnobservedFilter( storedSearch );
     if ( restoreLastSearch && lastSearch ) {
       return {
         ...initialExploreV2State,

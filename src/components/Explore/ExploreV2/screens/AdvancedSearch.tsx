@@ -125,7 +125,6 @@ const AdvancedSearch = ( ) => {
   const [pendingExit, setPendingExit] = useState( false );
   const [showSaveSheet, setShowSaveSheet] = useState( false );
   const [searchToDelete, setSearchToDelete] = useState<SavedSearch | null>( null );
-  const [searchToRename, setSearchToRename] = useState<SavedSearch | null>( null );
   const currentSearch = {
     subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
   };
@@ -161,15 +160,6 @@ const AdvancedSearch = ( ) => {
   const updateUser = ( selectedUser: ExploreSearchUser | null ) => dispatch( {
     type: "SET_USER",
     user: selectedUser,
-  } );
-
-  const updateUnobservedByUser = ( selectedUser: ExploreSearchUser | null ) => dispatch( {
-    type: "SET_UNOBSERVED_BY_USER",
-    user: selectedUser && {
-      id: selectedUser.id,
-      login: selectedUser.login,
-      icon_url: selectedUser.icon_url,
-    },
   } );
 
   const updateExcludeSpeciesInSavedSearch = ( name: string | null ) => dispatch( {
@@ -250,7 +240,6 @@ const AdvancedSearch = ( ) => {
     project,
     researchGrade,
     reviewedFilter,
-    unobservedByUser,
     excludeSpeciesInSavedSearch,
     user,
     wildStatus,
@@ -364,7 +353,6 @@ const AdvancedSearch = ( ) => {
         <SavedSearches
           currentSearch={currentSavedSearch}
           onDelete={setSearchToDelete}
-          onRename={setSearchToRename}
           onSave={( ) => setShowSaveSheet( true )}
           onSelect={applySavedSearch}
         />
@@ -403,17 +391,6 @@ const AdvancedSearch = ( ) => {
               }
             }}
           />
-          {currentUser && (
-            <View className="px-4 mt-5">
-              <Checkbox
-                text={t( "Unobserved-by-me" )}
-                isChecked={!!unobservedByUser}
-                onPress={() => updateUnobservedByUser( unobservedByUser
-                  ? null
-                  : currentUser )}
-              />
-            </View>
-          )}
           <View className="px-4 mt-5" testID="AdvancedSearch.excludeSavedSearch">
             {excludeSpeciesInSavedSearch
               ? (
@@ -860,9 +837,7 @@ const AdvancedSearch = ( ) => {
         currentSearch={currentSavedSearch}
         onCloseDelete={( ) => setSearchToDelete( null )}
         onCloseSave={( ) => setShowSaveSheet( false )}
-        onCloseRename={( ) => setSearchToRename( null )}
         searchToDelete={searchToDelete}
-        searchToRename={searchToRename}
         showSaveSheet={showSaveSheet}
       />
       {pendingExit && (

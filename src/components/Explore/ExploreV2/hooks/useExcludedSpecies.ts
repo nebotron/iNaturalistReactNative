@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { NearbyCoords } from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import { excludesSpecies, unobservedByUserId }
-  from "components/Explore/ExploreV2/helpers/buildQueryParams";
+import { excludesSpecies } from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import {
   referencedSavedSearches,
   resolveExcludedSpeciesIds,
@@ -19,8 +18,7 @@ import { getLatestTrackedLocation } from "../../../../sharedHelpers/locationHist
 interface Options {
   // Re-resolve each time a search is applied, not just on mount
   searchCount: number;
-  // Skip requests: "Unobserved by me" uses the previous list, and a saved
-  // search's species can't be loaded
+  // A saved search's species can't be loaded offline
   offline: boolean;
   // Nearby for the current search, also used for a nearby saved search
   nearbyCoords?: NearbyCoords;
@@ -45,17 +43,16 @@ export const fetchNearbyCoords = async ( ): Promise<NearbyCoords | undefined> =>
     : undefined;
 };
 
-// The species a search leaves out (see excludedSpecies), freshly resolved so a
-// species observed since the last sync is left out too
+// The species a search leaves out (see excludedSpecies), fetched again each
+// time the search is applied so they're up to date
 const useExcludedSpecies = (
-  search: Pick<ExploreV2Search, "subject" | "filters">,
+  search: Pick<ExploreV2Search, "filters">,
   {
     searchCount, offline, nearbyCoords, currentUserId, enabled = true,
   }: Options,
 ): ExcludedSpecies => {
   const savedSearches = useStore( state => state.exploreSavedSearches.searches );
   const active = excludesSpecies( search );
-  const userId = unobservedByUserId( search );
   const savedSearchName = search.filters.excludeSpeciesInSavedSearch ?? null;
   // Editing, renaming or deleting a referenced saved search changes the key
   const referenced = referencedSavedSearches( search, savedSearches )
@@ -69,7 +66,6 @@ const useExcludedSpecies = (
     // eslint-disable-next-line @tanstack/query/exhaustive-deps
     queryKey: [
       "excludedSpecies",
-      userId,
       savedSearchName,
       referenced,
       searchCount,
@@ -79,20 +75,13 @@ const useExcludedSpecies = (
       nearbyCoords?.lng,
     ],
     queryFn: async ( ) => {
-      // A token that can't be refreshed just fails the sync, which falls back
+      // Without a token the species are fetched signed out
       const apiToken = offline
         ? null
         : await getJWT( ).catch( ( ) => null );
       // Rebuilt from the key, so only what the key covers can change the result
       return resolveExcludedSpeciesIds( {
-        subject: null,
-        filters: {
-          ...defaultExploreV2Filters,
-          unobservedByUser: userId
-            ? { id: userId }
-            : null,
-          excludeSpeciesInSavedSearch: savedSearchName,
-        },
+        filters: { ...defaultExploreV2Filters, excludeSpeciesInSavedSearch: savedSearchName },
       }, {
         savedSearches,
         apiToken,
@@ -104,8 +93,7 @@ const useExcludedSpecies = (
     enabled: active && enabled,
     refetchOnMount: "always",
     gcTime: 0,
-    // "Unobserved by me" already falls back to the previous list, and a
-    // missing saved search won't appear on a retry
+    // A missing saved search won't appear on a retry
     retry: false,
   } );
 
