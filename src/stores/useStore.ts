@@ -123,6 +123,7 @@ const useStore = create<StoreState>()( persist(
 
       exploreSavedSearches: {
         searches: state.exploreSavedSearches.searches,
+        defaultsAddedForUserIds: state.exploreSavedSearches.defaultsAddedForUserIds,
       },
       lastExploreSearch: state.lastExploreSearch,
 

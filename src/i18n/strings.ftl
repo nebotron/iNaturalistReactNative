@@ -1228,6 +1228,8 @@ My-Observations = My Observations
 # so we went with "Me". You have about ~7-20 characters before it gets cut
 # off on the smallest screen sizes.
 My-Observations--bottom-tab = Me
+# Name of a saved Explore search, added for each new user, of every species they've observed
+My-species = My species
 Native = Native
 Native-to-place = Native to { $place }
 Navigates-to-AI-camera = Navigates to AI camera

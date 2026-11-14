@@ -30,3 +30,12 @@ export const setSavedSearches = searches => act( ( ) => {
     exploreSavedSearches: { ...state.exploreSavedSearches, searches },
   } ) );
 } );
+
+// Marks the user as already given the starter saved searches, for tests that need an empty
+// list of saved searches after signing in
+export const skipDefaultSavedSearches = userId => useStore.setState( state => ( {
+  exploreSavedSearches: {
+    ...state.exploreSavedSearches,
+    defaultsAddedForUserIds: [userId],
+  },
+} ) );

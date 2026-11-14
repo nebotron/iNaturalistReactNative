@@ -20,7 +20,9 @@ import {
 } from "tests/helpers/exploreV2";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
-import { savedSearch, setSavedSearches } from "tests/helpers/savedSearch";
+import {
+  savedSearch, setSavedSearches, skipDefaultSavedSearches,
+} from "tests/helpers/savedSearch";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
@@ -93,6 +95,7 @@ beforeEach( async ( ) => {
   setStoreStateLayout( { isDefaultMode: false, isAllAddObsOptionsMode: true } );
   enableExploreV2( );
   inatjs.observations.search.mockClear( );
+  skipDefaultSavedSearches( mockUser.id );
   await signIn( mockUser, { realm: global.mockRealms[__filename] } );
 } );
 

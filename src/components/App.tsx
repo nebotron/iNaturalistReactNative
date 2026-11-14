@@ -1,6 +1,7 @@
 import "../../global.css";
 
 import { useNavigation } from "@react-navigation/native";
+import useDefaultSavedSearches from "components/Explore/ExploreV2/hooks/useDefaultSavedSearches";
 import RootStackNavigator from "navigation/RootStackNavigator";
 import type { PropsWithChildren } from "react";
 import React, { useCallback } from "react";
@@ -60,6 +61,7 @@ const App = ( { children }: PropsWithChildren ) => {
   useResumeGroupPhotos( );
   useUsbImport( );
   useQueuedDeletionAlbum( currentUser?.id );
+  useDefaultSavedSearches( currentUser );
 
   // this children prop is here for the sake of testing with jest
   // normally we would never do this in code

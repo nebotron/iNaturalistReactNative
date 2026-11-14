@@ -53,6 +53,9 @@ export interface ExploreV2SearchesSlice {
     updateSearch: ( _key: string, _search: ExploreV2SearchWithTab ) => void;
     removeSearch: ( _key: string ) => void;
     clearSavedSearches: ( ) => void;
+    // Users who've been given the starter saved searches, so each gets them once
+    defaultsAddedForUserIds: number[];
+    addDefaultSearches: ( _userId: number, _searches: SavedSearchInput[] ) => void;
   };
   // The Explore tab's most recent search, restored when the app relaunches
   lastExploreSearch: ExploreV2SearchWithTab | null;
@@ -90,6 +93,22 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
     clearSavedSearches: ( ) => set( state => ( {
       exploreSavedSearches: { ...state.exploreSavedSearches, searches: [] },
     } ) ),
+    defaultsAddedForUserIds: [],
+    // Adds the starter searches after any already saved, skipping one whose name is taken
+    addDefaultSearches: ( userId, defaults ) => set( state => {
+      const { searches, defaultsAddedForUserIds } = state.exploreSavedSearches;
+      if ( defaultsAddedForUserIds.includes( userId ) ) return state;
+      const added = defaults
+        .filter( search => !search.name || !findSavedSearchByName( searches, search.name ) )
+        .map( search => ( { ...search, savedAt: Date.now( ), datesAsOf: today( ) } ) );
+      return {
+        exploreSavedSearches: {
+          ...state.exploreSavedSearches,
+          searches: [...searches, ...added],
+          defaultsAddedForUserIds: [...defaultsAddedForUserIds, userId],
+        },
+      };
+    } ),
   },
   lastExploreSearch: null,
   setLastExploreSearch: lastExploreSearch => set( { lastExploreSearch } ),
