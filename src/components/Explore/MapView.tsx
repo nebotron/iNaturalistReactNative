@@ -240,7 +240,6 @@ const MapView = ( {
         showSwitchMapTypeButton
         showsCompass={false}
         switchMapTypeButtonClassName="left-20 bottom-20"
-        showScaleBar
         showsUserLocation
         tileMapParams={tileMapParams}
         withPressableObsTiles={tileMapParams !== null}

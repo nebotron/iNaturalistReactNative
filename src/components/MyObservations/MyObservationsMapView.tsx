@@ -73,7 +73,6 @@ const MyObservationsMapView = ( { isConnected, userId }: Props ) => {
           regionToAnimate={regionToAnimate}
           showCurrentLocationButton
           showSwitchMapTypeButton
-          showScaleBar
           showsUserLocation
           switchMapTypeButtonClassName="right-5 bottom-20"
           tileMapParams={{
