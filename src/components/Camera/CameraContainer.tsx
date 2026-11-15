@@ -16,7 +16,7 @@ import React, {
 import { Alert, StatusBar } from "react-native";
 import type { CameraRef, CapturePhotoSettings } from "react-native-vision-camera";
 import { CommonResolutions } from "react-native-vision-camera";
-import { startPositionWarmup } from "sharedHelpers/accuratePositionWatcher";
+import { getBestRecentFix, startPositionWarmup } from "sharedHelpers/accuratePositionWatcher";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { log } from "sharedHelpers/logger";
 import { hasWriteMediaPermission } from "sharedHelpers/permissions";
@@ -29,6 +29,7 @@ import useStore from "stores/useStore";
 
 import CameraWithDevice from "./CameraWithDevice";
 import { handleCameraError } from "./helpers";
+import { savePhotoToPhotoLibraryAtCapture } from "./helpers/savePhotosToPhotoLibrary";
 import savePhotoToDocumentsDirectory from "./helpers/savePhotoToDocumentsDirectory";
 import usePrepareStoreAndNavigate from "./hooks/usePrepareStoreAndNavigate";
 
@@ -282,6 +283,11 @@ const CameraContainer = ( ) => {
         throw new Error( "Failed to take photo: missing camera" );
       }
       const uri = await savePhotoToDocumentsDirectory( cameraPhoto );
+      // Into the photo library right away, not at the checkmark, so a crash
+      // before then doesn't lose the photo. Not awaited: the shutter shouldn't
+      // wait on the library.
+      savePhotoToPhotoLibraryAtCapture( uri, getBestRecentFix( ) )
+        .catch( e => logger.error( "Saving photo to photo library at capture failed", e ) );
       const newPhotoState = await updateTakePhotoStore( uri, options );
       if ( options?.navigateImmediately ) {
         await handleNavigation( newPhotoState, options?.visionResult );

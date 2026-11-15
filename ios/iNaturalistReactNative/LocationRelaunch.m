@@ -62,10 +62,58 @@ static void appendPendingFixes( NSData *fixes )
 // locationHistoryTracker.ts.
 static const CLLocationDistance kDistanceFilterMeters = 50;
 
+// The thread the location manager lives on. CLLocationManager calls into
+// locationd synchronously (creating the manager, setting desiredAccuracy,
+// starting updates), and on a busy device one of those calls has taken over
+// 10 seconds. On the main queue, with updateAccuracy running from the
+// did-enter-background notification, that blew iOS's 10-second allowance for
+// the background transition and the watchdog killed the app (0x8BADF00D,
+// scene-update), taking unsaved camera photos with it. CoreLocation delivers
+// delegate callbacks on the run loop of the thread that created the manager,
+// so this thread runs one of its own.
+static CFRunLoopRef locationRunLoop( void )
+{
+  static CFRunLoopRef runLoop = NULL;
+  static dispatch_once_t onceToken;
+  dispatch_once( &onceToken, ^{
+    dispatch_semaphore_t ready = dispatch_semaphore_create( 0 );
+    NSThread *thread = [[NSThread alloc] initWithBlock:^{
+      runLoop = (CFRunLoopRef)CFRetain( CFRunLoopGetCurrent( ) );
+      // A run loop with no sources returns at once; the port keeps it running
+      [[NSRunLoop currentRunLoop] addPort:[NSMachPort port] forMode:NSDefaultRunLoopMode];
+      dispatch_semaphore_signal( ready );
+      while ( YES ) {
+        @autoreleasepool {
+          [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                   beforeDate:[NSDate distantFuture]];
+        }
+      }
+    }];
+    thread.name = @"org.inaturalist.LocationMonitor";
+    [thread start];
+    dispatch_semaphore_wait( ready, DISPATCH_TIME_FOREVER );
+  } );
+  return runLoop;
+}
+
+// Everything that touches the manager or the buffer runs here, in order, so
+// delegate callbacks and drainPendingLocations can't interleave and a fix
+// can't be dropped between reading the buffer and clearing it.
+static void onLocationThread( dispatch_block_t block )
+{
+  CFRunLoopRef runLoop = locationRunLoop( );
+  CFRunLoopPerformBlock( runLoop, kCFRunLoopDefaultMode, block );
+  CFRunLoopWakeUp( runLoop );
+}
+
 @interface INatLocationMonitor () <CLLocationManagerDelegate>
 @property (nonatomic, strong) CLLocationManager *manager;
 @property (nonatomic) BOOL paused;
 @property (nonatomic) BOOL precise;
+// UIApplication state, read on the main thread and handed over
+@property (nonatomic) BOOL appActive;
+// Main thread only
+@property (nonatomic) BOOL observingAppState;
 @end
 
 @implementation INatLocationMonitor
@@ -88,33 +136,53 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
 - (void)start
 {
   [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kEnabledKey];
-  // CLLocationManager must be created and driven on a thread with a run loop.
-  // Staying on the main queue also means delegate callbacks and
-  // drainPendingLocations can't interleave, so a fix can't be dropped between
-  // reading the buffer and clearing it.
+  // UIApplication is main-thread only; the manager is driven on its own thread
   dispatch_async( dispatch_get_main_queue(), ^{
-    if ( !self.manager ) {
-      self.manager = [CLLocationManager new];
-      self.manager.delegate = self;
-      self.manager.allowsBackgroundLocationUpdates = YES;
-      // Let iOS turn the GPS off while the user is stationary; the
-      // significant-change monitor below relaunches/resumes updates once they
-      // move again (see locationManagerDidPauseLocationUpdates:).
-      self.manager.pausesLocationUpdatesAutomatically = YES;
-      // CLActivityTypeFitness tells iOS this is a moving-on-foot session so it
-      // can manage the location radio accordingly.
-      self.manager.activityType = CLActivityTypeFitness;
-      self.manager.distanceFilter = kDistanceFilterMeters;
+    if ( !self.observingAppState ) {
+      self.observingAppState = YES;
       NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
-      [nc addObserver:self selector:@selector( updateAccuracy )
+      [nc addObserver:self selector:@selector( appStateChanged )
                  name:UIApplicationDidBecomeActiveNotification object:nil];
-      [nc addObserver:self selector:@selector( updateAccuracy )
+      [nc addObserver:self selector:@selector( appStateChanged )
                  name:UIApplicationDidEnterBackgroundNotification object:nil];
     }
-    [self updateAccuracy];
-    [self.manager startMonitoringSignificantLocationChanges];
-    [self.manager startUpdatingLocation];
+    BOOL active = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+    onLocationThread( ^{
+      self.appActive = active;
+      [self startOnLocationThread];
+    } );
   } );
+}
+
+// Posted on the main thread, which must not wait on locationd here: this runs
+// inside the background transition iOS gives 10 seconds to finish.
+- (void)appStateChanged
+{
+  BOOL active = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+  onLocationThread( ^{
+    self.appActive = active;
+    if ( self.manager ) [self updateAccuracy];
+  } );
+}
+
+- (void)startOnLocationThread
+{
+  if ( !self.manager ) {
+    self.manager = [CLLocationManager new];
+    self.manager.delegate = self;
+    self.manager.allowsBackgroundLocationUpdates = YES;
+    // Let iOS turn the GPS off while the user is stationary; the
+    // significant-change monitor below relaunches/resumes updates once they
+    // move again (see locationManagerDidPauseLocationUpdates:).
+    self.manager.pausesLocationUpdatesAutomatically = YES;
+    // CLActivityTypeFitness tells iOS this is a moving-on-foot session so it
+    // can manage the location radio accordingly.
+    self.manager.activityType = CLActivityTypeFitness;
+    self.manager.distanceFilter = kDistanceFilterMeters;
+  }
+  [self updateAccuracy];
+  [self.manager startMonitoringSignificantLocationChanges];
+  [self.manager startUpdatingLocation];
 }
 
 // ~100 m, which is enough to geotag photos and lets iOS locate us from Wi-Fi
@@ -124,7 +192,7 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
 // app was in use, which kept the GPS on for all of it.
 - (void)updateAccuracy
 {
-  BOOL active = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+  BOOL active = self.appActive;
   self.manager.desiredAccuracy = active && self.precise
     ? kCLLocationAccuracyNearestTenMeters
     : kCLLocationAccuracyHundredMeters;
@@ -137,7 +205,7 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
 
 - (void)setPrecise:(BOOL)precise
 {
-  dispatch_async( dispatch_get_main_queue(), ^{
+  onLocationThread( ^{
     self.precise = precise;
     if ( self.manager ) [self updateAccuracy];
   } );
@@ -153,7 +221,7 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
 - (void)stop
 {
   [[NSUserDefaults standardUserDefaults] setBool:NO forKey:kEnabledKey];
-  dispatch_async( dispatch_get_main_queue(), ^{
+  onLocationThread( ^{
     [self.manager stopUpdatingLocation];
     [self.manager stopMonitoringSignificantLocationChanges];
   } );
@@ -221,8 +289,7 @@ RCT_EXPORT_MODULE( );
   return NO;
 }
 
-// Run on the main queue so drains are serialized against the location
-// manager's delegate callbacks (see -start).
+// -start reads UIApplication state here; drains hop to the location thread.
 - (dispatch_queue_t)methodQueue
 {
   return dispatch_get_main_queue();
@@ -246,7 +313,11 @@ RCT_EXPORT_METHOD( setPrecise:( BOOL )precise )
 RCT_EXPORT_METHOD( drainPendingLocations:(RCTPromiseResolveBlock)resolve
                    rejecter:(RCTPromiseRejectBlock)reject )
 {
-  resolve( [[INatLocationMonitor shared] drainPendingLocations] );
+  // On the location thread, so drains are serialized against the location
+  // manager's delegate callbacks (see onLocationThread)
+  onLocationThread( ^{
+    resolve( [[INatLocationMonitor shared] drainPendingLocations] );
+  } );
 }
 
 @end
