@@ -253,6 +253,8 @@ const styles = StyleSheet.create( {
   },
 } );
 
+const HOTSPOT_CIRCLE_CLASS = "w-6 h-6 rounded-full items-center justify-center border border-white";
+
 const WildlifeHotspotsScreen = ( {
   filterParams: filterParamsProp, exploreV2State,
 }: Props ) => {
@@ -626,7 +628,10 @@ const WildlifeHotspotsScreen = ( {
     if ( selectedHotspotId !== hotspot.id ) {
       // With nothing selected the carousel isn't mounted; it opens at the
       // selected index instead
-      if ( carouselRef.current ) {
+      // scrollTo is a no-op, with no snap callback, when the carousel is
+      // already at that index, so only expect a snap when it will move.
+      // Otherwise the stale index would swallow a later swipe to it.
+      if ( carouselRef.current && carouselRef.current.getCurrentIndex( ) !== index ) {
         programmaticScrollIndexRef.current = index;
         carouselRef.current.scrollTo( { index, animated: true } );
       }
@@ -1030,15 +1035,21 @@ const WildlifeHotspotsScreen = ( {
                     : 1}
                   onPress={() => handleHotspotMarkerPress( hotspot, idx )}
                 >
-                  <View
-                    className="w-6 h-6 rounded-full items-center justify-center border border-white"
-                    style={{
-                      backgroundColor: selectedHotspotId === hotspot.id
-                        ? colors.inatGreen
-                        : colors.warningYellow,
-                    }}
-                  >
-                    <Body4 className="text-white font-bold">{idx + 1}</Body4>
+                  {/* The marker's tap area is its view's bounds, so the small
+                    circle sits in a transparent 44pt square; a tap just off
+                    the circle would otherwise land on the map and do nothing.
+                    collapsable keeps the wrapper from being flattened away. */}
+                  <View collapsable={false} className="w-11 h-11 items-center justify-center">
+                    <View
+                      className={HOTSPOT_CIRCLE_CLASS}
+                      style={{
+                        backgroundColor: selectedHotspotId === hotspot.id
+                          ? colors.inatGreen
+                          : colors.warningYellow,
+                      }}
+                    >
+                      <Body4 className="text-white font-bold">{idx + 1}</Body4>
+                    </View>
                   </View>
                 </Marker>
               ) )}
