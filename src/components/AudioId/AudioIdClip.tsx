@@ -119,6 +119,12 @@ const AudioIdClip = ( ) => {
       && Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
     .sort( ( a, b ) => Math.abs( obsTime( a ) - time ) - Math.abs( obsTime( b ) - time ) );
 
+  // The observation last made from, or added to with, this clip, while it's still saved
+  const madeObs = useQuery( {
+    type: Observation,
+    query: observations => observations.filtered( "uuid == $0", clip?.observationUuid ?? "" ),
+  }, [clip?.observationUuid] )[0];
+
   if ( !clip ) return <Body3 className="p-5">{t( "This-clip-is-no-longer-saved" )}</Body3>;
 
   // With `identify`, the observation gets no taxon and Suggestions opens to identify its sound.
@@ -223,6 +229,19 @@ const AudioIdClip = ( ) => {
           <Body3 className="mt-4">{t( "No-location-was-recorded-for-this-clip" )}</Body3>
         )}
 
+      {madeObs && (
+        <>
+          <Body1 className="mt-6">{t( "Observation-from-this-clip" )}</Body1>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityHint={t( "Navigates-to-observation-details" )}
+            className="-mx-5"
+            onPress={( ) => navigation.navigate( "ObsDetails", { uuid: madeObs.uuid } )}
+          >
+            <ObsListItem observation={madeObs} currentUser={currentUser} hideObsUploadStatus />
+          </Pressable>
+        </>
+      )}
       <Button
         className="mt-4"
         level="focus"

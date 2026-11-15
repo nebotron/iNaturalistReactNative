@@ -1367,6 +1367,8 @@ Obscured = Obscured
 Observation = Observation
 Observation-Attribution = Observation: © { $userName } · { $restrictions }
 Observation-Copyright = Observation Copyright: © { $userName } · { $restrictions }
+# Heading on an Audio ID clip's page above the observation made from it
+Observation-from-this-clip = Observation from this clip
 Observation-has-no-photos-and-no-sounds = This observation has no photos and no sounds.
 # Displayed when user views an obscured location on the ObsDetail map screen
 Observation-location-obscured-randomized-point = This observation’s location is obscured. You are seeing a randomized point within the obscuration polygon.

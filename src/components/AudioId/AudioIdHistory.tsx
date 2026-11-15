@@ -3,11 +3,9 @@ import {
   Body1, Body3, INatIcon, INatIconButton, List2,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
-import { RealmContext } from "providers/contexts";
 import React from "react";
 import { FlatList } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import Observation from "realmModels/Observation";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
@@ -18,10 +16,7 @@ import ClipPlayButton from "./ClipPlayButton";
 import useCommonName from "./useCommonName";
 import useEligibleClips from "./useEligibleClips";
 
-const { useQuery } = RealmContext;
-
 const TAG_SHADES = { true: "rgba(116, 172, 0, 0.2)", false: "rgba(155, 16, 16, 0.15)" };
-const OBSERVED_SHADE = "rgba(116, 172, 0, 0.5)";
 
 // Every time Audio ID heard one species, or every clip saved by hand, newest first.
 const AudioIdHistory = ( ) => {
@@ -42,19 +37,9 @@ const AudioIdHistory = ( ) => {
     ? undefined
     : ofSpecies[0]?.sp;
   const commonName = useCommonName( sp );
-  // Clips whose observation is still saved on this device
-  const obsUuids = ofSpecies.flatMap( c => ( c.observationUuid
-    ? [c.observationUuid]
-    : [] ) );
-  const savedObs = useQuery( {
-    type: Observation,
-    query: observations => observations.filtered( "uuid IN $0", obsUuids ),
-    keyPaths: ["uuid"],
-  }, [obsUuids.join( )] );
   const eligible = useEligibleClips( ofSpecies );
-  const savedUuids = new Set( savedObs.map( o => o.uuid ) );
+  // Only a right/wrong tag shades a row: making an observation isn't a label.
   const clipShade = ( clip: typeof ofSpecies[number] ) => {
-    if ( clip.observationUuid && savedUuids.has( clip.observationUuid ) ) return OBSERVED_SHADE;
     const correct = isClipCorrect( clip );
     return correct === undefined
       ? undefined
