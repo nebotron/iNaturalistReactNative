@@ -80,6 +80,14 @@ const ALIASES: Aliases = {
   "upvote-inactive": "arrow-up-bold-circle-outline",
 } as const;
 
+const SHADOW_RADIUS = 4;
+const SHADOW_OFFSET_Y = 1;
+// Text shadows are clipped to the Text's own bounds, and an icon glyph fills
+// its box, so the shadow gets cut off at the edges. Pad the Text by the
+// shadow's reach and cancel the padding with an equal negative margin so the
+// icon's layout doesn't change.
+const SHADOW_GUTTER = SHADOW_RADIUS + SHADOW_OFFSET_Y;
+
 // Use default color if none is specified
 const INatIcon = ( {
   testID, name, color, size, dropShadow,
@@ -90,8 +98,10 @@ const INatIcon = ( {
     ...( Platform.OS === "android" && { includeFontPadding: false } ),
     ...( dropShadow && {
       textShadowColor: "rgba(0, 0, 0, 0.75)",
-      textShadowRadius: 4,
-      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: SHADOW_RADIUS,
+      textShadowOffset: { width: 0, height: SHADOW_OFFSET_Y },
+      padding: SHADOW_GUTTER,
+      margin: -SHADOW_GUTTER,
     } ),
   };
   return (
