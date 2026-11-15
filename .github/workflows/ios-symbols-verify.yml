@@ -1,0 +1,19 @@
+# Temporary: runs ios-symbols.yml from this branch to check it. Remove before merging.
+name: iOS symbols (verify)
+on:
+  push:
+    branches: [claude/stoic-fermat-lrktun]
+    paths: [.github/workflows/ios-symbols-verify.yml]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  rebuild:
+    strategy:
+      fail-fast: false
+      matrix:
+        build: ["2026.1114.225047", "2026.1017.144045", "2026.1023.165028"]
+    uses: ./.github/workflows/ios-symbols.yml
+    secrets: inherit
+    with:
+      build: ${{ matrix.build }}
