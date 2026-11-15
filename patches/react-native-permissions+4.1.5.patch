@@ -1,0 +1,110 @@
+diff --git a/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm b/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm
+index 00b734f..3568bfb 100644
+--- a/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm
++++ b/node_modules/react-native-permissions/ios/LocationAlways/RNPermissionHandlerLocationAlways.mm
+@@ -10,6 +10,19 @@
+ 
+ @end
+ 
++// +authorizationStatus asks locationd synchronously, and RNPermissions runs on
++// the main queue; a slow reply (often during a background resume) stalls the
++// main thread until the watchdog kills the app. Read it off the main queue and
++// resolve back on it, where RNPermissions keeps its handler locks.
++static void RNPReadLocationAuthorizationStatus(void (^ _Nonnull block)(CLAuthorizationStatus status)) {
++  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
++    CLAuthorizationStatus status = [CLLocationManager authorizationStatus];
++    dispatch_async(dispatch_get_main_queue(), ^{
++      block(status);
++    });
++  });
++}
++
+ @implementation RNPermissionHandlerLocationAlways
+ 
+ + (NSArray<NSString *> * _Nonnull)usageDescriptionKeys {
+@@ -22,17 +35,19 @@
+ 
+ - (void)checkWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
+                  rejecter:(void (__unused ^ _Nonnull)(NSError * _Nonnull))reject {
+-  switch ([CLLocationManager authorizationStatus]) {
+-    case kCLAuthorizationStatusNotDetermined:
+-      return resolve(RNPermissionStatusNotDetermined);
+-    case kCLAuthorizationStatusRestricted:
+-      return resolve(RNPermissionStatusRestricted);
+-    case kCLAuthorizationStatusAuthorizedWhenInUse:
+-    case kCLAuthorizationStatusDenied:
+-      return resolve(RNPermissionStatusDenied);
+-    case kCLAuthorizationStatusAuthorizedAlways:
+-      return resolve(RNPermissionStatusAuthorized);
+-  }
++  RNPReadLocationAuthorizationStatus(^(CLAuthorizationStatus status) {
++    switch (status) {
++      case kCLAuthorizationStatusNotDetermined:
++        return resolve(RNPermissionStatusNotDetermined);
++      case kCLAuthorizationStatusRestricted:
++        return resolve(RNPermissionStatusRestricted);
++      case kCLAuthorizationStatusAuthorizedWhenInUse:
++      case kCLAuthorizationStatusDenied:
++        return resolve(RNPermissionStatusDenied);
++      case kCLAuthorizationStatusAuthorizedAlways:
++        return resolve(RNPermissionStatusAuthorized);
++    }
++  });
+ }
+ 
+ - (void)requestWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
+diff --git a/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm b/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm
+index df174c5..9556063 100644
+--- a/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm
++++ b/node_modules/react-native-permissions/ios/LocationWhenInUse/RNPermissionHandlerLocationWhenInUse.mm
+@@ -10,6 +10,19 @@
+ 
+ @end
+ 
++// +authorizationStatus asks locationd synchronously, and RNPermissions runs on
++// the main queue; a slow reply (often during a background resume) stalls the
++// main thread until the watchdog kills the app. Read it off the main queue and
++// resolve back on it, where RNPermissions keeps its handler locks.
++static void RNPReadLocationAuthorizationStatus(void (^ _Nonnull block)(CLAuthorizationStatus status)) {
++  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
++    CLAuthorizationStatus status = [CLLocationManager authorizationStatus];
++    dispatch_async(dispatch_get_main_queue(), ^{
++      block(status);
++    });
++  });
++}
++
+ @implementation RNPermissionHandlerLocationWhenInUse
+ 
+ + (NSArray<NSString *> * _Nonnull)usageDescriptionKeys {
+@@ -22,17 +35,19 @@
+ 
+ - (void)checkWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
+                  rejecter:(void (__unused ^ _Nonnull)(NSError * _Nonnull))reject {
+-  switch ([CLLocationManager authorizationStatus]) {
+-    case kCLAuthorizationStatusNotDetermined:
+-      return resolve(RNPermissionStatusNotDetermined);
+-    case kCLAuthorizationStatusRestricted:
+-      return resolve(RNPermissionStatusRestricted);
+-    case kCLAuthorizationStatusDenied:
+-      return resolve(RNPermissionStatusDenied);
+-    case kCLAuthorizationStatusAuthorizedWhenInUse:
+-    case kCLAuthorizationStatusAuthorizedAlways:
+-      return resolve(RNPermissionStatusAuthorized);
+-  }
++  RNPReadLocationAuthorizationStatus(^(CLAuthorizationStatus status) {
++    switch (status) {
++      case kCLAuthorizationStatusNotDetermined:
++        return resolve(RNPermissionStatusNotDetermined);
++      case kCLAuthorizationStatusRestricted:
++        return resolve(RNPermissionStatusRestricted);
++      case kCLAuthorizationStatusDenied:
++        return resolve(RNPermissionStatusDenied);
++      case kCLAuthorizationStatusAuthorizedWhenInUse:
++      case kCLAuthorizationStatusAuthorizedAlways:
++        return resolve(RNPermissionStatusAuthorized);
++    }
++  });
+ }
+ 
+ - (void)requestWithResolver:(void (^ _Nonnull)(RNPermissionStatus))resolve
