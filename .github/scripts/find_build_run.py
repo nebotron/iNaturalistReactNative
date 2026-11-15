@@ -11,6 +11,7 @@ GITHUB_OUTPUT):
     prebuilt_react_native  "true"/"false", from the job's log, or "unknown"
                            once GitHub has expired the log
     runner_image           the runner image and version the job ran on
+    xcode                  the Xcode it built with ("26.6 17F113"), when the log says
     symbols_artifact_id    the run's own symbols-<build> artifact, if it saved one
 
 Usage: GITHUB_TOKEN=... GITHUB_REPOSITORY=owner/repo find_build_run.py BUILD
@@ -91,7 +92,7 @@ def main() -> None:
     run, job = matches[0]
 
     prebuilt = "unknown"
-    image = ""
+    image = xcode = ""
     try:
         log = get( f"{repo}/actions/jobs/{job['id']}/logs", raw=True )
         # Expressions are substituted in the logged script, so the old
@@ -103,6 +104,10 @@ def main() -> None:
         name = re.search( r"Image: (\S+)", log )
         version = re.search( r"Version: (\S+)", log )
         image = " ".join( m.group( 1 ) for m in ( name, version ) if m )
+        # The TestFlight workflow keys ccache on `xcodebuild -version` and
+        # prints the wrapper it wrote; older runs never printed it
+        built_with = re.search( r"string:Xcode([\d.]+)Buildversion(\w+)", log )
+        xcode = " ".join( built_with.groups() ) if built_with else ""
     except urllib.error.HTTPError as e:
         # A crash log from the build answers it: prebuilt React Native shows
         # up as React.framework among its Binary Images
@@ -119,6 +124,7 @@ def main() -> None:
         "job_id": job["id"],
         "prebuilt_react_native": prebuilt,
         "runner_image": image,
+        "xcode": xcode,
         "symbols_artifact_id": symbols["id"] if symbols else "",
     }
     lines = "".join( f"{k}={v}\n" for k, v in outputs.items() )

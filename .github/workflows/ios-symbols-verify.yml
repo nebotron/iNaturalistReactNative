@@ -1,4 +1,4 @@
-# Temporary: runs ios-symbols.yml from this branch to check it (run 2). Remove before merging.
+# Temporary: runs ios-symbols.yml from this branch to check it (run 3). Remove before merging.
 name: iOS symbols (verify)
 on:
   push:

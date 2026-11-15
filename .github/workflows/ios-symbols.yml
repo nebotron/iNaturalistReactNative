@@ -8,9 +8,11 @@
 # commit's own setup steps (.env, models, Pods, with the run's
 # prebuilt_react_native setting read back from its log), and archives it
 # unsigned, without the JS bundle, with the original build number. Builds are
-# reproducible, so the rebuilt binary matches the shipped one; when the
-# original run's symbols-<build> artifact still exists, the rebuilt table is
-# compared against it and the run fails if they differ.
+# reproducible given the same Xcode, which is picked to match the original run's
+# when its log names it. When the original run's symbols-<build> artifact still
+# exists, the rebuilt table is compared against it and the run fails if they
+# differ; otherwise check the rebuild's UUID and Apple's own frame names in a
+# crash log with scripts/symbolicate.py.
 #
 # Artifacts:
 #   rebuilt-symbols-<build>  <build>.txt.gz (the same nm table the TestFlight
@@ -72,6 +74,7 @@ jobs:
       run_id: ${{ steps.find.outputs.run_id }}
       prebuilt_react_native: ${{ steps.prebuilt.outputs.value }}
       runner_image: ${{ steps.find.outputs.runner_image }}
+      xcode: ${{ steps.find.outputs.xcode }}
       symbols_artifact_id: ${{ steps.find.outputs.symbols_artifact_id }}
     steps:
       - uses: actions/checkout@v6
@@ -101,7 +104,6 @@ jobs:
     env:
       BUILD_NUMBER: ${{ inputs.build }}
       ARCHIVE_PATH: ${{ github.workspace }}/ios/build/iNaturalistReactNative.xcarchive
-      OUT: ${{ github.workspace }}/../rebuilt-symbols
     steps:
       # At the workspace root, the same path the original built from, since
       # paths end up in the binary
@@ -115,9 +117,32 @@ jobs:
           path: .symbol-tools
           sparse-checkout: .github/scripts
 
+      # Outside the checkout, which the archive mustn't see
+      - run: echo "OUT=$RUNNER_TEMP/rebuilt-symbols" >> "$GITHUB_ENV"
+
+      # A different Xcode compiles a different binary, so use the original
+      # run's when its log named it and this image still has it
       - name: Select Xcode
-        if: inputs.xcode != ''
-        run: sudo xcode-select -s "${{ inputs.xcode }}"
+        env:
+          XCODE_APP: ${{ inputs.xcode }}
+          ORIGINAL_XCODE: ${{ needs.resolve.outputs.xcode }}
+        run: |
+          for app in /Applications/Xcode*.app; do
+            echo "$app: $( DEVELOPER_DIR="$app/Contents/Developer" xcodebuild -version 2>/dev/null | tr '\n' ' ' )"
+          done
+          if [ -z "$XCODE_APP" ] && [ -n "$ORIGINAL_XCODE" ]; then
+            build="${ORIGINAL_XCODE##* }"
+            for app in /Applications/Xcode*.app; do
+              if DEVELOPER_DIR="$app/Contents/Developer" xcodebuild -version 2>/dev/null \
+                | grep -q "Build version $build$"; then
+                XCODE_APP="$app"
+                break
+              fi
+            done
+            [ -n "$XCODE_APP" ] || echo "::warning::This image lacks the original run's Xcode ($ORIGINAL_XCODE); the rebuild may not match"
+          fi
+          [ -z "$XCODE_APP" ] || sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
 
       - uses: actions/setup-node@v6
         with:
@@ -180,6 +205,7 @@ jobs:
             "sha": "${{ needs.resolve.outputs.sha }}",
             "original_run_id": "${{ needs.resolve.outputs.run_id }}",
             "original_runner_image": "${{ needs.resolve.outputs.runner_image }}",
+            "original_xcode": "${{ needs.resolve.outputs.xcode }}",
             "prebuilt_react_native": "${{ needs.resolve.outputs.prebuilt_react_native }}",
             "rebuild_runner_image": "$ImageOS $ImageVersion",
             "xcode": "$( xcodebuild -version | tr '\n' ' ' | sed 's/ *$//' )",
