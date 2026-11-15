@@ -7,6 +7,7 @@ import {
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
 import isEqual from "lodash/isEqual";
+import { defaultExploreV2Filters } from "providers/ExploreV2Context";
 import useStore from "stores/useStore";
 import factory, { makeResponse } from "tests/factory";
 import {
@@ -153,6 +154,47 @@ describe( "searching from Advanced Search", ( ) => {
       expect( await screen.findByTestId( "ExploreResults.excludedSpeciesError" ) ).toBeVisible( );
       expect( screen.getByText( /there’s no saved search with that name/ ) ).toBeVisible( );
     } );
+  } );
+
+  it( "still excludes a saved search overwritten from a search that excludes it", async ( ) => {
+    setSavedSearches( [
+      {
+        ...savedSearch( { subject: { type: "taxon", taxon: { id: 47126, name: "Plantae" } } } ),
+        key: "saved-backyard",
+        name: "Backyard",
+      },
+      {
+        ...savedSearch( {
+          subject: null,
+          filters: { ...defaultExploreV2Filters, excludeSpeciesInSavedSearch: "Backyard" },
+        } ),
+        key: "saved-not-backyard",
+        name: "Not in backyard",
+      },
+    ] );
+    renderApp( );
+    await navigateToExplore( );
+    await openAdvancedSearch( );
+    await actor.press( screen.getByTestId( "SavedSearches.load.saved-not-backyard" ) );
+    await screen.findByTestId( "ExploreResults" );
+
+    // Edit Backyard from the search that excludes it
+    await openAdvancedSearch( );
+    await addTaxonFilter( mockOtherTaxon, global.mockRealms[__filename] );
+    inatjs.observations.speciesCounts.mockClear( );
+    await actor.press( screen.getByTestId( "SavedSearches.overwrite.saved-backyard" ) );
+    await actor.press( screen.getByTestId( "SavedSearches.load.saved-not-backyard" ) );
+    await screen.findByTestId( "ExploreResults" );
+
+    await waitFor( ( ) => {
+      const speciesFetches = inatjs.observations.speciesCounts.mock.calls
+        .map( call => call[0] )
+        .filter( params => isEqual( params?.fields, {
+          taxon: { id: true, rank_level: true, ancestor_ids: true },
+        } ) );
+      expect( speciesFetches.at( -1 ) ).toMatchObject( { taxon_id: mockOtherTaxon.id } );
+    } );
+    expect( screen.queryByTestId( "ExploreResults.excludedSpeciesError" ) ).toBeNull( );
   } );
 
   it( "searches for several taxa at once", async ( ) => {

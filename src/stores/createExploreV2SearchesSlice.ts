@@ -46,6 +46,27 @@ export const findSavedSearchByName = (
 
 const today = ( ) => format( new Date( ), "yyyy-MM-dd" );
 
+// A saved search can't leave out its own species. Overwriting one with a search that
+// excludes it, e.g. from a search that excludes the one being overwritten, would leave every
+// search that excludes it failing on the loop, so the exclusion that leads back is dropped.
+const withoutExclusionLoop = ( searches: SavedSearch[], key: string ): SavedSearch[] => {
+  const saved = searches.find( search => search.key === key );
+  const visited: SavedSearch[] = [];
+  let name = saved?.filters.excludeSpeciesInSavedSearch;
+  while ( name ) {
+    const next = findSavedSearchByName( searches, name );
+    if ( !next || visited.includes( next ) ) return searches;
+    if ( next.key === key ) {
+      return searches.map( search => ( search.key === key
+        ? { ...search, filters: { ...search.filters, excludeSpeciesInSavedSearch: null } }
+        : search ) );
+    }
+    visited.push( next );
+    name = next.filters.excludeSpeciesInSavedSearch;
+  }
+  return searches;
+};
+
 export interface ExploreV2SearchesSlice {
   exploreSavedSearches: {
     searches: SavedSearch[];
@@ -68,20 +89,23 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
     saveSearch: search => set( state => ( {
       exploreSavedSearches: {
         ...state.exploreSavedSearches,
-        searches: [
+        searches: withoutExclusionLoop( [
           { ...search, savedAt: Date.now( ), datesAsOf: today( ) },
           ...state.exploreSavedSearches.searches,
-        ],
+        ], search.key ),
       },
     } ) ),
     updateSearch: ( key, search ) => set( state => ( {
       exploreSavedSearches: {
         ...state.exploreSavedSearches,
-        searches: state.exploreSavedSearches.searches.map( saved => ( saved.key === key
-          ? {
-            ...saved, ...search, key, datesAsOf: today( ),
-          }
-          : saved ) ),
+        searches: withoutExclusionLoop(
+          state.exploreSavedSearches.searches.map( saved => ( saved.key === key
+            ? {
+              ...saved, ...search, key, datesAsOf: today( ),
+            }
+            : saved ) ),
+          key,
+        ),
       },
     } ) ),
     removeSearch: key => set( state => ( {
