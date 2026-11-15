@@ -9,7 +9,7 @@ import { Pressable, ScrollView, View } from "components/styledComponents";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import React, {
-  useCallback, useEffect, useMemo, useState, useSyncExternalStore,
+  useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore,
 } from "react";
 import { Trans } from "react-i18next";
 import type { ViewProps } from "react-native";
@@ -242,11 +242,13 @@ const AudioId = ( ) => {
     };
   }, [] ) );
   const {
-    listening, error, current, setup, setSeen, start,
+    listening, starting, error, current, setup, setSeen, start,
     stop,
   } = useWhileBright( useAudioIdSession, state => state );
-  // Start listening when the screen opens; a no-op if already listening
-  useEffect( ( ) => {
+  // Start listening when the screen opens; a no-op if already listening.
+  // A layout effect, so the first frame already shows it starting rather
+  // than flashing the start button.
+  useLayoutEffect( ( ) => {
     useAudioIdSession.getState( ).start( );
   }, [] );
   const dimmed = useScreenDimmed( );
@@ -401,13 +403,13 @@ const AudioId = ( ) => {
             )}
         </Body3>
         <Button
-          level={listening
+          level={listening || starting
             ? "warning"
             : "focus"}
-          text={listening
+          text={listening || starting
             ? t( "STOP-LISTENING" )
             : t( "START-LISTENING" )}
-          onPress={listening
+          onPress={listening || starting
             ? stop
             : start}
         />

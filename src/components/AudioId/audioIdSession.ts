@@ -257,6 +257,9 @@ export const saveRecentClip = async ( ): Promise<string> => {
 
 interface AudioIdState {
   listening: boolean;
+  // Set from the moment start is called until the mic is running, so the
+  // screen shows it as listening rather than offering to start
+  starting: boolean;
   error: string | null;
   current: Scores | null; // null until the first run
   level: number;
@@ -299,6 +302,7 @@ heardStore.migrateFrom( "audio-id-session", "heard" );
 
 const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
   listening: false,
+  starting: false,
   error: null,
   current: null,
   level: 0,
@@ -317,7 +321,7 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
     starting = true;
     sessionId += 1;
     const id = sessionId;
-    set( { error: null } );
+    set( { error: null, starting: true } );
     callClips.clear( );
     // The mic starts at once, scoring every species, while the user's place
     // and the species likely there are worked out (a location fix can take
@@ -335,6 +339,12 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
       return;
     } finally {
       starting = false;
+      set( { starting: false } );
+    }
+    // Stopped while the mic was starting
+    if ( sessionId !== id ) {
+      AudioBirdId.stop( );
+      return;
     }
     set( { listening: true } );
     sessionStarted = new Date( ).toISOString( );
@@ -360,10 +370,11 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
     logger.info( `scoring ${s.species.length} species, located ${s.located}` );
   },
   stop: ( ) => {
+    sessionId += 1;
     scoringGeneration = null;
     AudioBirdId?.stop( );
     markListening( null );
-    set( { listening: false } );
+    set( { listening: false, starting: false } );
   },
 } ) );
 
