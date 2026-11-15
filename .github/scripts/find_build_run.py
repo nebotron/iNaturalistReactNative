@@ -31,6 +31,11 @@ WORKFLOW = "testflight-ios.yml"
 STEP = "Set the build number"
 
 
+class NoRedirect( urllib.request.HTTPRedirectHandler ):
+    def redirect_request( self, *args, **kwargs ):
+        return None
+
+
 def get( path: str, raw: bool = False ):
     url = path if path.startswith( "http" ) else API + path
     request = urllib.request.Request( url, headers={
@@ -38,8 +43,15 @@ def get( path: str, raw: bool = False ):
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     } )
-    with urllib.request.urlopen( request, timeout=60 ) as response:
-        body = response.read()
+    try:
+        with urllib.request.build_opener( NoRedirect ).open( request, timeout=60 ) as response:
+            body = response.read()
+    except urllib.error.HTTPError as e:
+        if e.code not in ( 301, 302, 307 ):
+            raise
+        # Logs redirect to blob storage, which refuses the API token
+        with urllib.request.urlopen( e.headers["Location"], timeout=120 ) as response:
+            body = response.read()
     return body.decode( errors="replace" ) if raw else json.loads( body )
 
 
@@ -84,15 +96,17 @@ def main() -> None:
         log = get( f"{repo}/actions/jobs/{job['id']}/logs", raw=True )
         # Expressions are substituted in the logged script, so the old
         # prebuilt_react_native input shows up as a literal true or false
-        flag = re.search( r'if \[ "(true|false)" = "true" \]; then\s*\n'
-                          r'.*export RCT_USE_RN_DEP=1', log )
+        flag = re.search( r'if \[ "(true|false)" = "true" \]; then[^\n]*\n'
+                          r'[^\n]*export RCT_USE_RN_DEP=1', log )
         prebuilt = flag.group( 1 ) if flag else (
             "false" if "pod install" in log else "unknown" )
         name = re.search( r"Image: (\S+)", log )
         version = re.search( r"Version: (\S+)", log )
         image = " ".join( m.group( 1 ) for m in ( name, version ) if m )
     except urllib.error.HTTPError as e:
-        print( f"::warning::The job's log is gone ({e.code}); pass prebuilt_react_native",
+        # A crash log from the build answers it: prebuilt React Native shows
+        # up as React.framework among its Binary Images
+        print( f"::warning::Couldn't read the job's log ({e.code}); pass prebuilt_react_native",
                file=sys.stderr )
 
     artifacts = get( f"{repo}/actions/runs/{run['id']}/artifacts?per_page=100" )["artifacts"]
