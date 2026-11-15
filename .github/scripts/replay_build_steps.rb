@@ -17,26 +17,25 @@ abort "usage: #{$PROGRAM_NAME} true|false STEP_NAME..." if wanted.empty?
 
 # The build moved from testflight-ios.yml into testflight-ios-build.yml; read
 # whichever holds the steps.
-steps = %w[testflight-ios-build.yml testflight-ios.yml].flat_map do | file |
+steps = %w(testflight-ios-build.yml testflight-ios.yml).flat_map do | file |
   path = File.join( ".github/workflows", file )
   next [] unless File.exist?( path )
 
-  ( YAML.load_file( path )["jobs"] || {} ).values.flat_map { | job | job["steps"] || [] }
+  ( YAML.load_file( path )["jobs"] || {} ).values.flat_map {| job | job["steps"] || [] }
 end
 
 def substitute( text, prebuilt )
   text.to_s.gsub( /\$\{\{\s*(.+?)\s*\}\}/ ) do
     case ( expression = Regexp.last_match( 1 ) )
     when "inputs.prebuilt_react_native" then prebuilt
-    when /\Asecrets\.(\w+)\z/ then ENV.fetch( Regexp.last_match( 1 ), "" )
-    when /\Aenv\.(\w+)\z/ then ENV.fetch( Regexp.last_match( 1 ), "" )
+    when /\A(?:secrets|env)\.(\w+)\z/ then ENV.fetch( Regexp.last_match( 1 ), "" )
     else abort "Can't evaluate ${{ #{expression} }} outside Actions"
     end
   end
 end
 
 wanted.each do | name |
-  step = steps.find { | s | s["name"] == name }
+  step = steps.find {| s | s["name"] == name }
   unless step
     puts "::notice::This commit's workflow has no \"#{name}\" step; skipping it"
     next
@@ -45,7 +44,7 @@ wanted.each do | name |
     puts "::notice::Skipping \"#{name}\", which only ran if #{step['if']}"
     next
   end
-  env = ( step["env"] || {} ).to_h { | k, v | [k, substitute( v, prebuilt )] }
+  env = ( step["env"] || {} ).to_h {| k, v | [k, substitute( v, prebuilt )] }
   script = substitute( step["run"], prebuilt )
   puts "::group::#{name}"
   puts script
