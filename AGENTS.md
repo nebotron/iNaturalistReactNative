@@ -340,7 +340,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 
 In-depth architecture and convention docs for both humans and AI agents. Read the relevant doc before exploring or modifying a subsystem — it captures patterns that aren't obvious from the code alone.
 
-- `architecture/` — `upload-system.md`, `navigation-patterns.md`, `api-layer.md`, `realm-and-zustand.md` (includes working with Realm objects in the React layer)
+- `architecture/` — `upload-system.md`, `navigation-patterns.md`, `api-layer.md`, `realm-and-zustand.md` (includes working with Realm objects in the React layer), `video-stabilization.md` (the Video Stabilizer tool: native/JS split, camera-path model, approaches weighed)
 - `conventions/` — `component-conventions.md`, `i18n-conventions.md`, `import-aliases.md`, `typescript.md`, `nativewind-v4.md` (className resolution gotchas from the NativeWind 2→4 migration)
 - `testing/` — `test-core.md`, `test-components.md`, `integration-test-analysis.md`, `e2e.md` (Detox + Maestro + iOS verification), `scroll-benchmarking.md` (measuring list scroll performance on Android)
 

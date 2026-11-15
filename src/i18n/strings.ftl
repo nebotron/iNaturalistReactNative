@@ -129,13 +129,21 @@ All-your-observations-have-been-uploaded = All your observations have been uploa
 ALLOW-LOCATION-ACCESS = ALLOW LOCATION ACCESS
 # Button asking if user has an existing iNaturalist account
 Already-have-an-iNaturalist-account = Already have an iNaturalist account?
+# Hint for the "Shift, rotation and zoom" video stabilization method
+Also-removes-tilt-and-zoom-wobble = Also removes tilt and zoom wobble. Best for handheld shots.
 # Display name for the iconic taxa category for amphibia
 Amphibians = Amphibians
 An-Internet-connection-is-required = An Internet connection is required to load more observations.
+# Button that measures how a video's camera or subject moves, before stabilizing it
+ANALYZE-MOTION = ANALYZE MOTION
+# Button that measures a video's motion again after its settings changed
+ANALYZE-MOTION-AGAIN = ANALYZE MOTION AGAIN
 # Message shown to the user after they have left the AI camera where they may
 # have seen a species suggestion but before they land on the match screen,
 # where they might see a better suggestion.
 Analyzing-for-the-best-identification = Analyzing for the best identification...
+# Progress while measuring a video's motion
+Analyzing-motion-x-percent = Analyzing motion… { $percent }%
 # Option when choosing a value for an date filter that indicates any value is
 # acceptable
 Any--date = Any
@@ -217,6 +225,8 @@ Audio-ID-model-error = Model error: { $error }
 August = August
 # Returns user to login screen
 BACK-TO-LOGIN = BACK TO LOGIN
+# Tab: stabilize a video so the background holds still
+BACKGROUND--stabilize-on = BACKGROUND
 # Explanation on observation details for an observation with casual quality grade
 Because-this-observation-is-of-a-pet-garden-plant-or-zoo-animal = Because this observation is of a pet, garden plant, or zoo animal, it is not eligible for research grade.
 # Display name for the iconic taxa category for aves
@@ -325,6 +335,8 @@ Choose-a-date-time = Choose a date & time
 Choose-a-time = Choose a time
 # Label for a text input field during sign up to choose a username
 CHOOSE-A-USERNAME = CHOOSE A USERNAME
+# Button in the video stabilizer that starts over with a different video
+CHOOSE-ANOTHER-VIDEO = CHOOSE ANOTHER VIDEO
 Choose-photos = Choose Photos
 # Label for button that chooses a folder on a USB drive for photo import
 CHOOSE-USB-FOLDER = CHOOSE USB FOLDER
@@ -442,6 +454,8 @@ CREATE-AN-ACCOUNT = CREATE AN ACCOUNT
 # Button that creates an observation from an Audio ID clip
 CREATE-OBSERVATION = CREATE OBSERVATION
 Create-observation-with-no-evidence = Create observation with no evidence
+# Section header in the video stabilizer for cropping the output
+CROP = CROP
 CROP-DRAG-HINT = Drag to pan. Pinch to zoom.
 # Menu item and screen title for the log of photo crops
 CROP-LOG = CROP LOG
@@ -449,6 +463,10 @@ CROP-PHOTO = Crop Photo
 # Accessibility label for the button that crops a photo to a square of the
 # upload size, e.g. "Crop to 2048 × 2048"; size is in pixels
 Crop-to-size-by-size = Crop to { $size } × { $size }
+# Accessibility label for the slider that sets how far the video stabilizer crops in
+Crop-zoom = Crop zoom
+# Label for how far the video stabilizer crops in, e.g. "Zoom 2.0×"
+Crop-zoom-x = Zoom { $zoom }×
 # Label for current device location in Wildlife Hotspots tool
 Current-location = Current location
 DATA-QUALITY = DATA QUALITY
@@ -634,6 +652,12 @@ Download-for-offline-use = Download for offline use
 DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
+# Instruction under the video frame when stabilizing on a subject
+Drag-on-the-frame-to-draw-a-box-around-the-subject = Drag on the frame to draw a box around the subject.
+# Alert when trying to track a subject before marking it
+Draw-a-box-around-the-subject-first = Draw a box around the subject first.
+# Accessibility hint for the video frame when stabilizing on a subject
+Draws-a-box-around-the-subject = Draws a box around the subject.
 # Maximum total driving time chosen for planning a route through wildlife hotspots
 Drive-time-limit =
     Max drive: { $hours ->
@@ -753,11 +777,15 @@ EXPLORE-LIFE-LIST = EXPLORE LIFE LIST
 EXPLORE-OBSERVATIONS = EXPLORE OBSERVATIONS
 EXPLORE-OBSERVERS = EXPLORE OBSERVERS
 EXPLORE-SPECIES = EXPLORE SPECIES
+# Button that renders and saves the stabilized video
+EXPORT = EXPORT
 Failed-to-delete-sound = Failed to delete sound
 Failed-to-load-game-data-Please-try-again = Failed to load game data. Please try again.
 Failed-to-load-hotspot-data = Failed to load hotspot data
 # Error message with log in fails
 Failed-to-log-in = Failed to log in
+# Hint for the "Shift only" video stabilization method
+Fastest-removes-up-down-and-sideways-shake = Fastest. Removes up, down and sideways shake, but not tilt.
 # Option for showing a star button to fave or unfave an observation on its photo
 Fave-star = Fave/unfave star
 # Heading for the list of users who favorited an observation
@@ -789,6 +817,8 @@ Filter-by-sex = Filter by Sex
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
 Filters = Filters
+# Video stabilization method that finds the subject without the user marking it
+Find-the-subject-automatically--stabilize-method = Find the subject automatically
 # Display name for the iconic taxa category for actinopterygii
 Fish = Fish
 # Status when an item has been flagged
@@ -807,6 +837,10 @@ FOLLOWING-X-PEOPLE =
         [one] FOLLOWING { $count } PERSON
        *[other] FOLLOWING { $count } PEOPLE
     }
+# Hint for the "Find the subject automatically" video stabilization method
+Follows-the-most-prominent-object = Follows the most prominent object. Draw a box to pick which one.
+# Hint for the "Track the box I draw" video stabilization method
+Follows-what-you-draw-a-box-around = Follows whatever you draw a box around, even as it turns or changes shape.
 For-most-other-projects-observations-will-automatically-be-included = For most other projects, observations that meet project requirements will automatically be included in projects.
 # Label for button that stops photo import from a USB drive folder
 FORGET-USB-FOLDER = FORGET USB FOLDER
@@ -941,6 +975,10 @@ Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
 Import-complete = Import complete
 Import-finished-with-errors = Import finished with errors
+# Button that imports a video from the device's file browser
+IMPORT-FROM-FILES = IMPORT FROM FILES
+# Button that imports a video from the photo library
+IMPORT-FROM-PHOTOS = IMPORT FROM PHOTOS
 # Accessibility label for the My Observations button that imports photos from a USB drive
 Import-photos-from-USB = Import photos from USB
 # Shows the number of observations a user is about to import
@@ -950,6 +988,8 @@ IMPORT-X-OBSERVATIONS =
        *[other] { $count } OBSERVATIONS
     }
 Importing-photos-to-your-library = Importing photos to your library…
+# Status while a video is being imported into the video stabilizer
+Importing-video = Importing video…
 # Progress message shown while selected photos are copied off the device
 Importing-X-photos =
     Importing { $count ->
@@ -1045,10 +1085,14 @@ June = June
 Just-make-sure-the-organism-is-wild = Just make sure the organism is wild (not a pet, zoo animal, or garden plant)
 # Species game option for a life stage
 Juvenile--life-stage = Juvenile
+# Toggle to keep a video's sound in the stabilized copy
+Keep-audio = Keep audio
 KEEP-EDITING = KEEP EDITING
 Keep-in-mind-that-project-curators = Keep in mind that project curators will still be able to add your observations to their project unless you change your account settings.
 # Settings option to keep imported photos on the USB drive or SD card
 Keep-on-drive = Keep on Drive
+# Toggle that rescales each frame so a tracked subject doesn't grow or shrink
+Keep-the-subject-the-same-size = Keep the subject the same size
 # Display name for the iconic taxa category chromista
 Kelp-and-Diatoms = Kelp & Diatoms
 # Unit after the nearby search radius input
@@ -1202,6 +1246,14 @@ Most-faved = Most faved
 Most-Observed-Default = Most Observed (Default)
 # Accessibility label for the thumbnail of the last photo taken in the camera
 Most-recent-photo = Most recent photo
+# Shown once a video's motion has been measured
+Motion-analyzed-across-x-frames =
+    { $count ->
+        [one] Motion analyzed across 1 frame
+       *[other] Motion analyzed across { $count } frames
+    }
+# Accessibility hint for the video frame when stabilizing on the background
+Moves-the-crop-to-the-tapped-point = Moves the crop to the tapped point.
 must-be-captive-cultivated = must be captive / cultivated
 must-be-georeferenced = must be georeferenced
 must-be-identified = must be identified
@@ -1494,6 +1546,8 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 # Tab on notifications showing notifications about content created by others.
 # Should be 16 characters or fewer or it will be ellipsized.
 OTHERS--notifications = OTHERS
+# Size of the stabilized video and of the part of the original it's cropped from, in pixels
+Output-x-by-y-from-source-x-by-y = Output { $width } × { $height }, from about { $sourceWidth } × { $sourceHeight } pixels of the original.
 Overwrite-saved-filter = Overwrite saved filter
 PASSWORD = PASSWORD
 # Accessibility label for a button that pauses audio
@@ -1534,6 +1588,8 @@ Planned-hotspots-summary =
     }
 # Display name for the iconic taxa category for plantae
 Plants = Plants
+# Button that plays the stabilized video
+PLAY = PLAY
 # Accessibility label for a button that plays audio
 Play--audio = Play
 Play-species-identification-game = Play species identification game
@@ -1563,6 +1619,8 @@ Potential-disagreement-description = <0>Is the evidence enough to confirm this i
 Potential-disagreement-disagree = <0>No, but this is a member of </0><1></1>
 Potential-disagreement-unsure = <0>I don't know but I am sure this is </0><1></1>
 Press-and-hold-to-view-more-options = Press and hold to view more options
+# Button that renders and plays a quick, low-resolution version of the stabilized video
+PREVIEW = PREVIEW
 # Accessibility label for a button that shows the previous day in location history
 Previous-day = Previous day
 Previous-observation = Previous observation
@@ -1713,6 +1771,8 @@ Removes-your-vote-of-agreement = Removes your vote of agreement
 Removes-your-vote-of-disagreement = Removes your vote of disagreement
 # Accessibility hint for a camera or lens that can be renamed
 Renames-this-camera-or-lens = Renames this camera or lens.
+# Progress while writing the stabilized video
+Rendering-video-x-percent = Rendering… { $percent }%
 # Accessibility label for the drag handle used to reorder a stop on a multi-stop route
 Reorder-stop = Reorder stop
 # Display name for the iconic taxa category for reptilia
@@ -1768,6 +1828,8 @@ SAVE-FOR-LATER = SAVE FOR LATER
 # Audio ID button that keeps the last 15 seconds of sound as a clip, whether or not anything was identified in it
 SAVE-LAST-15-SECONDS = SAVE LAST 15 SECONDS
 SAVE-LOCATION = SAVE LOCATION
+# Button that saves the stabilized video to the photo library
+SAVE-TO-PHOTOS = SAVE TO PHOTOS
 # Title of an Audio ID clip the user saved by hand, which has no identification
 Saved-clip = Saved clip
 # Heading of the list of Audio ID clips the user saved by hand
@@ -1780,6 +1842,8 @@ Saved-filter-name-placeholder = e.g. Nearby birds
 Saved-Observation = Saved observation, in queue to upload
 # Heading of the saved searches section on the advanced search screen
 SAVED-SEARCHES = SAVED SEARCHES
+# Alert after the stabilized video was saved to the photo library
+Saved-to-Photos = Saved to Photos
 Saved-X-of-Y = Saved { $saved } of { $total }.
 Saved-X-of-Y-free-up-space-to-continue = Saved { $saved } of { $total }. Free up space on this device to continue.
 Saved-X-of-Y-removing-them-from-the-device = Saved { $saved } of { $total }. Removing them from the device…
@@ -1852,11 +1916,17 @@ Separate-Photos = Separate Photos
 September = September
 SETTINGS = SETTINGS
 Share = Share
+# Button that shares the stabilized video with another app
+SHARE = SHARE
 SHARE-DEBUG-LOGS = SHARE DEBUG LOGS
 Share-location = Share Location
 Share-map = Share map
 # Preceded by the fragment # Preceded by the fragment, "By uploading your observation to iNaturalist, you can:"
 Share-your-observation-where-it-can-help-scientists = Share your observation, where it can help scientists across the world better understand biodiversity.
+# Video stabilization method that only removes shifting, not rotation
+Shift-only--stabilize-method = Shift only
+# Video stabilization method that removes shifting, rotation and zoom changes
+Shift-rotation-and-zoom--stabilize-method = Shift, rotation and zoom
 SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
 # Accessibility label for the button that decreases the hotspot route time limit
 Shorten-time-limit = Shorten time limit
@@ -1891,6 +1961,10 @@ Skip-for-now = Skip for now
 SKIP-LEAVE-UNKNOWN = SKIP (LEAVE UNKNOWN)
 # Accessibility hint for SKIP-LEAVE-UNKNOWN
 Skips-this-observation-and-leaves-it-unknown = Skips this observation and leaves it unknown.
+# Section header in the video stabilizer for how smooth the camera's motion is made
+SMOOTHING = SMOOTHING
+# Warning that parts of the stabilized video will show black edges
+Some-frames-still-show-empty-edges = Some frames still show black edges at this zoom.
 # Accessibility label for an icon marking an identification that another
 # identifier later agreed with
 Someone-agreed-with-this-identification = Someone agreed with this identification
@@ -1956,6 +2030,14 @@ Specific-identification--project-rule = Specific identification
 # Header for a project rule requiring an observation to be in a place chosen
 # by the project
 Specific-location--project-rule = Specific location
+# Smoothing setting at its maximum: the shot is held completely still
+Stabilization-locked = Locked
+# Smoothing setting: how many seconds of camera motion are averaged
+Stabilization-smooths-over-x-seconds = Smooth over { $seconds } s
+# Accessibility label for the slider that sets how strongly a video is stabilized
+Stabilization-strength = Stabilization strength
+# Header above the choice of stabilizing a video on its background or its subject
+STABILIZE-ON = STABILIZE ON
 # Label for the standard map type
 Standard--map-type = Standard
 # Button that starts Audio ID listening to the microphone
@@ -1963,7 +2045,11 @@ START-LISTENING = START LISTENING
 # Placeholder text for the start location input in the Wildlife Hotspots tool
 Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
+# Accessibility label for the slider that chooses where the stabilized video starts
+Start-time = Start time
 Start-upload = Start upload
+# Where the stabilized video starts, e.g. "Start 0:03.2"
+Starts-at-x = Start { $time }
 # Accessibility hint for button that starts recording a sound
 Starts-recording-sound = Starts recording sound
 Stay-on-this-screen = Stay on this screen while your location loads.
@@ -1990,6 +2076,8 @@ Stops-the-sound = Stops the sound.
 STORAGE-USAGE = STORAGE USAGE
 # Shown on the storage usage screen when folder sizes could not be read
 Storage-usage-could-not-be-measured = Storage usage could not be measured.
+# Tab: stabilize a video so the subject holds still
+SUBJECT--stabilize-on = SUBJECT
 # Sort option: distance from camera to subject, nearest first
 Subject-distance-Nearest = Subject distance (nearest)
 SUBMIT = SUBMIT
@@ -2007,6 +2095,8 @@ Take-photo = Take photo
 # Label for the button that opens the AI camera to take photos for a new observation
 Take-photos = Take photos
 Tap-here-to-switch-to-Advanced-Mode = Tap here to switch to Advanced Mode
+# Instruction under the video frame when stabilizing on the background
+Tap-the-frame-to-choose-where-to-crop = Tap the frame to choose where to crop.
 # Shown in place of a group of observations that failed to load, prompting the user to
 # request them again
 Tap-to-try-loading-again = Tap to try loading again
@@ -2091,6 +2181,8 @@ TOTAL-STORAGE-USED = TOTAL STORAGE USED
 Track--evidence = Track
 # Switch label for enabling continuous background location tracking
 Track-location-in-the-background = Track location in the background
+# Video stabilization method that follows a box the user draws
+Track-the-box-I-draw--stabilize-method = Track the box I draw
 # Legend label for the marker showing a location from tracked history
 Tracked-location = Tracked location
 # Title of the Android foreground service notification while tracking location
@@ -2460,6 +2552,16 @@ Verifiable--project-rule = Verifiable
 Verified-IDs-are-used-for-science-and-conservation = Verified IDs are used for science and conservation
 # Listing of app and build versions
 Version-app-build = Version { $appVersion } ({ $buildVersion })
+# Accessibility label for the still frame of a video being stabilized
+Video-frame = Video frame
+# Title of the video stabilizer tool, and its menu item
+VIDEO-STABILIZER = VIDEO STABILIZER
+# Alert title when the video stabilizer hits an error
+Video-stabilizer-failed = Couldn’t stabilize the video
+# Introduction on the video stabilizer screen
+Video-stabilizer-intro = Import a video, then hold either the background or a subject steady, and crop in closer.
+# Shown on platforms the video stabilizer doesn't support
+Video-stabilizer-is-only-available-on-iOS = The video stabilizer is only available on iOS.
 # Storage category: videos saved in the app
 Videos--storage = Videos
 Videos--storage-description = Videos saved in the app
@@ -2790,6 +2892,10 @@ Youve-previously-denied-camera-permissions = You've previously denied camera per
 Youve-previously-denied-location-permissions = You’ve previously denied location permissions, so please enable them in settings.
 Youve-previously-denied-microphone-permissions = You’ve previously denied microphone permissions, so please enable them in settings.
 Youve-previously-denied-photo-library-permissions = You've previously denied photo library permissions
+# Toggle that zooms in until no black edges show in the stabilized video
+Zoom-in-to-hide-empty-edges = Zoom in to hide black edges
 Zoom-to-current-location = Zoom to current location
 # Label for button that shows zoom level, e.g. on a camera
 zoom-x = { $zoom }×
+# Note that the video stabilizer zoomed in further than asked, to hide black edges
+Zoomed-to-x-to-hide-empty-edges = Zoomed to { $zoom }× to hide black edges.

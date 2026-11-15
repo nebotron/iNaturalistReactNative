@@ -38,6 +38,7 @@ import { Heading4 } from "components/SharedComponents";
 import FollowersList from "components/UserProfile/FollowersList";
 import FollowingList from "components/UserProfile/FollowingList";
 import UserProfile from "components/UserProfile/UserProfile";
+import VideoStabilizer from "components/VideoStabilizer/VideoStabilizer";
 import { t } from "i18next";
 import ContextHeader from "navigation/ContextHeader";
 import {
@@ -139,6 +140,11 @@ const cropLogTitle = () => (
 const cameraPairsTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "CAMERA-PAIRS" )}
+  </Heading4>
+);
+const videoStabilizerTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "VIDEO-STABILIZER" )}
   </Heading4>
 );
 const locationHistoryTitle = () => (
@@ -395,6 +401,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={CameraPairs}
             options={{
               headerTitle: cameraPairsTitle,
+            }}
+          />
+          <Stack.Screen
+            name="VideoStabilizer"
+            component={VideoStabilizer}
+            options={{
+              headerTitle: videoStabilizerTitle,
             }}
           />
           <Stack.Screen

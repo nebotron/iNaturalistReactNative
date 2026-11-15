@@ -25,6 +25,7 @@ import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
 import { log } from "sharedHelpers/logger";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
+import { isVideoStabilizerSupported } from "sharedHelpers/videoStabilizerNative";
 import {
   useCurrentUser, useDebugMode,
   useLayoutPrefs, useTranslation,
@@ -130,6 +131,15 @@ const Menu = ( ) => {
       navigation: "CameraPairs",
       icon: "camera",
     },
+    ...( isVideoStabilizerSupported( )
+      ? {
+        videoStabilizer: {
+          label: t( "VIDEO-STABILIZER" ),
+          navigation: "VideoStabilizer",
+          icon: "play-circle",
+        },
+      }
+      : {} ),
     about: {
       label: t( "ABOUT" ),
       navigation: "About",
