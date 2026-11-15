@@ -11,7 +11,9 @@ src/components/WildlifeHotspots/hooks/useRouteHotspots.ts: take the newest
 `max observations`, split them with k-means into clusters of at most a 1.5 km radius,
 count each species once per day per cluster, and rank the clusters by that count.
 
-Success metric: the share of lifers whose species appears in one of the top-5 hotspots.
+Success metric: the share of lifers found inside the area of one of the top-5 hotspots
+(the smallest circle around the hotspot's observations), whatever species were reported
+there; --tolerance-km also counts lifers found just outside.
 
 Only lifers whose first observation is research grade are scored; the "not yet seen"
 filter still excludes every species the user had observed in any quality grade, as
@@ -190,7 +192,8 @@ def find_lifers( birds: list[dict] ):
 # ---------------------------------------------------------------- search parameters
 
 def search_params( lat: float, lng: float, seen: list[int], day: str, stream: str ) -> dict:
-    # Key order matters: it is the cache key
+    # Key order and values matter: the query string is the cache key, which is also why
+    # fields still asks for ancestor_ids
     dlat = BOX_PADDING_KM / 111
     dlng = BOX_PADDING_KM / ( 111 * max( 0.2, math.cos( math.radians( lat ) ) ) )
     p = {
@@ -290,12 +293,45 @@ def split_to_radius( pts: np.ndarray, max_radius_km: float ):
     return out
 
 
-def top_hotspot_taxa( observations: list[dict], top: int ) -> set[int]:
-    """Taxa (with ancestors) seen in the top hotspots, ranked by de-duplicated count.
+def enclosing_circle( pts: np.ndarray ):
+    """enclosingCircle: smallest circle around the points (Welzl), on a local flat
+    projection. Returns ( lat, lng, radius_km )."""
+    km_lat = math.pi * EARTH_RADIUS_KM / 180
+    km_lng = km_lat * math.cos( math.radians( pts[0, 0] ) )
+    xy = [( lng * km_lng, lat * km_lat ) for lat, lng in pts]
 
-    The app ranks by ( detour + parking minutes ) / count; with the route centred on the
-    search area every candidate's detour is treated as equal, so this is count order.
-    """
+    def contains( c, p ):
+        return math.hypot( p[0] - c[0], p[1] - c[1] ) <= c[2] * ( 1 + 1e-9 ) + 1e-9
+
+    def from_two( a, b ):
+        return ( ( a[0] + b[0] ) / 2, ( a[1] + b[1] ) / 2, math.hypot( a[0] - b[0], a[1] - b[1] ) / 2 )
+
+    def from_three( a, b, c ):
+        d = 2 * ( a[0] * ( b[1] - c[1] ) + b[0] * ( c[1] - a[1] ) + c[0] * ( a[1] - b[1] ) )
+        if d == 0:  # collinear: the two farthest-apart points define the circle
+            return max( ( from_two( a, b ), from_two( a, c ), from_two( b, c ) ), key=lambda r: r[2] )
+        a2, b2, c2 = ( p[0] ** 2 + p[1] ** 2 for p in ( a, b, c ) )
+        x = ( a2 * ( b[1] - c[1] ) + b2 * ( c[1] - a[1] ) + c2 * ( a[1] - b[1] ) ) / d
+        y = ( a2 * ( c[0] - b[0] ) + b2 * ( a[0] - c[0] ) + c2 * ( b[0] - a[0] ) ) / d
+        return ( x, y, math.hypot( a[0] - x, a[1] - y ) )
+
+    c = ( *xy[0], 0 )
+    for i in range( 1, len( xy ) ):
+        if not contains( c, xy[i] ):
+            c = ( *xy[i], 0 )
+            for j in range( i ):
+                if not contains( c, xy[j] ):
+                    c = from_two( xy[i], xy[j] )
+                    for k in range( j ):
+                        if not contains( c, xy[k] ):
+                            c = from_three( xy[i], xy[j], xy[k] )
+    return ( c[1] / km_lat, c[0] / km_lng, c[2] )
+
+
+def top_hotspot_areas( observations: list[dict], top: int ):
+    """Area circles of the top hotspots, ranked by de-duplicated count. The app ranks by ( detour + parking minutes ) / count; with the route centred
+    on the search area every candidate's detour is treated as equal, so this is count
+    order."""
     pts, obs = [], []
     for o in observations:
         if o.get( "location" ) and o.get( "taxon" ):
@@ -303,21 +339,22 @@ def top_hotspot_taxa( observations: list[dict], top: int ) -> set[int]:
             pts.append( ( lat, lng ) )
             obs.append( o )
     if not pts:
-        return set( )
+        return []
+    pts = np.array( pts )
     cells = []
-    for _, members in split_to_radius( np.array( pts ), CLUSTER_RADIUS_KM ):
-        species_days = set( )
-        taxa = set( )
-        for i in members:
-            o = obs[i]
-            species_days.add( ( o["taxon"]["id"], o.get( "observed_on" ) ) )
-            taxa.update( o["taxon"].get( "ancestor_ids" ) or [o["taxon"]["id"]] )
-        cells.append( ( len( species_days ), taxa ) )
+    for _, members in split_to_radius( pts, CLUSTER_RADIUS_KM ):
+        # Observations of the same species on the same day count once
+        count = len( { ( obs[i]["taxon"]["id"], obs[i].get( "observed_on" ) ) for i in members } )
+        cells.append( ( count, members ) )
     cells.sort( key=lambda c: -c[0] )  # stable, like the app's sort
-    found = set( )
-    for _, taxa in cells[:top]:
-        found |= taxa
-    return found
+    return [enclosing_circle( pts[members] ) for _, members in cells[:top]]
+
+
+def found_in( target: dict, areas, tolerance_km: float ) -> bool:
+    return any(
+        haversine_km( target["lat"], target["lng"], lat, lng ) <= radius + tolerance_km
+        for lat, lng, radius in areas
+    )
 
 
 # ---------------------------------------------------------------- the backtest
@@ -339,17 +376,16 @@ def strategy_slice( stream_obs: list[dict], day: str, days_back, cap: int ):
 
 
 def score_group( job ):
-    day, targets, streams, caps, top = job
+    day, targets, streams, caps, top, tolerance_km = job
     memo, out = {}, []
     for name, ( stream, days_back ) in STRATEGIES.items( ):
         for cap in caps:
             sliced = strategy_slice( streams[stream], day, days_back, cap )
             key = tuple( o.get( "uuid" ) for o in sliced )
             if key not in memo:
-                memo[key] = top_hotspot_taxa( sliced, top )
-            found = memo[key]
+                memo[key] = top_hotspot_areas( sliced, top )
             for t in targets:
-                out.append( ( t["id"], name, cap, t["sp"] in found ) )
+                out.append( ( t["id"], name, cap, found_in( t, memo[key], tolerance_km ) ) )
     return out
 
 
@@ -359,6 +395,8 @@ def main( ):
     parser.add_argument( "--caps", default="200,400,600,800,1000",
                          help="max observations settings to test (multiples of 200)" )
     parser.add_argument( "--top", type=int, default=5, help="count a hit in the top N hotspots" )
+    parser.add_argument( "--tolerance-km", type=float, default=0,
+                         help="also count lifers found this far outside a hotspot's area" )
     parser.add_argument( "--cache-dir", type=Path, default=DEFAULT_CACHE_DIR )
     parser.add_argument( "--offline", action="store_true", help="use only cached responses" )
     parser.add_argument( "--dry-run", action="store_true",
@@ -396,7 +434,7 @@ def main( ):
         if any( v is None for v in streams.values( ) ):
             skipped += 1
             continue
-        jobs.append( ( day, targets, streams, caps, args.top ) )
+        jobs.append( ( day, targets, streams, caps, args.top, args.tolerance_km ) )
         if client.requests:
             print( f"  area {n}/{len( groups )} {day}: {client.requests} requests so far",
                    flush=True )
@@ -413,7 +451,8 @@ def main( ):
 
     hits = Counter( ( name, cap ) for _, name, cap, hit in rows if hit )
     n_lifers = len( { r[0] for r in rows } )
-    print( f"\nResearch-grade lifers whose species was in a top-{args.top} hotspot "
+    slack = f" (+{args.tolerance_km:g} km)" if args.tolerance_km else ""
+    print( f"\nResearch-grade lifers found inside a top-{args.top} hotspot's area{slack} "
            f"(n = {n_lifers})\n" )
     print( f"{'strategy':<14}" + "".join( f"{c:>8}" for c in caps ) )
     for name in STRATEGIES:
@@ -421,10 +460,14 @@ def main( ):
             f"{100 * hits[( name, c )] / n_lifers:>7.1f}%" for c in caps
         ) )
 
-    results_path = args.cache_dir / f"results_{args.user}_top{args.top}.json"
+    tolerance = f"_tol{args.tolerance_km:g}" if args.tolerance_km else ""
+    results_path = (
+        args.cache_dir / f"results_{args.user}_top{args.top}{tolerance}.json"
+    )
     results_path.write_text( json.dumps( {
         "user": args.user,
         "top": args.top,
+        "tolerance_km": args.tolerance_km,
         "caps": caps,
         "lifers_scored": n_lifers,
         "percent": {
