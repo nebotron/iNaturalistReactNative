@@ -39,7 +39,7 @@ const AddObsBottomSheet = ( {
 
   const obsCreateItems = useMemo( ( ) => ( {
     aiCamera: {
-      text: t( "ID-in-Camera" ),
+      text: t( "Take-photos" ),
       icon: "aicamera",
       onPress: ( ) => navAndCloseBottomSheet( ADD_OBS_SCREENS.CAMERA, { camera: "AI" } ),
       testID: "aicamera-button",

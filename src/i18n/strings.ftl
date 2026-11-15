@@ -891,7 +891,6 @@ Hotspots-View = Hotspots View
 How-often-each-camera-lens-and-setting-appears = How often each camera, lens, and setting appears in your photos
 I-agree-to-the-Terms-of-Use = <0>I agree to the Terms of Use and Privacy Policy, and I have reviewed the Community Guidelines (</0><1>required</1><0>).</0>
 Iconic-taxon-name = Iconic taxon name: { $iconicTaxon }
-ID-in-Camera = ID in Camera
 ID-Suggestions = ID Suggestions
 # Identification Status
 ID-Withdrawn = ID Withdrawn
@@ -2001,6 +2000,8 @@ Tags-the-ID-as-right = Tags the ID as right.
 Tags-the-ID-as-wrong = Tags the ID as wrong.
 # Help text for the button that opens the multi-capture camera
 Take-photo = Take photo
+# Label for the button that opens the AI camera to take photos for a new observation
+Take-photos = Take photos
 Tap-here-to-switch-to-Advanced-Mode = Tap here to switch to Advanced Mode
 # Shown in place of a group of observations that failed to load, prompting the user to
 # request them again

@@ -166,7 +166,7 @@ exports[`AddObsButton renders correctly 1`] = `
                 }
               }
             >
-              ID in Camera
+              Take photos
             </Text>
           </View>
           <View
