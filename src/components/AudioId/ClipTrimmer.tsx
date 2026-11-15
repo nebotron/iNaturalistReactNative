@@ -2,12 +2,12 @@ import { exists } from "@dr.pogodin/react-native-fs";
 import { INatIconButton } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
-  useEffect, useLayoutEffect, useRef, useState,
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
 } from "react";
 import { PanResponder } from "react-native";
 import { useTranslation } from "sharedHooks";
 
-import { clipPath, contextClipPath } from "./audioIdHistory";
+import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 import ClipProbabilityGraph, { useClipTimeline } from "./ClipProbabilityGraph";
@@ -19,24 +19,47 @@ interface Span { path: string; startMs: number; endMs: number; context: boolean 
 // How close in points a touch has to land to grab a start or end handle
 const GRAB = 24;
 const MIN_CLIP = 0.2;
+// How long after the last change to a trim it's saved, so a drag saves once
+const SAVE_DELAY_MS = 500;
 
 // The audio around a clip, with the trim it starts with: the 15 s context
 // clip, trimmed to the call found in it, or else to the
 // 5 s window the call was heard in (the context clip ends 5 s after the
 // window, which ends about when the clip was heard). Clips from before
-// context clips were saved fall back to the 5 s window.
+// context clips were saved fall back to the 5 s window. A trim the user set
+// is saved with the clip and starts it instead.
 export const useClipSpan = (
   id: string,
   heardAt: number | undefined,
   call?: [number, number],
   // The context clip's length, when it isn't 15 s (see AudioIdClip.duration)
   clipDuration?: number,
+  savedTrim?: [number, number],
 ) => {
   const [callStart, callEnd] = call || ( clipDuration
     ? [0, clipDuration]
     : [5, 10] );
   const [span, setSpan] = useState<Span | null>( null );
   const [trim, setTrim] = useState<[number, number]>( [0, 0] );
+  // Read when the span loads, so saving a trim doesn't reload it
+  const savedTrimRef = useRef( savedTrim );
+  useLayoutEffect( ( ) => { savedTrimRef.current = savedTrim; } );
+  const unsaved = useRef<[number, number] | null>( null );
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>( undefined );
+  const save = useCallback( ( ) => {
+    clearTimeout( saveTimer.current );
+    if ( !unsaved.current ) return;
+    useAudioIdHistory.getState( ).updateClip( id, { trim: unsaved.current } );
+    unsaved.current = null;
+  }, [id] );
+  // Leaving the clip saves a trim still waiting to be
+  useEffect( ( ) => save, [save] );
+  const changeTrim = useCallback( ( next: [number, number] ) => {
+    setTrim( next );
+    unsaved.current = next;
+    clearTimeout( saveTimer.current );
+    saveTimer.current = setTimeout( save, SAVE_DELAY_MS );
+  }, [save] );
   useEffect( ( ) => {
     if ( !heardAt ) return;
     exists( contextClipPath( id ) ).then( hasContext => {
@@ -56,12 +79,18 @@ export const useClipSpan = (
         };
       const duration = ( s.endMs - s.startMs ) / 1000;
       setSpan( s );
-      setTrim( !hasContext
-        ? [0, duration]
-        : [callStart, callEnd] );
+      const saved = savedTrimRef.current;
+      if ( saved ) {
+        const start = Math.min( Math.max( saved[0], 0 ), Math.max( duration - MIN_CLIP, 0 ) );
+        setTrim( [start, Math.min( Math.max( saved[1], start + MIN_CLIP ), duration )] );
+      } else {
+        setTrim( !hasContext
+          ? [0, duration]
+          : [callStart, callEnd] );
+      }
     } );
   }, [id, heardAt, callStart, callEnd, clipDuration] );
-  return { span, trim, setTrim };
+  return { span, trim, setTrim: changeTrim };
 };
 
 interface Props {

@@ -33,6 +33,9 @@ export interface AudioIdClip {
   location?: { latitude: number; longitude: number; accuracy: number };
   // Seconds into the 15 s context clip the call fills, when found
   call?: [number, number];
+  // Seconds into the clip's audio (the context clip, if kept) the user
+  // trimmed it to, when they moved a handle
+  trim?: [number, number];
   // The model's mean per-frame logit for the species in each 1/3 s of the
   // 15 s context clip, as the live session had it, or null where no run
   // covered that 1/3 s

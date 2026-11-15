@@ -49,7 +49,13 @@ const AudioIdClip = ( ) => {
   const updateObservations = useStore( state => state.updateObservations );
   const currentUser = useCurrentUser( );
   const [error, setError] = useState<string | null>( null );
-  const { span, trim, setTrim } = useClipSpan( id, clip?.time, clip?.call, clip?.duration );
+  const { span, trim, setTrim } = useClipSpan(
+    id,
+    clip?.time,
+    clip?.call,
+    clip?.duration,
+    clip?.trim,
+  );
   const time = clip?.time ?? 0;
   // The score for the trim as it stands, which is what Identify will give the
   // species: the trimmed audio is the observation's sound. Until it's back,
