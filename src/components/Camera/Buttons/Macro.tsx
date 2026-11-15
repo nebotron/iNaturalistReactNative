@@ -31,7 +31,7 @@ const Macro = ( {
         accessibilityHint={macroMode
           ? t( "Disable-macro-mode" )
           : t( "Enable-macro-mode" )}
-        icon="iconic-plantae"
+        icon="flower"
         optionalClasses={macroMode
           ? "border-2 border-inatGreen"
           : undefined}
