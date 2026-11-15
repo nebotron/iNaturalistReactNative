@@ -4,6 +4,7 @@ import * as usePredictions from "components/Camera/AICamera/hooks/usePredictions
 import i18next from "i18next";
 import React from "react";
 import * as useTaxon from "sharedHooks/useTaxon";
+import useStore from "stores/useStore";
 import cachedImageUri from "tests/helpers/cachedImageUri";
 
 jest.mock( "@react-navigation/native", () => ( {
@@ -155,5 +156,17 @@ describe( "AI Camera", ( ) => {
     const taxonIcon = screen.getByTestId( "IconicTaxonName.iconicTaxonIcon" );
 
     expect( taxonIcon ).toBeVisible( );
+  } );
+
+  it( "shows only the most recent photo in the corner thumbnail", ( ) => {
+    useStore.setState( { cameraUris: ["file://first.jpg", "file://second.jpg"] } );
+    render( <AICamera {...mockMultiCaptureProps} /> );
+
+    const latestPhoto = screen.getByTestId( "AICamera.latestPhoto" );
+
+    expect( latestPhoto ).toBeVisible( );
+    expect( latestPhoto.props.source ).toStrictEqual( { uri: "file://second.jpg" } );
+    expect( screen.queryByLabelText( i18next.t( "Photo-importer" ) ) ).toBeNull( );
+    useStore.setState( { cameraUris: [] } );
   } );
 } );

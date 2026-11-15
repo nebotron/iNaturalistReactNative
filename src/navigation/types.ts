@@ -286,12 +286,6 @@ export type PhotoImporterStackParamList = {
   // {
   //   fromGroupPhotos: true;
   // }
-  // From PhotoLibraryIcon
-  // {
-  //   cmonBack: true;
-  //   lastScreen: "Camera";
-  //   fromAICamera: true;
-  // }
   // From AddEvidenceSheet
   // {
   //   skipGroupPhotos: true;

@@ -472,7 +472,7 @@ const AICamera = ( {
         toggleLocation={toggleLocation}
         macroMode={macroMode}
         toggleMacro={toggleMacro}
-        completeSentinelFile={() => completeSentinelFile( sentinelFileName )}
+        latestPhotoUri={cameraUris[cameraUris.length - 1]}
       />
       <Snackbar visible={showMaxPhotosAlert} onDismiss={() => setShowMaxPhotosAlert( false )}>
         {t( "You-can-only-add-20-photos-per-observation" )}

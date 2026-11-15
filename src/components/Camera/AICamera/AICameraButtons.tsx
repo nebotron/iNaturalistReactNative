@@ -2,9 +2,9 @@ import CameraFlip from "components/Camera/Buttons/CameraFlip";
 import Close from "components/Camera/Buttons/Close";
 import Flash from "components/Camera/Buttons/Flash";
 import GreenCheckmark from "components/Camera/Buttons/GreenCheckmark";
+import LatestPhoto from "components/Camera/Buttons/LatestPhoto";
 import Location from "components/Camera/Buttons/Location";
 import Macro from "components/Camera/Buttons/Macro";
-import PhotoLibraryIcon from "components/Camera/Buttons/PhotoLibraryIcon";
 import TakePhoto from "components/Camera/Buttons/TakePhoto";
 import Zoom from "components/Camera/Buttons/Zoom";
 import RotatableIconWrapper from "components/Camera/RotatableIconWrapper";
@@ -27,6 +27,7 @@ interface Props {
   flipCamera: ( ) => void;
   handleClose: ( ) => void;
   hasFlash: boolean;
+  latestPhotoUri?: string;
   photosTaken: boolean;
   rotatableAnimatedStyle: AnimatedStyle;
   showPrediction: boolean;
@@ -40,7 +41,6 @@ interface Props {
   toggleLocation: ( ) => void;
   macroMode: boolean;
   toggleMacro: ( ) => void;
-  completeSentinelFile: ( ) => Promise<void>;
 }
 
 const AICameraButtons = ( {
@@ -51,6 +51,7 @@ const AICameraButtons = ( {
   flipCamera,
   handleClose,
   hasFlash,
+  latestPhotoUri,
   photosTaken,
   rotatableAnimatedStyle,
   showPrediction,
@@ -64,7 +65,6 @@ const AICameraButtons = ( {
   toggleLocation,
   macroMode,
   toggleMacro,
-  completeSentinelFile,
 }: Props ) => {
   const { bottom } = useSafeAreaInsets( );
   const { isDefaultMode } = useLayoutPrefs();
@@ -75,7 +75,6 @@ const AICameraButtons = ( {
         // Photos can be taken before the model has loaded, they just won't
         // come with a live suggestion
         disabled={disallowAddingPhotos || takingPhoto}
-        disabledPhotoLibrary={takingPhoto}
         // TODO: once we re-visit tablet views, we'll want to ensure users cannot spam the submit
         // button while taking photos. see:
         // https://linear.app/inaturalist/issue/MOB-1084/multicapture-camera-multiple-copies-of-photos-can-be-saved
@@ -86,7 +85,8 @@ const AICameraButtons = ( {
           : handleCheckmarkPress}
         handleClose={handleClose}
         hasFlash={hasFlash}
-        hasPhotoLibraryButton
+        hasLatestPhoto
+        latestPhotoUri={latestPhotoUri}
         photosTaken={photosTaken}
         rotatableAnimatedStyle={rotatableAnimatedStyle}
         showPrediction={showPrediction}
@@ -98,7 +98,6 @@ const AICameraButtons = ( {
         useLocation={useLocation}
         toggleLocation={toggleLocation}
         isDefaultMode={isDefaultMode}
-        completeSentinelFile={completeSentinelFile}
       />
     );
   }
@@ -163,10 +162,9 @@ const AICameraButtons = ( {
           />
         </View>
         <View>
-          <PhotoLibraryIcon
+          <LatestPhoto
+            photoUri={latestPhotoUri}
             rotatableAnimatedStyle={rotatableAnimatedStyle}
-            disabled={takingPhoto}
-            completeSentinelFile={completeSentinelFile}
           />
         </View>
       </View>
