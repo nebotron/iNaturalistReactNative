@@ -8,6 +8,7 @@ import type { RefObject } from "react";
 import React, {
   useCallback,
   useEffect,
+  useState,
 } from "react";
 import {
   Platform, StyleSheet,
@@ -85,12 +86,21 @@ const CameraView = ( {
     [onCameraError],
   );
 
-  // Macro mode locks the lens at its closest focus distance. The controller is
-  // recreated whenever the session restarts (e.g. switching to the macro
-  // device), so this runs both when macroMode changes and on every start.
+  // Macro mode locks the lens at its closest focus distance. Toggling macro
+  // swaps to the ultra-wide device, which VisionCamera reconfigures on the
+  // already-running session: onStarted doesn't fire again, and when macroMode
+  // changes the ref still holds the previous device's controller. So re-apply
+  // whenever a new controller is configured, and only to the controller for
+  // the device being shown.
+  const [configuredCount, setConfiguredCount] = useState( 0 );
+  const onConfigured = useCallback( ( ) => {
+    setConfiguredCount( count => count + 1 );
+  }, [] );
+
   const applyMacroFocus = useCallback( async ( ) => {
     const controller = cameraRef.current?.controller;
-    if ( !controller?.device.supportsFocusLocking ) { return; }
+    if ( !controller || controller.device.id !== device.id ) { return; }
+    if ( !controller.device.supportsFocusLocking ) { return; }
     try {
       if ( macroMode ) {
         await controller.setFocusLocked( 0 );
@@ -100,11 +110,11 @@ const CameraView = ( {
     } catch ( error ) {
       logger.error( "Failed to apply macro focus", error );
     }
-  }, [cameraRef, macroMode] );
+  }, [cameraRef, device.id, macroMode] );
 
   useEffect( ( ) => {
     applyMacroFocus( );
-  }, [applyMacroFocus] );
+  }, [applyMacroFocus, configuredCount] );
 
   const outputs = frameOutput
     ? [photoOutput, frameOutput]
@@ -129,6 +139,7 @@ const CameraView = ( {
           enableNativeZoomGesture={false}
           isActive={isActive}
           onError={onError}
+          onConfigured={onConfigured}
           onStarted={applyMacroFocus}
           orientationSource="device"
           outputs={outputs}
