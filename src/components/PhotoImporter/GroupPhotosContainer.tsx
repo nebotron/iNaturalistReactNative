@@ -1,3 +1,4 @@
+import { StackActions, useNavigation } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
@@ -84,6 +85,7 @@ const GroupPhotosContainer = ( ) => {
   const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
   const itemHeight = gridItemStyle.height;
   const realm = useRealm( );
+  const navigation = useNavigation( );
   const exitObservationFlow = useExitObservationFlow( );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
@@ -389,6 +391,23 @@ const GroupPhotosContainer = ( ) => {
     ) );
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
+
+    // With every photo removed there's nothing left to group, so go straight
+    // back to the picker to choose some more. Popping back to the picker this
+    // import was started from keeps its params (and so what Cancel does
+    // there); an import that never had one underneath (resumed on a cold
+    // start, or handed over by the share extension) gets a fresh one in place
+    // of this screen.
+    if ( removedFromGroup.length === 0 ) {
+      const pickerRoute = navigation.getState( )?.routes
+        .find( route => route.name === "PhotoLibrary" );
+      navigation.dispatch( pickerRoute
+        ? StackActions.popTo( "PhotoLibrary", {
+          ...( pickerRoute.params || {} ),
+          fromGroupPhotos: false,
+        } )
+        : StackActions.replace( "PhotoLibrary" ) );
+    }
   };
 
   // The separate, duplicate, and remove buttons live on each photo, so they

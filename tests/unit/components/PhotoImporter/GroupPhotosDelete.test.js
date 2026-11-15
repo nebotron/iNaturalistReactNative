@@ -1,3 +1,4 @@
+import { StackActions } from "@react-navigation/native";
 import { fireEvent, screen } from "@testing-library/react-native";
 import GroupPhotosContainer from "components/PhotoImporter/GroupPhotosContainer";
 import initI18next from "i18n/initI18next";
@@ -11,6 +12,10 @@ import {
 import useStore, { zustandStorage } from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 
+const mockDispatch = jest.fn( );
+const groupPhotosOnlyState = { routes: [{ name: "GroupPhotos" }] };
+const mockGetState = jest.fn( ( ) => groupPhotosOnlyState );
+
 jest.mock( "@react-navigation/native", ( ) => {
   const actualNav = jest.requireActual( "@react-navigation/native" );
   return {
@@ -20,7 +25,8 @@ jest.mock( "@react-navigation/native", ( ) => {
       goBack: jest.fn( ),
       push: jest.fn( ),
       canGoBack: jest.fn( ( ) => false ),
-      dispatch: jest.fn( ),
+      dispatch: mockDispatch,
+      getState: mockGetState,
       addListener: jest.fn( ( ) => jest.fn( ) ),
       setOptions: jest.fn( ),
     } ),
@@ -38,6 +44,7 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
     useStore.setState( initialStoreState, true );
     zustandStorage.removeItem( "removedGroupPhotoUris" );
     jest.clearAllMocks( );
+    mockGetState.mockImplementation( ( ) => groupPhotosOnlyState );
   } );
 
   // Removing a photo records its device URI instead of deleting it: the import
@@ -58,6 +65,63 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
 
     expect( useStore.getState( ).pendingGroupPhotoDeletionUris ).toContain( "ph://DEVICE-1" );
     expect( getRemovedGroupPhotoUris( ) ).toContain( "ph://DEVICE-1" );
+  } );
+
+  // With nothing left to group, the user is taken straight back to the picker
+  // they came from, which keeps its params.
+  it( "returns to the photo picker after the last photo is removed", async ( ) => {
+    mockGetState.mockImplementation( ( ) => ( {
+      routes: [
+        { name: "PhotoLibrary", params: { cmonBack: true } },
+        { name: "GroupPhotos" },
+      ],
+    } ) );
+    useStore.setState( {
+      groupedPhotos: [{
+        photos: [{
+          image: { uri: "file:///local_1.jpg" },
+          originalDevicePhotoUri: "ph://DEVICE-1",
+        }],
+      }],
+    } );
+    renderComponent( <GroupPhotosContainer /> );
+
+    fireEvent.press( screen.getByTestId( "GroupPhotos.remove.file:///local_1.jpg" ) );
+
+    expect( mockDispatch ).toHaveBeenCalledWith( StackActions.popTo( "PhotoLibrary", {
+      cmonBack: true,
+      fromGroupPhotos: false,
+    } ) );
+  } );
+
+  it( "opens a fresh photo picker when none is underneath", async ( ) => {
+    useStore.setState( {
+      groupedPhotos: [{
+        photos: [{
+          image: { uri: "file:///local_1.jpg" },
+          originalDevicePhotoUri: "ph://DEVICE-1",
+        }],
+      }],
+    } );
+    renderComponent( <GroupPhotosContainer /> );
+
+    fireEvent.press( screen.getByTestId( "GroupPhotos.remove.file:///local_1.jpg" ) );
+
+    expect( mockDispatch ).toHaveBeenCalledWith( StackActions.replace( "PhotoLibrary" ) );
+  } );
+
+  it( "stays on Group Photos while photos remain", async ( ) => {
+    useStore.setState( {
+      groupedPhotos: [
+        { photos: [{ image: { uri: "file:///local_1.jpg" } }] },
+        { photos: [{ image: { uri: "file:///local_2.jpg" } }] },
+      ],
+    } );
+    renderComponent( <GroupPhotosContainer /> );
+
+    fireEvent.press( screen.getByTestId( "GroupPhotos.remove.file:///local_1.jpg" ) );
+
+    expect( mockDispatch ).not.toHaveBeenCalled( );
   } );
 
   // Removing a photo is a decision about the photo, not about the import, so
