@@ -260,10 +260,11 @@ class Photo extends Realm.Object {
   // local file, and those URLs have never been fetched, so the newest
   // observations would all download bytes the device already has. Store the
   // uploaded file in the image cache under the sizes the app's photo-heavy
-  // screens load: original (observation lists and the media viewer) and large
-  // (observation details). The file is the upload itself, so it is the same
-  // picture the server serves. Must finish before the photo is marked synced,
-  // or a screen can request the remote URL first. iOS only; a no-op elsewhere.
+  // screens load: original (observation lists and the media viewer), large
+  // (observation details) and medium (the Me tab's grids). The file is the
+  // upload itself, so it is the same picture the server serves. Must finish
+  // before the photo is marked synced, or a screen can request the remote URL
+  // first. iOS only; a no-op elsewhere.
   static async seedImageCache( remoteUrl?: string, localFilePath?: string | null ) {
     const seedCache = NativeModules.FasterImageViewManager?.seedCache;
     const localUri = Photo.getLocalPhotoUri( localFilePath ?? undefined );
@@ -271,6 +272,7 @@ class Photo extends Realm.Object {
     const sources = [
       Photo.displayOriginalPhoto( remoteUrl ),
       Photo.displayLargePhoto( remoteUrl ),
+      Photo.displayMediumPhoto( remoteUrl ),
     ];
     try {
       await seedCache( sources, stripFilePrefix( localUri ) );

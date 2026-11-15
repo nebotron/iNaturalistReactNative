@@ -17,13 +17,14 @@ describe( "seedImageCache", ( ) => {
     seedCache.mockResolvedValue( true );
   } );
 
-  it( "stores the uploaded file under the original and large URLs", async ( ) => {
+  it( "stores the uploaded file under the original, large and medium URLs", async ( ) => {
     await Photo.seedImageCache( SQUARE_URL, "/old/container/photoUploads/abc.jpg" );
 
     expect( seedCache ).toHaveBeenCalledWith(
       [
         "https://inaturalist-open-data.s3.amazonaws.com/photos/42/original.jpg",
         "https://inaturalist-open-data.s3.amazonaws.com/photos/42/large.jpg",
+        "https://inaturalist-open-data.s3.amazonaws.com/photos/42/medium.jpg",
       ],
       // A bare path in the current container, not a file:// URI.
       `${photoUploadPath}/abc.jpg`,
