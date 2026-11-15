@@ -26,6 +26,9 @@ Not every report has a crash log: one appears only once the tester's device
 uploads it, and a crash iOS wrote no crash report for (such as a jetsam
 memory kill) never has one. MetricKit's view of those is in the app log:
     python3 scripts/app_log.py --grep metrickit_crash
+
+Builds go up without symbols, so the app's own frames in these logs need
+scripts/symbolicate.py and the build's symbols (see that script).
 """
 
 from __future__ import annotations
