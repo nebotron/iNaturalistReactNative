@@ -4,6 +4,8 @@ import type { LatLng } from "react-native-maps";
 import { log } from "sharedHelpers/logger";
 import { getTunable } from "sharedHelpers/tunableParams";
 
+import { cachedRequest } from "./requestCache";
+
 const logger = log.extend( "placeSearch" );
 
 export interface PlaceResult {
@@ -52,27 +54,13 @@ const { PlaceSearch } = NativeModules as { PlaceSearch?: PlaceSearchModule };
 // Suggestions are cached by query so backspacing, retyping, or refocusing a
 // field doesn't refetch. The bias point is part of the key because the same
 // text ranks differently from a different stop.
-const CACHE_LIMIT = 50;
-const cache = new Map<string, PlaceResult[]>( );
+const CACHE_LIMIT = 200;
 
 function cacheKey( text: string, nearbyLatLng?: LatLng ): string {
   const bias = nearbyLatLng
     ? `${nearbyLatLng.latitude.toFixed( 2 )},${nearbyLatLng.longitude.toFixed( 2 )}`
     : "";
   return `${text.trim( ).toLowerCase( )}|${bias}`;
-}
-
-// Only successful lookups are cached, so a network blip doesn't pin an empty
-// dropdown to a query for the rest of the session.
-function remember( key: string, results: PlaceResult[] ): PlaceResult[] {
-  if ( results.length > 0 ) {
-    cache.set( key, results );
-    if ( cache.size > CACHE_LIMIT ) {
-      const oldest = cache.keys( ).next( ).value;
-      if ( oldest !== undefined ) cache.delete( oldest );
-    }
-  }
-  return results;
 }
 
 interface PhotonProperties {
@@ -168,15 +156,10 @@ async function searchNominatim( text: string, nearbyLatLng?: LatLng ): Promise<P
   } ) );
 }
 
-// Suggestions carry their own coordinates, so selecting one needs no follow-up
-// place details lookup.
-export async function searchPlaces(
+async function searchPlacesUncached(
   text: string,
   nearbyLatLng?: LatLng,
 ): Promise<PlaceResult[]> {
-  const key = cacheKey( text, nearbyLatLng );
-  const cached = cache.get( key );
-  if ( cached ) return cached;
   if ( PlaceSearch ) {
     try {
       const appleResults = await PlaceSearch.search(
@@ -189,23 +172,40 @@ export async function searchPlaces(
           : 0,
         MAX_SUGGESTIONS,
       );
-      if ( appleResults.length > 0 ) return remember( key, appleResults );
+      if ( appleResults.length > 0 ) return appleResults;
     } catch ( error ) {
       logger.error( "Apple place search threw", error );
     }
   }
   try {
     const photonResults = await searchPhoton( text, nearbyLatLng );
-    if ( photonResults.length > 0 ) return remember( key, photonResults );
+    if ( photonResults.length > 0 ) return photonResults;
   } catch ( error ) {
     logger.error( "Photon search threw", error );
   }
   try {
-    return remember( key, await searchNominatim( text, nearbyLatLng ) );
+    return await searchNominatim( text, nearbyLatLng );
   } catch ( error ) {
     logger.error( "Nominatim search threw", error );
     return [];
   }
+}
+
+// Suggestions carry their own coordinates, so selecting one needs no follow-up
+// place details lookup.
+export function searchPlaces(
+  text: string,
+  nearbyLatLng?: LatLng,
+): Promise<PlaceResult[]> {
+  // Only successful lookups are cached, so a network blip doesn't pin an empty
+  // dropdown to a query.
+  return cachedRequest(
+    "places",
+    CACHE_LIMIT,
+    cacheKey( text, nearbyLatLng ),
+    ( ) => searchPlacesUncached( text, nearbyLatLng ),
+    results => results.length > 0,
+  );
 }
 
 export default searchPlaces;

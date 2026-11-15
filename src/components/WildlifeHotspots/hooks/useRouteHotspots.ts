@@ -1,4 +1,5 @@
 import { searchObservations } from "api/observations";
+import { cachedRequest } from "components/WildlifeHotspots/requestCache";
 import i18n from "i18next";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
@@ -43,11 +44,18 @@ const OSRM_TABLE_BASE = "https://router.project-osrm.org/table/v1/driving";
 // Hotspot settings ride along in filterParams but aren't iNaturalist API params
 const HOTSPOT_PARAM_KEYS = Object.keys( DEFAULT_HOTSPOT_SETTINGS );
 
-export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<{
+// Waypoints as OSRM takes them, rounded to about a metre so the same places
+// make the same request
+const osrmCoords = ( points: RoutePoint[] ) => points
+  .map( w => `${w.longitude.toFixed( 5 )},${w.latitude.toFixed( 5 )}` )
+  .join( ";" );
+
+interface OSRMRoute {
   coords: RoutePoint[];
   durationSec: number;
-}> {
-  const wStr = waypoints.map( w => `${w.longitude},${w.latitude}` ).join( ";" );
+}
+
+async function fetchOSRMRouteUncached( wStr: string ): Promise<OSRMRoute> {
   const url = `${OSRM_BASE}/${wStr}?overview=full&geometries=geojson`;
   const response = await fetch( url );
   if ( !response.ok ) {
@@ -64,17 +72,32 @@ export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<{
   };
 }
 
-// Driving times in seconds between every pair of points, Infinity where unroutable
-export async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
-  const wStr = points.map( w => `${w.longitude},${w.latitude}` ).join( ";" );
+export function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<OSRMRoute> {
+  const wStr = osrmCoords( waypoints );
+  return cachedRequest( "route", 50, wStr, ( ) => fetchOSRMRouteUncached( wStr ) );
+}
+
+async function fetchOSRMDurationsUncached( wStr: string ): Promise<( number | null )[][]> {
   const response = await fetch( `${OSRM_TABLE_BASE}/${wStr}?annotations=duration` );
   if ( !response.ok ) {
     throw new Error( `Routing service error: ${response.status}` );
   }
   const data = await response.json();
   if ( !data.durations ) throw new Error( "No travel times found between these locations" );
-  return ( data.durations as ( number | null )[][] )
-    .map( row => row.map( d => d ?? Infinity ) );
+  return data.durations;
+}
+
+// Driving times in seconds between every pair of points, Infinity where unroutable
+export async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
+  const wStr = osrmCoords( points );
+  // Stored as OSRM sends it, since JSON turns Infinity into null
+  const durations = await cachedRequest(
+    "durations",
+    50,
+    wStr,
+    ( ) => fetchOSRMDurationsUncached( wStr ),
+  );
+  return durations.map( row => row.map( d => d ?? Infinity ) );
 }
 
 // Extra distance (km) incurred by visiting `candidate` between stops[idx] and stops[idx + 1]
@@ -173,32 +196,13 @@ function roundBboxOutward( bbox: ReturnType<typeof routeBbox> ) {
   };
 }
 
-// Observation pages already fetched, keyed on the full request, so reopening
-// the Hotspots view, reordering stops, or changing a setting that only affects
-// clustering or ranking doesn't search iNaturalist again.
-const OBSERVATION_CACHE_TTL_MS = 15 * 60 * 1000;
-const OBSERVATION_CACHE_MAX_ENTRIES = 30;
+// Observation pages already fetched, so reopening the Hotspots view, reordering
+// stops, or changing a setting that only affects clustering or ranking doesn't
+// search iNaturalist again
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const observationPageCache = new Map<string, { at: number; promise: Promise<any> }>();
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function cachedSearchObservations( params: Record<string, unknown> ): Promise<any> {
-  const key = JSON.stringify( params );
-  const now = Date.now();
-  const hit = observationPageCache.get( key );
-  if ( hit && now - hit.at < OBSERVATION_CACHE_TTL_MS ) return hit.promise;
-  const promise = searchObservations( params );
-  observationPageCache.set( key, { at: now, promise } );
-  // A failed request must not be served from the cache
-  promise.catch( () => observationPageCache.delete( key ) );
-  // Map keeps insertion order, so the first key is the oldest
-  while ( observationPageCache.size > OBSERVATION_CACHE_MAX_ENTRIES ) {
-    const oldest = observationPageCache.keys().next().value;
-    if ( oldest === undefined ) break;
-    observationPageCache.delete( oldest );
-  }
-  return promise;
-}
+const cachedSearchObservations = ( params: Record<string, unknown> ): Promise<any> => (
+  cachedRequest( "observations", 30, params, ( ) => searchObservations( params ) )
+);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getObsCoords( obs: any ): { lat: number; lng: number } | null {
