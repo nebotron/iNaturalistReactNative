@@ -292,6 +292,14 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
   log when the device uploaded one) come from App Store Connect:
   `python3 scripts/testflight_crashes.py` (`--log N` prints one report's log).
   Needs the App Store Connect API key variables in the environment or `.env`.
+- **Naming the app's own frames** in those crash logs, in `.ips` files from a
+  device, and in the app log's MetricKit stacks: TestFlight builds go up
+  without symbols, so those frames are bare offsets. Each TestFlight run saves
+  a `symbols-<build>` artifact (90 days); for any build, the `iOS symbols`
+  workflow (`.github/workflows/ios-symbols.yml`, input `build`) rebuilds the
+  symbol table and dSYM from the commit that built it. Unzip the artifacts into
+  `scripts/.symbols`, then `python3 scripts/symbolicate.py crash.ips` or
+  `python3 scripts/symbolicate.py --log`.
 - **Battery use** comes from iOS MetricKit, once a day per device:
   `python3 scripts/power_report.py` tabulates `metrickit_daily` (CPU, GPU,
   location, network, disk writes), `metrickit_signpost` (the same split by

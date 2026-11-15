@@ -18,7 +18,8 @@ Usage:
 MetricKit stacks give the app's own frames as offsets into the binary, which
 is stripped, so they mean nothing on their own (or name whatever exported
 symbol happens to precede them). Each TestFlight build saves a symbol table as
-the workflow artifact `symbols-<build number>` (testflight-ios-build.yml);
+the workflow artifact `symbols-<build number>` (testflight-ios-build.yml), and
+ios-symbols.yml rebuilds one for any build as `rebuilt-symbols-<build number>`;
 unzip it into DIR (default scripts/.symbols) and those frames get their names.
 """
 
@@ -160,7 +161,8 @@ def load_symbols( directory: Path | None, build: str | None ) -> Symbols | None:
     if not directory or not build:
         return None
     for candidate in ( directory / f"{build}.txt.gz", directory / f"{build}.txt",
-                       directory / f"symbols-{build}" / f"{build}.txt.gz" ):
+                       directory / f"symbols-{build}" / f"{build}.txt.gz",
+                       directory / f"rebuilt-symbols-{build}" / f"{build}.txt.gz" ):
         if candidate.exists():
             return Symbols( candidate )
     return None
