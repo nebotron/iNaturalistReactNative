@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import functools
 import gzip
 import json
 import re
@@ -69,16 +70,17 @@ class Symbols:
         """The function holding this offset, and the offset into it."""
         address = TEXT_BASE + offset
         i = bisect.bisect_right( self.addresses, address ) - 1
-        return ( self.names[i], address - self.addresses[i] ) if i >= 0 else None
+        return ( demangle( self.names[i] ), address - self.addresses[i] ) if i >= 0 else None
 
     def lines( self, offsets: list[int] ) -> list[list[str]]:
         """For each offset, its frames innermost first as "function (file:line)"."""
         if not self.dwarf or not offsets:
             return [[] for _ in offsets]
+        # Addresses in the dSYM's own space, which starts at TEXT_BASE; the
+        # default output style ends each address's frames with a blank line
         result = subprocess.run(
-            ["llvm-symbolizer", f"--obj={self.dwarf}", "--inlines", "--demangle",
-             "--relative-address", "--output-style=GNU"],
-            input="".join( f"0x{o:x}\n" for o in offsets ),
+            ["llvm-symbolizer", f"--obj={self.dwarf}", "--inlines", "--demangle"],
+            input="".join( f"0x{TEXT_BASE + o:x}\n" for o in offsets ),
             capture_output=True, text=True, check=True,
         )
         blocks, current = [], []
@@ -92,8 +94,30 @@ class Symbols:
         out = []
         for block in blocks[:len( offsets )]:
             pairs = zip( block[0::2], block[1::2] )
-            out.append( [f"{name} ({Path( where ).name})" for name, where in pairs] )
+            out.append( [f"{name} ({Path( where ).name})" for name, where in pairs
+                         if name != "??"] )
         return out + [[] for _ in range( len( offsets ) - len( out ) )]
+
+
+@functools.cache
+def demangle( name: str ) -> str:
+    """The table's name as Apple prints it: C symbols lose nm's leading
+    underscore, and C++ names the CI's c++filt left mangled get demangled."""
+    if name.startswith( "__Z" ):
+        tool = shutil.which( "llvm-cxxfilt" ) or shutil.which( "c++filt" )
+        if tool:
+            out = subprocess.run( [tool, name[1:]], capture_output=True, text=True ).stdout
+            return out.strip() or name
+    if name.startswith( "_" ) and not name.startswith( "__" ):
+        return name[1:]
+    return name
+
+
+def same_function( apple: str, ours: str ) -> bool:
+    # Apple cuts long names short with "..."
+    if apple.endswith( "..." ):
+        return ours.startswith( apple[:-3] )
+    return apple == ours
 
 
 def find_symbols( directory: Path, build: str ) -> Symbols | None:
@@ -211,15 +235,17 @@ def symbolicate_crash_log( path: Path, directory: Path ) -> None:
         mark = ""
         if f["apple"] and outermost[( f["thread"], f["offset"] )] is f:
             checked += 1
-            if found and f["apple"] == found[0] \
+            if found and same_function( f["apple"], found[0] ) \
                     and f["apple_offset"] == found[1] + f["offset"] - lookup_offset( f ):
                 agree += 1
                 mark = "  = Apple"
             else:
                 mark = f"  != Apple: {f['apple']} + {f['apple_offset']}"
         print( f"  {f['index']:>3} +0x{f['offset']:x}  {ours}{mark}" )
-        for inline in where:
-            print( f"          {inline}" )
+        # Once per address, after Apple's last line for it
+        if outermost[( f["thread"], f["offset"] )] is f:
+            for inline in where:
+                print( f"          {inline}" )
     if checked:
         print( f"\n{agree} of {checked} frames Apple symbolicated agree with these symbols" )
 

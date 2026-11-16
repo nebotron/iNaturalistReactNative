@@ -7,12 +7,16 @@
 # that produced a build number, checks out that run's commit, replays that
 # commit's own setup steps (.env, models, Pods, with the run's
 # prebuilt_react_native setting read back from its log), and archives it
-# unsigned, without the JS bundle, with the original build number. Builds are
-# reproducible given the same Xcode, which is picked to match the original run's
-# when its log names it. When the original run's symbols-<build> artifact still
-# exists, the rebuilt table is compared against it and the run fails if they
-# differ; otherwise check the rebuild's UUID and Apple's own frame names in a
-# crash log with scripts/symbolicate.py.
+# unsigned, without the JS bundle, with the original build number, using the
+# original run's Xcode when its log names it.
+#
+# A rebuild usually reproduces the shipped binary exactly, but not always: one
+# of two rebuilds of 2026.1017.144045 with the same Xcode came out with another
+# UUID. So check every rebuild. When the original run's symbols-<build>
+# artifact still exists, the rebuilt table is compared against it here and the
+# run fails if they differ; otherwise scripts/symbolicate.py checks the binary
+# UUID in a crash log against the rebuild's, and Apple's own frame names where
+# Apple symbolicated any.
 #
 # Artifacts:
 #   rebuilt-symbols-<build>  <build>.txt.gz (the same nm table the TestFlight
