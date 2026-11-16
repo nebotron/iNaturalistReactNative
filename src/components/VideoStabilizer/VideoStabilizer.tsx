@@ -270,16 +270,11 @@ const VideoStabilizer = ( ) => {
     wantedPreviewKey, previewKey,
   ] );
 
-  const startOver = ( ) => {
-    activeJob = null;
-    cancelVideoStabilizer( );
-    releaseKeepAwake( KEEP_AWAKE_HOLDER );
-    useVideoStabilizer.getState( ).reset( );
-    clearVideoStabilizerFiles( ).catch( ( ) => undefined );
-  };
-
+  // Also serves "choose another video": work on the current one stops, and it
+  // stays loaded if the picker is dismissed. Importing replaces its files.
   const importVideo = async ( ) => {
     activeJob = null;
+    cancelVideoStabilizer( );
     holdKeepAwake( KEEP_AWAKE_HOLDER );
     set( { busy: { phase: "importing", progress: 0 } } );
     try {
@@ -618,7 +613,7 @@ const VideoStabilizer = ( ) => {
         className="mt-8"
         text={t( "CHOOSE-ANOTHER-VIDEO" )}
         disabled={disabled}
-        onPress={startOver}
+        onPress={importVideo}
       />
     </ScrollView>
   );
