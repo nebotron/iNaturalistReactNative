@@ -101,10 +101,15 @@ export const saveStabilizedVideo = ( path: string, original: string, start: numb
   nativeModule?.saveToPhotos( path, original, start ) ?? unavailable( )
 );
 
-// Looping, muted-until-unmuted inline player. Registered once here:
-// requireNativeComponent throws when a name is registered twice.
-export const VideoStabilizerPlayer = nativeModule
-  ? requireNativeComponent<ViewProps & { uri: string }>( "VideoStabilizerPlayer" )
+// The original, from `start`, beside the stabilized video, looping silently
+// in step. Registered once here: requireNativeComponent throws when a name is
+// registered twice.
+export const VideoStabilizerComparison = nativeModule
+  ? requireNativeComponent<ViewProps & {
+    original: string;
+    stabilized: string;
+    start: number;
+  }>( "VideoStabilizerComparison" )
   : null;
 
 // The native side keeps one session's files (the imported copy, frames,

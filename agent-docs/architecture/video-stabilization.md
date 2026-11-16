@@ -9,10 +9,10 @@ shutter, and crop in closer. The copy keeps the original's sound and metadata.
 
 | Layer | File | Job |
 | --- | --- | --- |
-| Screen | `src/components/VideoStabilizer/` | Import, start time, still lock, smoothing, rolling shutter, crop, inline preview, export/save |
+| Screen | `src/components/VideoStabilizer/` | Import, start time, still lock, smoothing, rolling shutter, crop, side-by-side preview, export/save |
 | Session state | `src/stores/videoStabilizer.ts` | Zustand, not persisted, so a tab switch doesn't drop a finished analysis |
 | Math | `src/sharedHelpers/videoStabilization.ts` | Camera path, smoothing, rolling shutter, crop/zoom planning; unit tested |
-| Bridge | `src/sharedHelpers/videoStabilizerNative.ts` | Typed wrapper, progress events, the inline player view |
+| Bridge | `src/sharedHelpers/videoStabilizerNative.ts` | Typed wrapper, progress events, the comparison player view |
 | Native | `ios/iNaturalistReactNative/VideoStabilizer.m` | Picking, frame reading, Vision registration, Core Image warping, AVAssetWriter, saving, player |
 
 The native module runs two passes over the same upright, constant-frame-rate
@@ -36,8 +36,12 @@ frame *i* of the render.
 The screen keys each result by the settings it was made with
 (`analysisKey`, `previewKey`, `exportKey` in the store). An effect reruns the
 analysis whenever its key is stale and, once it's current, re-renders the
-preview, which plays inline below the settings (`VideoStabilizerPlayer`, a
-looping `AVPlayerViewController`). Native analyses and renders are numbered;
+preview, which loops in a panel pinned below the settings beside the
+original (`VideoStabilizerComparison`: the original first, from the start
+time the preview was rendered with, then the stabilized preview). Both are
+tracks of one `AVMutableComposition` laid side by side by an
+`AVVideoComposition`, so a single player clock keeps them frame for frame in
+step, across the loop too. Native analyses and renders are numbered;
 starting one cancels the one before, and progress events carry the JS job
 number so a superseded job's progress is ignored. Only the export is started
 by hand. A render deletes the previous file of its kind only once it has

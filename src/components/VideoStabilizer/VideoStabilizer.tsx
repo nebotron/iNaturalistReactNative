@@ -36,7 +36,7 @@ import {
   renderStabilizedVideo,
   saveStabilizedVideo,
   videoFrameAt,
-  VideoStabilizerPlayer,
+  VideoStabilizerComparison,
 } from "sharedHelpers/videoStabilizerNative";
 import { useTranslation } from "sharedHooks";
 import type { BusyPhase } from "stores/videoStabilizer";
@@ -100,8 +100,8 @@ const VideoStabilizer = ( ) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions( );
   const {
     videoPath, info, frame, start, cropCenter, strength, still, rollingShutter,
-    zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, exportUri,
-    exportKey, set, setStart,
+    zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, previewStart,
+    exportUri, exportKey, set, setStart,
   } = useVideoStabilizer( );
   // Slider positions while dragging; settings are only committed on release.
   const [startDraft, setStartDraft] = useState<number | null>( null );
@@ -236,7 +236,7 @@ const VideoStabilizer = ( ) => {
       } ),
       result => {
         if ( preview ) {
-          set( { previewUri: result.uri, previewKey: key } );
+          set( { previewUri: result.uri, previewKey: key, previewStart: state.start } );
           return;
         }
         logger.info(
@@ -426,196 +426,217 @@ const VideoStabilizer = ( ) => {
   const exportSize = outputSize( info.width, info.height, EXPORT_MAX_DIMENSION );
   const previewIsCurrent = !!previewUri && previewKey === wantedPreviewKey;
 
+  // The original and the stabilized preview side by side, pinned below the
+  // settings, each half the width at most and no taller than a third of
+  // the screen.
+  const comparisonHeight = Math.min( maxPreviewWidth / 2 / aspect, windowHeight * 0.3 );
+  const comparisonHalfWidth = comparisonHeight * aspect;
+
   return (
-    <ScrollView
-      contentContainerClassName="p-4 pb-[96px]"
-    >
-      <FramePreview
-        uri={frame.uri}
-        width={previewWidth}
-        height={previewHeight}
-        crop={cropOutline}
-        cropCenter={cropCenter ?? { x: 0.5, y: 0.5 }}
-        onPointPicked={point => set( { cropCenter: point } )}
-      />
-      <Body3 className="mt-2 text-center">
-        {t( "Tap-the-frame-to-choose-where-to-crop" )}
-      </Body3>
-
-      <View className="flex-row items-center mt-4">
-        <Body2 className="w-[110px]">
-          {t( "Starts-at-x", { time: formatTime( startDraft ?? start ) } )}
-        </Body2>
-        <FineSlider
-          accessibilityLabel={t( "Start-time" )}
-          disabled={disabled}
-          minimumValue={0}
-          maximumValue={Math.max( 0.1, info.duration - 0.5 )}
-          value={startDraft ?? start}
-          onChange={setStartDraft}
-          onComplete={commitStart}
+    <View className="flex-1">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="p-4 pb-6"
+      >
+        <FramePreview
+          uri={frame.uri}
+          width={previewWidth}
+          height={previewHeight}
+          crop={cropOutline}
+          cropCenter={cropCenter ?? { x: 0.5, y: 0.5 }}
+          onPointPicked={point => set( { cropCenter: point } )}
         />
-      </View>
-
-      <Heading4 className="mt-6 mb-2">{t( "SMOOTHING" )}</Heading4>
-      <SwitchRow
-        label={t( "Hold-the-background-completely-still" )}
-        value={still}
-        disabled={disabled}
-        onValueChange={value => set( { still: value } )}
-      />
-      {still
-        ? (
-          <Body3 className="mt-2">
-            {t( "Pins-the-background-where-it-is-at-the-start" )}
-          </Body3>
-        )
-        : (
-          <View className="flex-row items-center mt-3">
-            <Body2 className="w-[110px]">
-              {t( "Stabilization-smooths-over-x-seconds", { seconds: sigma.toFixed( 1 ) } )}
-            </Body2>
-            <FineSlider
-              accessibilityLabel={t( "Stabilization-strength" )}
-              disabled={disabled}
-              minimumValue={0}
-              maximumValue={1}
-              value={strengthDraft ?? strength}
-              onChange={setStrengthDraft}
-              onComplete={value => {
-                setStrengthDraft( null );
-                set( { strength: value } );
-              }}
-            />
-          </View>
-        )}
-
-      <Heading4 className="mt-6 mb-2">{t( "ROLLING-SHUTTER" )}</Heading4>
-      <View className="flex-row items-center">
-        <Body2 className="w-[110px]">{readoutLabel}</Body2>
-        <FineSlider
-          accessibilityLabel={t( "Rolling-shutter-correction" )}
-          disabled={disabled}
-          minimumValue={0}
-          maximumValue={1}
-          value={shownReadout}
-          snapValue={0}
-          snapThreshold={0.03}
-          onChange={setRollingShutterDraft}
-          onComplete={value => {
-            setRollingShutterDraft( null );
-            set( { rollingShutter: value } );
-          }}
-        />
-      </View>
-      <Body3 className="mt-2">{t( "Straightens-lines-that-lean-or-wobble-in-fast-pans" )}</Body3>
-
-      <Heading4 className="mt-6 mb-2">{t( "CROP" )}</Heading4>
-      <View className="flex-row items-center">
-        <Body2 className="w-[110px]">
-          {t( "Crop-zoom-x", { zoom: shownZoom.toFixed( 1 ) } )}
-        </Body2>
-        <FineSlider
-          accessibilityLabel={t( "Crop-zoom" )}
-          disabled={disabled}
-          minimumValue={1}
-          maximumValue={MAX_ZOOM}
-          value={shownZoom}
-          snapValue={1}
-          snapThreshold={0.1}
-          onChange={setZoomDraft}
-          onComplete={value => {
-            setZoomDraft( null );
-            set( { zoom: value } );
-          }}
-        />
-      </View>
-      <SwitchRow
-        classNames="mt-3"
-        label={t( "Zoom-in-to-hide-empty-edges" )}
-        value={avoidEdges}
-        disabled={disabled}
-        onValueChange={value => set( { avoidEdges: value } )}
-      />
-      {plan && avoidEdges && plan.zoom > zoom + 0.01 && (
-        <Body3 className="mt-2">
-          {t( "Zoomed-to-x-to-hide-empty-edges", { zoom: plan.zoom.toFixed( 2 ) } )}
+        <Body3 className="mt-2 text-center">
+          {t( "Tap-the-frame-to-choose-where-to-crop" )}
         </Body3>
-      )}
-      {plan?.edgesVisible && avoidEdges && (
-        <Body3 className="mt-2">{t( "Some-frames-still-show-empty-edges" )}</Body3>
-      )}
-      {source && (
-        <Body3 className="mt-2">
-          {t( "Output-x-by-y-from-source-x-by-y", {
-            width: exportSize.width,
-            height: exportSize.height,
-            sourceWidth: source.width,
-            sourceHeight: source.height,
-          } )}
-        </Body3>
-      )}
 
-      <Heading4 className="mt-6 mb-2">{t( "PREVIEW--video-stabilizer" )}</Heading4>
-      {previewUri && VideoStabilizerPlayer
-        ? (
-          <View
-            className={`self-center ${previewIsCurrent
-              ? ""
-              : "opacity-50"}`}
-          >
-            <VideoStabilizerPlayer
-              accessibilityLabel={t( "Stabilized-preview" )}
-              uri={previewUri}
-              style={{ width: previewWidth, height: previewHeight }}
-            />
-          </View>
-        )
-        : (
-          <View
-            className="self-center items-center justify-center bg-lightGray p-4"
-            style={{ width: previewWidth, height: previewHeight }}
-          >
-            <Body3 className="text-center">
-              {t( "The-preview-appears-here-once-the-motion-is-analyzed" )}
-            </Body3>
-          </View>
-        )}
-      {!exporting && busyBar}
-      {currentAnalysis && !busy && (
-        <Body3 className="mt-2">
-          {t( "Motion-analyzed-across-x-frames", { count: currentAnalysis.frames.length } )}
-        </Body3>
-      )}
-      <Button
-        className="mt-4"
-        text={t( "PLAY-ORIGINAL" )}
-        onPress={( ) => playVideo( videoPath )}
-      />
-
-      <Button
-        className="mt-6"
-        level="primary"
-        text={t( "EXPORT" )}
-        disabled={disabled || !currentAnalysis}
-        onPress={( ) => wantedPreviewKey && render( wantedPreviewKey, false )}
-      />
-      {exporting && busyBar}
-      {currentExport && !busy && (
-        <View className="mt-4">
-          <Button text={t( "PLAY" )} onPress={( ) => playVideo( currentExport )} />
-          <Button className="mt-3" text={t( "SAVE-TO-PHOTOS" )} onPress={saveToPhotos} />
-          <Button className="mt-3" text={t( "SHARE" )} onPress={shareExport} />
+        <View className="flex-row items-center mt-4">
+          <Body2 className="w-[110px]">
+            {t( "Starts-at-x", { time: formatTime( startDraft ?? start ) } )}
+          </Body2>
+          <FineSlider
+            accessibilityLabel={t( "Start-time" )}
+            disabled={disabled}
+            minimumValue={0}
+            maximumValue={Math.max( 0.1, info.duration - 0.5 )}
+            value={startDraft ?? start}
+            onChange={setStartDraft}
+            onComplete={commitStart}
+          />
         </View>
-      )}
 
-      <Button
-        className="mt-8"
-        text={t( "CHOOSE-ANOTHER-VIDEO" )}
-        disabled={disabled}
-        onPress={importVideo}
-      />
-    </ScrollView>
+        <Heading4 className="mt-6 mb-2">{t( "SMOOTHING" )}</Heading4>
+        <SwitchRow
+          label={t( "Hold-the-background-completely-still" )}
+          value={still}
+          disabled={disabled}
+          onValueChange={value => set( { still: value } )}
+        />
+        {still
+          ? (
+            <Body3 className="mt-2">
+              {t( "Pins-the-background-where-it-is-at-the-start" )}
+            </Body3>
+          )
+          : (
+            <View className="flex-row items-center mt-3">
+              <Body2 className="w-[110px]">
+                {t( "Stabilization-smooths-over-x-seconds", { seconds: sigma.toFixed( 1 ) } )}
+              </Body2>
+              <FineSlider
+                accessibilityLabel={t( "Stabilization-strength" )}
+                disabled={disabled}
+                minimumValue={0}
+                maximumValue={1}
+                value={strengthDraft ?? strength}
+                onChange={setStrengthDraft}
+                onComplete={value => {
+                  setStrengthDraft( null );
+                  set( { strength: value } );
+                }}
+              />
+            </View>
+          )}
+
+        <Heading4 className="mt-6 mb-2">{t( "ROLLING-SHUTTER" )}</Heading4>
+        <View className="flex-row items-center">
+          <Body2 className="w-[110px]">{readoutLabel}</Body2>
+          <FineSlider
+            accessibilityLabel={t( "Rolling-shutter-correction" )}
+            disabled={disabled}
+            minimumValue={0}
+            maximumValue={1}
+            value={shownReadout}
+            snapValue={0}
+            snapThreshold={0.03}
+            onChange={setRollingShutterDraft}
+            onComplete={value => {
+              setRollingShutterDraft( null );
+              set( { rollingShutter: value } );
+            }}
+          />
+        </View>
+        <Body3 className="mt-2">{t( "Straightens-lines-that-lean-or-wobble-in-fast-pans" )}</Body3>
+
+        <Heading4 className="mt-6 mb-2">{t( "CROP" )}</Heading4>
+        <View className="flex-row items-center">
+          <Body2 className="w-[110px]">
+            {t( "Crop-zoom-x", { zoom: shownZoom.toFixed( 1 ) } )}
+          </Body2>
+          <FineSlider
+            accessibilityLabel={t( "Crop-zoom" )}
+            disabled={disabled}
+            minimumValue={1}
+            maximumValue={MAX_ZOOM}
+            value={shownZoom}
+            snapValue={1}
+            snapThreshold={0.1}
+            onChange={setZoomDraft}
+            onComplete={value => {
+              setZoomDraft( null );
+              set( { zoom: value } );
+            }}
+          />
+        </View>
+        <SwitchRow
+          classNames="mt-3"
+          label={t( "Zoom-in-to-hide-empty-edges" )}
+          value={avoidEdges}
+          disabled={disabled}
+          onValueChange={value => set( { avoidEdges: value } )}
+        />
+        {plan && avoidEdges && plan.zoom > zoom + 0.01 && (
+          <Body3 className="mt-2">
+            {t( "Zoomed-to-x-to-hide-empty-edges", { zoom: plan.zoom.toFixed( 2 ) } )}
+          </Body3>
+        )}
+        {plan?.edgesVisible && avoidEdges && (
+          <Body3 className="mt-2">{t( "Some-frames-still-show-empty-edges" )}</Body3>
+        )}
+        {source && (
+          <Body3 className="mt-2">
+            {t( "Output-x-by-y-from-source-x-by-y", {
+              width: exportSize.width,
+              height: exportSize.height,
+              sourceWidth: source.width,
+              sourceHeight: source.height,
+            } )}
+          </Body3>
+        )}
+
+        {!exporting && busyBar}
+        {currentAnalysis && !busy && (
+          <Body3 className="mt-2">
+            {t( "Motion-analyzed-across-x-frames", { count: currentAnalysis.frames.length } )}
+          </Body3>
+        )}
+        <Button
+          className="mt-4"
+          text={t( "PLAY-ORIGINAL" )}
+          onPress={( ) => playVideo( videoPath )}
+        />
+
+        <Button
+          className="mt-6"
+          level="primary"
+          text={t( "EXPORT" )}
+          disabled={disabled || !currentAnalysis}
+          onPress={( ) => wantedPreviewKey && render( wantedPreviewKey, false )}
+        />
+        {exporting && busyBar}
+        {currentExport && !busy && (
+          <View className="mt-4">
+            <Button text={t( "PLAY" )} onPress={( ) => playVideo( currentExport )} />
+            <Button className="mt-3" text={t( "SAVE-TO-PHOTOS" )} onPress={saveToPhotos} />
+            <Button className="mt-3" text={t( "SHARE" )} onPress={shareExport} />
+          </View>
+        )}
+
+        <Button
+          className="mt-8"
+          text={t( "CHOOSE-ANOTHER-VIDEO" )}
+          disabled={disabled}
+          onPress={importVideo}
+        />
+      </ScrollView>
+      <View className="px-4 pt-2 pb-6 border-t border-lightGray bg-white">
+        <Heading4 className="mb-2">{t( "PREVIEW--video-stabilizer" )}</Heading4>
+        <View className="self-center flex-row">
+          <Body3 className="text-center" style={{ width: comparisonHalfWidth }}>
+            {t( "Original--video-stabilizer" )}
+          </Body3>
+          <Body3 className="text-center" style={{ width: comparisonHalfWidth }}>
+            {t( "Stabilized--video-stabilizer" )}
+          </Body3>
+        </View>
+        {previewUri && VideoStabilizerComparison
+          ? (
+            <View
+              className={`self-center mt-1 ${previewIsCurrent
+                ? ""
+                : "opacity-50"}`}
+            >
+              <VideoStabilizerComparison
+                accessibilityLabel={t( "Original-and-stabilized-videos" )}
+                original={videoPath}
+                stabilized={previewUri}
+                start={previewStart}
+                style={{ width: comparisonHalfWidth * 2, height: comparisonHeight }}
+              />
+            </View>
+          )
+          : (
+            <View
+              className="self-center items-center justify-center bg-lightGray p-4 mt-1"
+              style={{ width: comparisonHalfWidth * 2, height: comparisonHeight }}
+            >
+              <Body3 className="text-center">
+                {t( "The-preview-appears-here-once-the-motion-is-analyzed" )}
+              </Body3>
+            </View>
+          )}
+      </View>
+    </View>
   );
 };
 

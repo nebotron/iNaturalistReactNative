@@ -27,7 +27,7 @@ jest.mock( "sharedHelpers/videoStabilizerNative", ( ) => ( {
   renderStabilizedVideo: ( ...args: unknown[] ) => mockRender( ...args ),
   playVideo: ( ...args: unknown[] ) => mockPlay( ...args ),
   saveStabilizedVideo: ( ...args: unknown[] ) => mockSave( ...args ),
-  VideoStabilizerPlayer: null,
+  VideoStabilizerComparison: null,
 } ) );
 
 jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {

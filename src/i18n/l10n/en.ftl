@@ -1508,6 +1508,10 @@ Or-you-can-try-to-get-a-clearer-photo-by-zooming-in-getting-closer = Or, you can
 # Picker prompt on observation edit
 Organism-is-captive = Organism is captive
 Organisms-that-are-identified-to-species = Organisms that are identified to species rank or below
+# Label above the original video, playing beside the stabilized one
+Original--video-stabilizer = Original
+# Accessibility label for the original and stabilized videos playing side by side
+Original-and-stabilized-videos = Original and stabilized videos
 # Display name for the iconic taxa category for other: anything that doesn't fit into another category
 Other = Other
 # Storage category: everything that doesn't fit another category
@@ -2016,8 +2020,8 @@ Specific-location--project-rule = Specific location
 Stabilization-smooths-over-x-seconds = Smooth over { $seconds } s
 # Accessibility label for the slider that sets how strongly a video is stabilized
 Stabilization-strength = Stabilization strength
-# Accessibility label for the looping preview of the stabilized video
-Stabilized-preview = Stabilized preview
+# Label above the stabilized video, playing beside the original
+Stabilized--video-stabilizer = Stabilized
 # Label for the standard map type
 Standard--map-type = Standard
 # Button that starts Audio ID listening to the microphone

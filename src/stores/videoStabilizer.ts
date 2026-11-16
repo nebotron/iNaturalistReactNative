@@ -40,6 +40,9 @@ export interface VideoStabilizerState {
   busy: Busy | null;
   previewUri: string | null;
   previewKey: string | null;
+  // The start time the preview was rendered from, so the original plays
+  // beside it from the same frame even while a newer preview is on its way.
+  previewStart: number;
   exportUri: string | null;
   exportKey: string | null;
   set: ( partial: Partial<VideoStabilizerState> ) => void;
@@ -63,6 +66,7 @@ const initialSession = {
   busy: null,
   previewUri: null,
   previewKey: null,
+  previewStart: 0,
   exportUri: null,
   exportKey: null,
 };

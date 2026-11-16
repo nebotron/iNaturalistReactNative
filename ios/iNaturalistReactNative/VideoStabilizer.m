@@ -958,18 +958,95 @@ RCT_EXPORT_METHOD( saveToPhotos
 
 @end
 
-// ─── Inline player ───────────────────────────────────────────────────────────
+// ─── Comparison player ───────────────────────────────────────────────────────
 
-// The preview under the settings: loops silently until the viewer unmutes it,
-// with the system's controls, and pauses while off screen.
-@interface VideoStabilizerPlayerView : UIView
-@property ( nonatomic, copy ) NSString *uri;
+// The original (from the start time) beside the stabilized preview, as one
+// composition with both tracks laid side by side. One player clock drives
+// both, so they stay frame for frame in step, including across the loop.
+static AVPlayerItem *comparisonItem( NSString *originalPath, NSString *stabilizedPath, double start )
+{
+  AVURLAsset *original = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( originalPath )]
+                                             options:@{ AVURLAssetPreferPreciseDurationAndTimingKey: @YES }];
+  AVURLAsset *stabilized = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( stabilizedPath )]
+                                               options:@{ AVURLAssetPreferPreciseDurationAndTimingKey: @YES }];
+  AVAssetTrack *originalTrack = [original tracksWithMediaType:AVMediaTypeVideo].firstObject;
+  AVAssetTrack *stabilizedTrack = [stabilized tracksWithMediaType:AVMediaTypeVideo].firstObject;
+  if ( !originalTrack || !stabilizedTrack ) return nil;
+
+  // The stabilized frame i is the original frame i after `start`.
+  CMTimeRange stabilizedRange = stabilizedTrack.timeRange;
+  CMTime originalStart = CMTimeMakeWithSeconds( MAX( 0, start ), 600 );
+  CMTime originalLeft = CMTimeSubtract( CMTimeRangeGetEnd( originalTrack.timeRange ), originalStart );
+  CMTime duration = CMTimeMinimum( stabilizedRange.duration, originalLeft );
+  if ( CMTimeCompare( duration, kCMTimeZero ) <= 0 ) return nil;
+
+  AVMutableComposition *composition = [AVMutableComposition composition];
+  AVMutableCompositionTrack *left = [composition addMutableTrackWithMediaType:AVMediaTypeVideo
+                                                             preferredTrackID:kCMPersistentTrackID_Invalid];
+  AVMutableCompositionTrack *right = [composition addMutableTrackWithMediaType:AVMediaTypeVideo
+                                                              preferredTrackID:kCMPersistentTrackID_Invalid];
+  if ( ![left insertTimeRange:CMTimeRangeMake( originalStart, duration ) ofTrack:originalTrack
+                       atTime:kCMTimeZero error:nil]
+    || ![right insertTimeRange:CMTimeRangeMake( stabilizedRange.start, duration ) ofTrack:stabilizedTrack
+                        atTime:kCMTimeZero error:nil] ) {
+    return nil;
+  }
+
+  // Each half is the stabilized preview's size; the original is turned
+  // upright and scaled to fit it.
+  CGRect stabilizedRect = CGRectApplyAffineTransform(
+    CGRectMake( 0, 0, stabilizedTrack.naturalSize.width, stabilizedTrack.naturalSize.height ),
+    stabilizedTrack.preferredTransform );
+  CGSize cell = CGSizeMake( round( fabs( stabilizedRect.size.width ) ), round( fabs( stabilizedRect.size.height ) ) );
+  CGRect originalRect = CGRectApplyAffineTransform(
+    CGRectMake( 0, 0, originalTrack.naturalSize.width, originalTrack.naturalSize.height ),
+    originalTrack.preferredTransform );
+  CGFloat scale = MIN( cell.width / originalRect.size.width, cell.height / originalRect.size.height );
+  CGAffineTransform originalTransform = originalTrack.preferredTransform;
+  originalTransform = CGAffineTransformConcat( originalTransform,
+    CGAffineTransformMakeTranslation( -originalRect.origin.x, -originalRect.origin.y ) );
+  originalTransform = CGAffineTransformConcat( originalTransform, CGAffineTransformMakeScale( scale, scale ) );
+  originalTransform = CGAffineTransformConcat( originalTransform, CGAffineTransformMakeTranslation(
+    ( cell.width - originalRect.size.width * scale ) / 2,
+    ( cell.height - originalRect.size.height * scale ) / 2 ) );
+  CGAffineTransform stabilizedTransform = stabilizedTrack.preferredTransform;
+  stabilizedTransform = CGAffineTransformConcat( stabilizedTransform,
+    CGAffineTransformMakeTranslation( cell.width - stabilizedRect.origin.x, -stabilizedRect.origin.y ) );
+
+  AVMutableVideoCompositionLayerInstruction *leftLayer =
+    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:left];
+  [leftLayer setTransform:originalTransform atTime:kCMTimeZero];
+  AVMutableVideoCompositionLayerInstruction *rightLayer =
+    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:right];
+  [rightLayer setTransform:stabilizedTransform atTime:kCMTimeZero];
+  AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+  instruction.timeRange = CMTimeRangeMake( kCMTimeZero, duration );
+  instruction.layerInstructions = @[leftLayer, rightLayer];
+  instruction.backgroundColor = [UIColor blackColor].CGColor;
+
+  AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
+  videoComposition.instructions = @[instruction];
+  videoComposition.renderSize = CGSizeMake( cell.width * 2, cell.height );
+  videoComposition.frameDuration = CMTimeMake( 1000, (int32_t)round( frameRateOf( stabilizedTrack ) * 1000 ) );
+
+  AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:composition];
+  item.videoComposition = videoComposition;
+  return item;
+}
+
+// Loops the comparison silently, and pauses while off screen.
+@interface VideoStabilizerComparisonView : UIView
+@property ( nonatomic, copy ) NSString *original;
+@property ( nonatomic, copy ) NSString *stabilized;
+@property ( nonatomic, assign ) double start;
 @end
 
-@implementation VideoStabilizerPlayerView {
-  AVPlayerViewController *_controller;
+@implementation VideoStabilizerComparisonView {
   AVQueuePlayer *_player;
   AVPlayerLooper *_looper;
+  AVPlayerLayer *_layer;
+  NSString *_loadedKey;
+  BOOL _reloadScheduled;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -978,57 +1055,64 @@ RCT_EXPORT_METHOD( saveToPhotos
     self.backgroundColor = [UIColor blackColor];
     _player = [[AVQueuePlayer alloc] init];
     _player.muted = YES;
-    _controller = [[AVPlayerViewController alloc] init];
-    _controller.player = _player;
-    _controller.showsPlaybackControls = YES;
-    _controller.videoGravity = AVLayerVideoGravityResizeAspect;
-    _controller.view.frame = self.bounds;
-    _controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    _controller.view.backgroundColor = [UIColor blackColor];
-    [self addSubview:_controller.view];
+    _layer = [AVPlayerLayer playerLayerWithPlayer:_player];
+    _layer.videoGravity = AVLayerVideoGravityResizeAspect;
+    [self.layer addSublayer:_layer];
   }
   return self;
 }
 
-- (void)setUri:(NSString *)uri
+- (void)layoutSubviews
 {
-  if ( [uri isEqualToString:_uri] || ( !uri && !_uri ) ) return;
-  _uri = [uri copy];
+  [super layoutSubviews];
+  _layer.frame = self.bounds;
+}
+
+- (void)setOriginal:(NSString *)original { _original = [original copy]; [self scheduleReload]; }
+- (void)setStabilized:(NSString *)stabilized { _stabilized = [stabilized copy]; [self scheduleReload]; }
+- (void)setStart:(double)start { _start = start; [self scheduleReload]; }
+
+// The props arrive one at a time; build once they've all been set.
+- (void)scheduleReload
+{
+  if ( _reloadScheduled ) return;
+  _reloadScheduled = YES;
+  dispatch_async( dispatch_get_main_queue( ), ^{
+    self->_reloadScheduled = NO;
+    [self reload];
+  } );
+}
+
+- (void)reload
+{
+  NSString *key = [NSString stringWithFormat:@"%@|%@|%f", _original ?: @"", _stabilized ?: @"", _start];
+  if ( [key isEqualToString:_loadedKey] ) return;
+  _loadedKey = key;
   [_looper disableLooping];
   _looper = nil;
   [_player removeAllItems];
-  if ( uri.length == 0 ) return;
-  AVPlayerItem *item = [AVPlayerItem playerItemWithURL:[NSURL fileURLWithPath:stripFileScheme( uri )]];
-  _looper = [AVPlayerLooper playerLooperWithPlayer:_player templateItem:item];
-  if ( self.window ) [_player play];
-}
-
-- (UIViewController *)owningViewController
-{
-  UIResponder *responder = self.nextResponder;
-  while ( responder && ![responder isKindOfClass:[UIViewController class]] ) responder = responder.nextResponder;
-  return (UIViewController *)responder;
+  if ( _original.length == 0 || _stabilized.length == 0 ) return;
+  NSString *original = _original;
+  NSString *stabilized = _stabilized;
+  double start = _start;
+  // Reading the tracks can block, so the item is built off the main thread.
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+    AVPlayerItem *item = comparisonItem( original, stabilized, start );
+    dispatch_async( dispatch_get_main_queue( ), ^{
+      if ( !item || ![key isEqualToString:self->_loadedKey] ) return;
+      self->_looper = [AVPlayerLooper playerLooperWithPlayer:self->_player templateItem:item];
+      if ( self.window ) [self->_player play];
+    } );
+  } );
 }
 
 - (void)didMoveToWindow
 {
   [super didMoveToWindow];
   if ( self.window ) {
-    // A child view controller, so full screen and picture in picture work.
-    UIViewController *parent = [self owningViewController];
-    if ( parent && _controller.parentViewController != parent ) {
-      [parent addChildViewController:_controller];
-      [_controller didMoveToParentViewController:parent];
-    }
-    if ( _uri.length > 0 ) [_player play];
-  } else if ( !_controller.presentedViewController ) {
-    // Going full screen can also take the view out of the window; only a
-    // real removal pauses.
+    if ( _looper ) [_player play];
+  } else {
     [_player pause];
-    if ( _controller.parentViewController ) {
-      [_controller willMoveToParentViewController:nil];
-      [_controller removeFromParentViewController];
-    }
   }
 }
 
@@ -1040,15 +1124,17 @@ RCT_EXPORT_METHOD( saveToPhotos
 
 @end
 
-@interface VideoStabilizerPlayerManager : RCTViewManager
+@interface VideoStabilizerComparisonManager : RCTViewManager
 @end
 
-@implementation VideoStabilizerPlayerManager
+@implementation VideoStabilizerComparisonManager
 
 RCT_EXPORT_MODULE( )
 
-RCT_EXPORT_VIEW_PROPERTY( uri, NSString )
+RCT_EXPORT_VIEW_PROPERTY( original, NSString )
+RCT_EXPORT_VIEW_PROPERTY( stabilized, NSString )
+RCT_EXPORT_VIEW_PROPERTY( start, double )
 
-- (UIView *)view { return [VideoStabilizerPlayerView new]; }
+- (UIView *)view { return [VideoStabilizerComparisonView new]; }
 
 @end
