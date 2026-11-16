@@ -1,10 +1,13 @@
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
 #import <CoreImage/CoreImage.h>
+#import <CoreLocation/CoreLocation.h>
+#import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 #import <React/RCTUtils.h>
+#import <React/RCTViewManager.h>
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <Vision/Vision.h>
@@ -12,16 +15,22 @@
 // The measuring and rendering half of the video stabilizer; the camera-path
 // math lives in JS (sharedHelpers/videoStabilization.ts).
 //
-//   pickVideo  copies a video from Photos or Files into the working folder
-//   probe      upright size, duration, frame rate
-//   frameAt    a JPEG of one frame, for choosing the subject and the crop
-//   analyze    one pass over the frames, reporting per frame either how the
-//              picture moved since the previous frame (Vision image
-//              registration) or where the subject is (Vision object tracker,
-//              or the most salient object)
-//   render     a second pass that warps each frame by the affine JS computed
-//              for it, crops to the output size and writes an H.264 .mov,
-//              passing the audio through untouched
+//   pickVideo    copies a video from Photos into the working folder
+//   probe        upright size, duration, frame rate
+//   frameAt      a JPEG of one frame, for choosing the crop
+//   analyze      one pass over the frames, reporting per frame how the
+//                picture moved since the previous frame (Vision image
+//                registration) and, for a complete lock, where it sits on the
+//                first frame
+//   render       a second pass that warps each frame by the homography JS
+//                computed for it, crops to the output size and writes an
+//                H.264 .mov, passing the audio through untouched and keeping
+//                the original's metadata (capture date, location, camera)
+//   saveToPhotos adds a rendered video to the photo library with the
+//                original's date and location
+//
+// Analyses and renders are numbered as they're asked for, and starting one
+// cancels the one before, so JS can rerun them freely as settings change.
 //
 // Both passes read frames through the same AVAssetReaderVideoCompositionOutput
 // (upright, constant frame rate, same time range), so frame i of the analysis
@@ -85,6 +94,42 @@ static CGAffineTransform mat3AffinePart( Mat3 h )
   return CGAffineTransformMake( h.m[0] / w, h.m[3] / w, h.m[1] / w, h.m[4] / w, h.m[2] / w, h.m[5] / w );
 }
 
+static Mat3 mat3FromAffine( CGAffineTransform a )
+{
+  Mat3 r = { { a.a, a.c, a.tx, a.b, a.d, a.ty, 0, 0, 1 } };
+  return r;
+}
+
+// Warps `image` by `h`, a homography between bottom-left pixel spaces. Core
+// Image's perspective filter maps the image's corners to four points, which
+// is exactly a homography; a plain affine takes the cheaper path.
+static CIImage *warpImage( CIImage *image, Mat3 h )
+{
+  double w = fabs( h.m[8] ) > 1e-9 ? h.m[8] : 1;
+  if ( fabs( h.m[6] / w ) < 1e-12 && fabs( h.m[7] / w ) < 1e-12 ) {
+    return [image imageByApplyingTransform:mat3AffinePart( h )];
+  }
+  CGRect e = image.extent;
+  double xs[4] = { CGRectGetMinX( e ), CGRectGetMaxX( e ), CGRectGetMaxX( e ), CGRectGetMinX( e ) };
+  double ys[4] = { CGRectGetMaxY( e ), CGRectGetMaxY( e ), CGRectGetMinY( e ), CGRectGetMinY( e ) };
+  CIVector *corners[4];
+  for ( int i = 0; i < 4; i++ ) {
+    double pw = h.m[6] * xs[i] + h.m[7] * ys[i] + h.m[8];
+    // A corner at or behind the horizon can't be drawn; settle for the
+    // affine part rather than a picture turned inside out.
+    if ( !( pw * h.m[8] > 0 ) ) return [image imageByApplyingTransform:mat3AffinePart( h )];
+    corners[i] = [CIVector vectorWithX:( h.m[0] * xs[i] + h.m[1] * ys[i] + h.m[2] ) / pw
+                                     Y:( h.m[3] * xs[i] + h.m[4] * ys[i] + h.m[5] ) / pw];
+  }
+  CIFilter *filter = [CIFilter filterWithName:@"CIPerspectiveTransform"];
+  [filter setValue:image forKey:kCIInputImageKey];
+  [filter setValue:corners[0] forKey:@"inputTopLeft"];
+  [filter setValue:corners[1] forKey:@"inputTopRight"];
+  [filter setValue:corners[2] forKey:@"inputBottomRight"];
+  [filter setValue:corners[3] forKey:@"inputBottomLeft"];
+  return filter.outputImage ?: [image imageByApplyingTransform:mat3AffinePart( h )];
+}
+
 static NSArray<NSNumber *> *mat3Array( Mat3 h )
 {
   NSMutableArray *a = [NSMutableArray arrayWithCapacity:9];
@@ -103,14 +148,16 @@ static NSString *workingDirectory( void )
   return [caches stringByAppendingPathComponent:@"VideoStabilizer"];
 }
 
-// Removes files in the working folder whose names start with `prefix`.
-static void removeWorkingFiles( NSString *prefix )
+// Removes files in the working folder whose names start with `prefix`, except
+// `keep`.
+static void removeWorkingFiles( NSString *prefix, NSString *keep )
 {
   NSFileManager *fm = [NSFileManager defaultManager];
   NSString *dir = workingDirectory( );
   for ( NSString *name in [fm contentsOfDirectoryAtPath:dir error:nil] ) {
-    if ( [name hasPrefix:prefix] ) {
-      [fm removeItemAtPath:[dir stringByAppendingPathComponent:name] error:nil];
+    NSString *path = [dir stringByAppendingPathComponent:name];
+    if ( [name hasPrefix:prefix] && ![path isEqualToString:keep] ) {
+      [fm removeItemAtPath:path error:nil];
     }
   }
 }
@@ -188,35 +235,98 @@ static CVPixelBufferPoolRef makePixelBufferPool( size_t width, size_t height )
   return pool;
 }
 
-static CGFloat iou( CGRect a, CGRect b )
+// ─── Metadata ────────────────────────────────────────────────────────────────
+
+// The original's file-level metadata, for the stabilized copy: capture date,
+// location, camera make and model and the like. iPhone videos keep these as
+// QuickTime metadata, which is copied as is; other cameras' common keys are
+// carried over as their QuickTime equivalents.
+static NSArray<AVMetadataItem *> *metadataToKeep( AVAsset *asset )
 {
-  CGRect i = CGRectIntersection( a, b );
-  if ( CGRectIsNull( i ) ) return 0;
-  CGFloat inter = i.size.width * i.size.height;
-  CGFloat uni = a.size.width * a.size.height + b.size.width * b.size.height - inter;
-  return uni > 0 ? inter / uni : 0;
+  NSMutableArray<AVMetadataItem *> *items = [NSMutableArray array];
+  NSMutableSet<NSString *> *commonKeys = [NSMutableSet set];
+  for ( AVMetadataFormat format in @[AVMetadataFormatQuickTimeMetadata, AVMetadataFormatQuickTimeUserData] ) {
+    for ( AVMetadataItem *item in [asset metadataForFormat:format] ) {
+      [items addObject:item];
+      if ( item.commonKey ) [commonKeys addObject:item.commonKey];
+    }
+  }
+  NSDictionary<AVMetadataKey, AVMetadataIdentifier> *quickTimeFor = @{
+    AVMetadataCommonKeyCreationDate: AVMetadataIdentifierQuickTimeMetadataCreationDate,
+    AVMetadataCommonKeyLocation: AVMetadataIdentifierQuickTimeMetadataLocationISO6709,
+    AVMetadataCommonKeyMake: AVMetadataIdentifierQuickTimeMetadataMake,
+    AVMetadataCommonKeyModel: AVMetadataIdentifierQuickTimeMetadataModel,
+    AVMetadataCommonKeySoftware: AVMetadataIdentifierQuickTimeMetadataSoftware,
+  };
+  for ( AVMetadataItem *item in asset.commonMetadata ) {
+    AVMetadataIdentifier identifier = item.commonKey ? quickTimeFor[item.commonKey] : nil;
+    if ( !identifier || [commonKeys containsObject:item.commonKey] || !item.value ) continue;
+    AVMutableMetadataItem *copy = [AVMutableMetadataItem metadataItem];
+    copy.identifier = identifier;
+    copy.value = item.value;
+    copy.extendedLanguageTag = item.extendedLanguageTag;
+    [items addObject:copy];
+    [commonKeys addObject:item.commonKey];
+  }
+  return items;
 }
 
-static NSArray<NSNumber *> *topLeftBox( CGRect bottomLeft )
+static NSDate *metadataDate( AVAsset *asset )
 {
-  return @[
-    @( bottomLeft.origin.x ),
-    @( 1 - bottomLeft.origin.y - bottomLeft.size.height ),
-    @( bottomLeft.size.width ),
-    @( bottomLeft.size.height ),
-  ];
+  for ( AVMetadataItem *item in [AVMetadataItem metadataItemsFromArray:asset.commonMetadata
+                                                filteredByIdentifier:AVMetadataCommonIdentifierCreationDate] ) {
+    if ( item.dateValue ) return item.dateValue;
+    NSString *text = item.stringValue;
+    if ( text.length == 0 ) continue;
+    NSISO8601DateFormatter *formatter = [[NSISO8601DateFormatter alloc] init];
+    NSDate *date = [formatter dateFromString:text];
+    if ( date ) return date;
+  }
+  return nil;
 }
 
-@interface VideoStabilizer : RCTEventEmitter <RCTBridgeModule, PHPickerViewControllerDelegate,
-  UIDocumentPickerDelegate>
+// ISO 6709, as QuickTime stores it: "+37.3349-122.0090+010.000/".
+static CLLocation *metadataLocation( AVAsset *asset )
+{
+  for ( AVMetadataItem *item in [AVMetadataItem metadataItemsFromArray:asset.commonMetadata
+                                                filteredByIdentifier:AVMetadataCommonIdentifierLocation] ) {
+    NSString *text = item.stringValue;
+    if ( text.length == 0 ) continue;
+    NSRegularExpression *pattern = [NSRegularExpression
+      regularExpressionWithPattern:@"^([+-][0-9.]+)([+-][0-9.]+)([+-][0-9.]+)?" options:0 error:nil];
+    NSTextCheckingResult *match = [pattern firstMatchInString:text options:0 range:NSMakeRange( 0, text.length )];
+    if ( !match ) continue;
+    double latitude = [[text substringWithRange:[match rangeAtIndex:1]] doubleValue];
+    double longitude = [[text substringWithRange:[match rangeAtIndex:2]] doubleValue];
+    if ( fabs( latitude ) > 90 || fabs( longitude ) > 180 ) continue;
+    NSRange altitudeRange = [match rangeAtIndex:3];
+    double altitude = altitudeRange.location != NSNotFound
+      ? [[text substringWithRange:altitudeRange] doubleValue]
+      : 0;
+    return [[CLLocation alloc] initWithCoordinate:CLLocationCoordinate2DMake( latitude, longitude )
+                                         altitude:altitude
+                               horizontalAccuracy:0
+                                 verticalAccuracy:altitudeRange.location != NSNotFound ? 0 : -1
+                                        timestamp:metadataDate( asset ) ?: [NSDate date]];
+  }
+  return nil;
+}
+
+@interface VideoStabilizer : RCTEventEmitter <RCTBridgeModule, PHPickerViewControllerDelegate>
 @end
 
 @implementation VideoStabilizer {
   RCTPromiseResolveBlock _pickResolve;
   RCTPromiseRejectBlock _pickReject;
   BOOL _hasListeners;
-  volatile BOOL _cancelled;
+  // Bumped by every analysis, render and cancel; a job whose number is no
+  // longer current stops at its next frame.
+  volatile NSInteger _generation;
+  // Analyses and renders, one at a time.
   dispatch_queue_t _queue;
+  // Probing and frame grabs, so the start frame updates while an analysis
+  // is still running.
+  dispatch_queue_t _inspectQueue;
   CIContext *_ciContext;
   CFAbsoluteTime _lastProgressAt;
 }
@@ -235,20 +345,27 @@ RCT_EXPORT_MODULE( );
 {
   if ( ( self = [super init] ) ) {
     _queue = dispatch_queue_create( "org.inaturalist.videostabilizer", DISPATCH_QUEUE_SERIAL );
+    _inspectQueue = dispatch_queue_create( "org.inaturalist.videostabilizer.inspect", DISPATCH_QUEUE_SERIAL );
     _ciContext = [CIContext contextWithOptions:@{ kCIContextCacheIntermediates: @NO }];
   }
   return self;
 }
 
-- (void)emitProgress:(NSString *)phase progress:(double)progress force:(BOOL)force
+- (void)emitProgress:(NSString *)phase job:(id)job progress:(double)progress force:(BOOL)force
 {
   CFAbsoluteTime now = CFAbsoluteTimeGetCurrent( );
   if ( !_hasListeners || ( !force && now - _lastProgressAt < 0.1 ) ) return;
   _lastProgressAt = now;
   [self sendEventWithName:kProgressEvent body:@{
     @"phase": phase,
+    @"job": job ?: [NSNull null],
     @"progress": @( MAX( 0, MIN( 1, progress ) ) ),
   }];
+}
+
+- (BOOL)isCurrent:(NSInteger)generation
+{
+  return _generation == generation;
 }
 
 // ─── Import ──────────────────────────────────────────────────────────────────
@@ -281,7 +398,6 @@ static NSString *importVideoFile( NSURL *url, NSError **error )
 }
 
 RCT_EXPORT_METHOD( pickVideo
-                  : ( NSString * )source resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -292,23 +408,14 @@ RCT_EXPORT_METHOD( pickVideo
     }
     self->_pickResolve = resolve;
     self->_pickReject = reject;
-    UIViewController *picker;
-    if ( [source isEqualToString:@"files"] ) {
-      UIDocumentPickerViewController *documents = [[UIDocumentPickerViewController alloc]
-        initForOpeningContentTypes:@[UTTypeMovie] asCopy:YES];
-      documents.delegate = self;
-      picker = documents;
-    } else {
-      // The system picker needs no Photos permission. "Current" hands over
-      // the file as stored, instead of transcoding it to H.264 first.
-      PHPickerConfiguration *config = [[PHPickerConfiguration alloc] init];
-      config.filter = [PHPickerFilter videosFilter];
-      config.selectionLimit = 1;
-      config.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;
-      PHPickerViewController *library = [[PHPickerViewController alloc] initWithConfiguration:config];
-      library.delegate = self;
-      picker = library;
-    }
+    // The system picker needs no Photos permission. "Current" hands over the
+    // file as stored, metadata and all, instead of transcoding it first.
+    PHPickerConfiguration *config = [[PHPickerConfiguration alloc] init];
+    config.filter = [PHPickerFilter videosFilter];
+    config.selectionLimit = 1;
+    config.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;
+    PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:config];
+    picker.delegate = self;
     [RCTPresentedViewController( ) presentViewController:picker animated:YES completion:nil];
   } );
 }
@@ -339,21 +446,6 @@ RCT_EXPORT_METHOD( pickVideo
   }];
 }
 
-- (void)documentPicker:(__unused UIDocumentPickerViewController *)controller
-  didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
-{
-  NSURL *url = urls.firstObject;
-  NSError *error = nil;
-  NSString *path = url ? importVideoFile( url, &error ) : nil;
-  if ( url ) [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
-  [self finishPickWithPath:path error:url && !path ? error : nil];
-}
-
-- (void)documentPickerWasCancelled:(__unused UIDocumentPickerViewController *)controller
-{
-  [self finishPickWithPath:nil error:nil];
-}
-
 // ─── Inspection ──────────────────────────────────────────────────────────────
 
 RCT_EXPORT_METHOD( probe
@@ -361,7 +453,7 @@ RCT_EXPORT_METHOD( probe
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  dispatch_async( _queue, ^{
+  dispatch_async( _inspectQueue, ^{
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( path )] options:nil];
     AVAssetTrack *track = [asset tracksWithMediaType:AVMediaTypeVideo].firstObject;
     if ( !track ) {
@@ -387,7 +479,7 @@ RCT_EXPORT_METHOD( frameAt
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  dispatch_async( _queue, ^{
+  dispatch_async( _inspectQueue, ^{
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( path )] options:nil];
     AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     generator.appliesPreferredTrackTransform = YES;
@@ -407,7 +499,7 @@ RCT_EXPORT_METHOD( frameAt
     // A new name every time: React Native caches images by URI.
     [[NSFileManager defaultManager] createDirectoryAtPath:workingDirectory( )
                               withIntermediateDirectories:YES attributes:nil error:nil];
-    removeWorkingFiles( @"frame-" );
+    removeWorkingFiles( @"frame-", nil );
     NSString *dest = [workingDirectory( ) stringByAppendingPathComponent:
       [NSString stringWithFormat:@"frame-%@.jpg", [NSUUID UUID].UUIDString]];
     if ( ![jpeg writeToFile:dest atomically:YES] ) {
@@ -424,68 +516,60 @@ RCT_EXPORT_METHOD( frameAt
 
 RCT_EXPORT_METHOD( cancel )
 {
-  _cancelled = YES;
+  _generation += 1;
 }
 
 // ─── Analysis ────────────────────────────────────────────────────────────────
 
-// Mean color difference between two images over `rect`.
-- (double)differenceOf:(CIImage *)a and:(CIImage *)b inRect:(CGRect)rect
+// Vision's registration transforms are in Core Image's bottom-left pixel
+// space and map the targeted image onto the reference one. That reading was
+// once settled by a vote on every analysis; every device log showed it as is,
+// so it's now taken as given.
+//
+// Registers `targeted` against `reference`, returning the homography from the
+// targeted image's bottom-left pixels onto the reference's.
+static BOOL registerImages(
+  CVPixelBufferRef targeted,
+  CVPixelBufferRef reference,
+  BOOL homographic,
+  Mat3 *out
+)
 {
-  CIFilter *difference = [CIFilter filterWithName:@"CIDifferenceBlendMode"];
-  [difference setValue:a forKey:kCIInputImageKey];
-  [difference setValue:b forKey:kCIInputBackgroundImageKey];
-  CIFilter *average = [CIFilter filterWithName:@"CIAreaAverage"];
-  [average setValue:[difference.outputImage imageByCroppingToRect:rect] forKey:kCIInputImageKey];
-  [average setValue:[CIVector vectorWithCGRect:rect] forKey:kCIInputExtentKey];
-  float pixel[4] = { 0, 0, 0, 0 };
-  [_ciContext render:average.outputImage toBitmap:pixel rowBytes:sizeof( pixel )
-              bounds:average.outputImage.extent format:kCIFormatRGBAf colorSpace:nil];
-  return pixel[0] + pixel[1] + pixel[2];
-}
-
-// Vision's registration transforms are reported in Core Image's bottom-left
-// pixel space, mapping the targeted image (this frame) onto the reference
-// (the previous frame) — but which way round, and which way up, isn't spelled
-// out in the documentation, and a wrong guess turns stabilization into double
-// shake. So it's measured: on frames that moved, each reading of the
-// transform is applied to this frame and compared with the previous one, and
-// the reading that lines them up best wins a vote.
-typedef NS_ENUM( NSInteger, RegistrationReading ) {
-  RegistrationReadingAsIs = 0,
-  RegistrationReadingInverse,
-  RegistrationReadingFlipped,
-  RegistrationReadingFlippedInverse,
-  RegistrationReadingCount,
-};
-
-static Mat3 readRegistration( Mat3 raw, RegistrationReading reading, double height )
-{
-  Mat3 flip = mat3FlipY( height );
-  switch ( reading ) {
-    case RegistrationReadingInverse: return mat3Inv( raw );
-    case RegistrationReadingFlipped: return mat3Mul( flip, mat3Mul( raw, flip ) );
-    case RegistrationReadingFlippedInverse: return mat3Mul( flip, mat3Mul( mat3Inv( raw ), flip ) );
-    default: return raw;
+  VNImageRegistrationRequest *request;
+  if ( homographic ) {
+    request = [[VNHomographicImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:targeted options:@{}];
+  } else {
+    request = [[VNTranslationalImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:targeted options:@{}];
   }
-}
-
-- (RegistrationReading)bestReadingOf:(Mat3)raw current:(CIImage *)current previous:(CIImage *)previous
-{
-  CGRect extent = previous.extent;
-  CGRect center = CGRectInset( extent, extent.size.width * 0.25, extent.size.height * 0.25 );
-  RegistrationReading best = RegistrationReadingAsIs;
-  double bestScore = DBL_MAX;
-  for ( NSInteger reading = 0; reading < RegistrationReadingCount; reading++ ) {
-    Mat3 m = readRegistration( raw, (RegistrationReading)reading, extent.size.height );
-    CIImage *aligned = [current imageByApplyingTransform:mat3AffinePart( m )];
-    double score = [self differenceOf:aligned and:previous inRect:center];
-    if ( score < bestScore ) {
-      bestScore = score;
-      best = (RegistrationReading)reading;
+  VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCVPixelBuffer:reference options:@{}];
+  NSError *visionError = nil;
+  id observation = [handler performRequests:@[request] error:&visionError]
+    ? request.results.firstObject
+    : nil;
+  if ( [observation isKindOfClass:[VNImageHomographicAlignmentObservation class]] ) {
+    matrix_float3x3 w = ( (VNImageHomographicAlignmentObservation *)observation ).warpTransform;
+    Mat3 step;
+    for ( int r = 0; r < 3; r++ ) {
+      for ( int c = 0; c < 3; c++ ) step.m[r * 3 + c] = w.columns[c][r];
     }
+    // simd matrices are column-major for column vectors; if the pixel-sized
+    // shift turns up in the bottom row instead of the right column, the
+    // matrix is for row vectors and is transposed.
+    if ( fabs( step.m[6] ) + fabs( step.m[7] ) > fabs( step.m[2] ) + fabs( step.m[5] ) + 1e-3 ) {
+      Mat3 transposed;
+      for ( int r = 0; r < 3; r++ ) {
+        for ( int c = 0; c < 3; c++ ) transposed.m[r * 3 + c] = step.m[c * 3 + r];
+      }
+      step = transposed;
+    }
+    *out = step;
+    return YES;
   }
-  return best;
+  if ( [observation isKindOfClass:[VNImageTranslationAlignmentObservation class]] ) {
+    *out = mat3FromAffine( ( (VNImageTranslationAlignmentObservation *)observation ).alignmentTransform );
+    return YES;
+  }
+  return NO;
 }
 
 RCT_EXPORT_METHOD( analyze
@@ -494,17 +578,16 @@ RCT_EXPORT_METHOD( analyze
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  _cancelled = NO;
+  NSInteger generation = ++_generation;
   dispatch_async( _queue, ^{
-    NSString *method = options[@"method"] ?: @"translation";
-    BOOL subject = [method isEqualToString:@"tracker"] || [method isEqualToString:@"saliency"];
-    // Registration needs little detail; the tracker does better with more.
-    double maxDimension = subject ? 720 : 480;
-    NSArray<NSNumber *> *initialBox = options[@"box"];
-    if ( [method isEqualToString:@"tracker"] && initialBox.count != 4 ) {
-      reject( @"ANALYZE_FAILED", @"Draw a box around the subject first", nil );
-      return;
-    }
+    NSString *method = [options[@"method"] isEqualToString:@"translation"] ? @"translation" : @"similarity";
+    BOOL homographic = [method isEqualToString:@"similarity"];
+    // A complete lock also measures every frame against the first, so the
+    // small errors of chaining frame to frame don't add up to a drift.
+    BOOL reference = [options[@"reference"] boolValue];
+    id job = options[@"job"];
+    // Registration needs little detail.
+    double maxDimension = 480;
 
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( path )] options:nil];
     CMTimeRange range = timeRangeFor( asset, options );
@@ -517,27 +600,23 @@ RCT_EXPORT_METHOD( analyze
       return;
     }
 
-    NSMutableArray<NSDictionary *> *frames = [NSMutableArray array];
-    NSMutableArray<NSValue *> *rawSteps = [NSMutableArray array];  // background: Mat3 per frame
-    NSInteger votes[RegistrationReadingCount] = { 0 };
-    NSInteger votesCast = 0;
+    NSMutableArray<NSMutableDictionary *> *frames = [NSMutableArray array];
+    NSMutableArray<NSValue *> *steps = [NSMutableArray array];  // Mat3 per frame, onto the previous
+    NSMutableArray<NSValue *> *toFirst = [NSMutableArray array];  // Mat3 per frame, onto the first
     CVPixelBufferPoolRef pool = NULL;
     CVPixelBufferRef previous = NULL;
+    CVPixelBufferRef first = NULL;
+    CIImage *blackSmall = nil;
+    Mat3 chain = mat3Identity( );
+    NSInteger refined = 0;
     size_t fullWidth = 0;
     size_t fullHeight = 0;
     double scale = 1;
+    double smallWidth = 0;
     double smallHeight = 0;
-    VNSequenceRequestHandler *sequence = [[VNSequenceRequestHandler alloc] init];
-    VNTrackObjectRequest *track = nil;
-    CGRect lastBox = CGRectNull;  // bottom-left normalized
     BOOL bufferFailed = NO;
-    if ( initialBox.count == 4 ) {
-      lastBox = CGRectMake( initialBox[0].doubleValue,
-                            1 - initialBox[1].doubleValue - initialBox[3].doubleValue,
-                            initialBox[2].doubleValue, initialBox[3].doubleValue );
-    }
 
-    while ( !self->_cancelled ) {
+    while ( [self isCurrent:generation] ) {
       @autoreleasepool {
         CMSampleBufferRef sample = [output copyNextSampleBuffer];
         if ( !sample ) break;
@@ -547,8 +626,11 @@ RCT_EXPORT_METHOD( analyze
           fullWidth = CVPixelBufferGetWidth( full );
           fullHeight = CVPixelBufferGetHeight( full );
           scale = MIN( 1, maxDimension / MAX( fullWidth, fullHeight ) );
-          pool = makePixelBufferPool( (size_t)round( fullWidth * scale ), (size_t)round( fullHeight * scale ) );
+          smallWidth = round( fullWidth * scale );
           smallHeight = round( fullHeight * scale );
+          pool = makePixelBufferPool( (size_t)smallWidth, (size_t)smallHeight );
+          blackSmall = [[CIImage imageWithColor:[CIColor colorWithRed:0 green:0 blue:0]]
+            imageByCroppingToRect:CGRectMake( 0, 0, smallWidth, smallHeight )];
         }
         CVPixelBufferRef small = NULL;
         if ( pool ) CVPixelBufferPoolCreatePixelBuffer( NULL, pool, &small );
@@ -563,125 +645,50 @@ RCT_EXPORT_METHOD( analyze
         CFRelease( sample );
 
         NSMutableDictionary *frame = [@{ @"t": @( t ), @"ok": @YES } mutableCopy];
-        if ( !subject ) {
-          Mat3 step = mat3Identity( );
-          if ( previous ) {
-            VNImageRegistrationRequest *request;
-            if ( [method isEqualToString:@"similarity"] ) {
-              request = [[VNHomographicImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:small
-                                                                                            options:@{}];
-            } else {
-              request = [[VNTranslationalImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:small
-                                                                                              options:@{}];
-            }
-            VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCVPixelBuffer:previous options:@{}];
-            NSError *visionError = nil;
-            id observation = [handler performRequests:@[request] error:&visionError]
-              ? request.results.firstObject
-              : nil;
-            if ( [observation isKindOfClass:[VNImageHomographicAlignmentObservation class]] ) {
-              matrix_float3x3 w = ( (VNImageHomographicAlignmentObservation *)observation ).warpTransform;
-              for ( int r = 0; r < 3; r++ ) {
-                for ( int c = 0; c < 3; c++ ) step.m[r * 3 + c] = w.columns[c][r];
-              }
-              // simd matrices are column-major for column vectors; if the
-              // pixel-sized shift turns up in the bottom row instead of the
-              // right column, the matrix is for row vectors and is transposed.
-              if ( fabs( step.m[6] ) + fabs( step.m[7] ) > fabs( step.m[2] ) + fabs( step.m[5] ) + 1e-3 ) {
-                Mat3 transposed;
-                for ( int r = 0; r < 3; r++ ) {
-                  for ( int c = 0; c < 3; c++ ) transposed.m[r * 3 + c] = step.m[c * 3 + r];
-                }
-                step = transposed;
-              }
-            } else if ( [observation isKindOfClass:[VNImageTranslationAlignmentObservation class]] ) {
-              CGAffineTransform a = ( (VNImageTranslationAlignmentObservation *)observation ).alignmentTransform;
-              Mat3 m = { { a.a, a.c, a.tx, a.b, a.d, a.ty, 0, 0, 1 } };
-              step = m;
-            } else {
-              frame[@"ok"] = @NO;
-            }
-            BOOL moved = hypot( step.m[2], step.m[5] ) > 2;
-            if ( [frame[@"ok"] boolValue] && moved && votesCast < 9 ) {
-              CIImage *current = [CIImage imageWithCVPixelBuffer:small];
-              CIImage *before = [CIImage imageWithCVPixelBuffer:previous];
-              votes[[self bestReadingOf:step current:current previous:before]] += 1;
-              votesCast += 1;
-            }
-          }
-          [rawSteps addObject:[NSValue valueWithBytes:&step objCType:@encode( Mat3 )]];
-        } else if ( [method isEqualToString:@"tracker"] ) {
-          if ( frames.count == 0 ) {
-            track = [[VNTrackObjectRequest alloc] initWithDetectedObjectObservation:
-              [VNDetectedObjectObservation observationWithBoundingBox:lastBox]];
-            track.trackingLevel = VNRequestTrackingLevelAccurate;
-            frame[@"box"] = topLeftBox( lastBox );
-            frame[@"conf"] = @1;
+        Mat3 step = mat3Identity( );
+        if ( previous && !registerImages( small, previous, homographic, &step ) ) {
+          step = mat3Identity( );
+          frame[@"ok"] = @NO;
+        }
+        [steps addObject:[NSValue valueWithBytes:&step objCType:@encode( Mat3 )]];
+
+        if ( reference ) {
+          if ( !first ) {
+            first = CVPixelBufferRetain( small );
           } else {
-            NSError *visionError = nil;
-            [sequence performRequests:@[track] onCVPixelBuffer:small error:&visionError];
-            id result = track.results.firstObject;
-            VNDetectedObjectObservation *found = [result isKindOfClass:[VNDetectedObjectObservation class]]
-              ? (VNDetectedObjectObservation *)result
-              : nil;
-            if ( found ) {
-              frame[@"box"] = topLeftBox( found.boundingBox );
-              frame[@"conf"] = @( found.confidence );
-              // A low-confidence box is usually the tracker latching onto
-              // the background; keep tracking from the last good one.
-              if ( found.confidence >= 0.3 ) track.inputObservation = found;
-            } else {
-              frame[@"ok"] = @NO;
+            chain = mat3Mul( chain, step );
+            // What's left after lining the frame up by the chained estimate is
+            // small, so registering that against the first frame is reliable
+            // even where the two frames are far apart.
+            CVPixelBufferRef warped = NULL;
+            CVPixelBufferPoolCreatePixelBuffer( NULL, pool, &warped );
+            if ( warped ) {
+              CIImage *aligned = [warpImage( [CIImage imageWithCVPixelBuffer:small], chain )
+                imageByCompositingOverImage:blackSmall];
+              [self->_ciContext render:[aligned imageByCroppingToRect:blackSmall.extent] toCVPixelBuffer:warped];
+              Mat3 residual;
+              if ( registerImages( warped, first, homographic, &residual )
+                && hypot( residual.m[2], residual.m[5] ) < 0.2 * MAX( smallWidth, smallHeight ) ) {
+                chain = mat3Mul( residual, chain );
+                refined += 1;
+              }
+              CVPixelBufferRelease( warped );
             }
           }
-        } else {
-          VNGenerateObjectnessBasedSaliencyImageRequest *request = [[VNGenerateObjectnessBasedSaliencyImageRequest alloc] init];
-          VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCVPixelBuffer:small options:@{}];
-          NSError *visionError = nil;
-          [handler performRequests:@[request] error:&visionError];
-          id result = request.results.firstObject;
-          VNSaliencyImageObservation *saliency = [result isKindOfClass:[VNSaliencyImageObservation class]]
-            ? (VNSaliencyImageObservation *)result
-            : nil;
-          VNRectangleObservation *best = nil;
-          CGFloat bestScore = -CGFLOAT_MAX;
-          for ( VNRectangleObservation *candidate in saliency.salientObjects ) {
-            CGRect box = candidate.boundingBox;
-            CGFloat score;
-            if ( CGRectIsNull( lastBox ) ) {
-              score = box.size.width * box.size.height;
-            } else {
-              // Stick with the object followed so far; failing any overlap,
-              // the nearest one.
-              CGFloat overlap = iou( box, lastBox );
-              score = overlap > 0
-                ? overlap
-                : -hypot( CGRectGetMidX( box ) - CGRectGetMidX( lastBox ), CGRectGetMidY( box ) - CGRectGetMidY( lastBox ) );
-            }
-            if ( score > bestScore ) {
-              bestScore = score;
-              best = candidate;
-            }
-          }
-          if ( best ) {
-            lastBox = best.boundingBox;
-            frame[@"box"] = topLeftBox( lastBox );
-            frame[@"conf"] = @( best.confidence );
-          } else {
-            frame[@"ok"] = @NO;
-          }
+          [toFirst addObject:[NSValue valueWithBytes:&chain objCType:@encode( Mat3 )]];
         }
 
         if ( previous ) CVPixelBufferRelease( previous );
         previous = small;
         [frames addObject:frame];
-        [self emitProgress:@"analyze" progress:( t - CMTimeGetSeconds( range.start ) ) / rangeSeconds force:NO];
+        [self emitProgress:@"analyze" job:job progress:( t - CMTimeGetSeconds( range.start ) ) / rangeSeconds force:NO];
       }
     }
     if ( previous ) CVPixelBufferRelease( previous );
+    if ( first ) CVPixelBufferRelease( first );
     if ( pool ) CVPixelBufferPoolRelease( pool );
 
-    if ( self->_cancelled ) {
+    if ( ![self isCurrent:generation] ) {
       [reader cancelReading];
       reject( @"CANCELLED", @"Cancelled", nil );
       return;
@@ -692,37 +699,29 @@ RCT_EXPORT_METHOD( analyze
       return;
     }
 
-    NSString *readingName = @"";
-    if ( !subject ) {
-      RegistrationReading reading = RegistrationReadingAsIs;
-      for ( NSInteger r = 1; r < RegistrationReadingCount; r++ ) {
-        if ( votes[r] > votes[reading] ) reading = (RegistrationReading)r;
-      }
-      readingName = @[@"as-is", @"inverse", @"flipped", @"flipped-inverse"][reading];
-      // Bottom-left pixels of the small frame → top-left pixels of the full one.
-      Mat3 toTopLeft = mat3Mul( mat3Scale( 1 / scale ), mat3FlipY( smallHeight ) );
-      Mat3 fromTopLeft = mat3Inv( toTopLeft );
-      for ( NSUInteger i = 0; i < frames.count; i++ ) {
-        Mat3 raw;
-        [rawSteps[i] getValue:&raw];
-        Mat3 step = i == 0 ? mat3Identity( ) : readRegistration( raw, reading, smallHeight );
-        NSMutableDictionary *withStep = [frames[i] mutableCopy];
-        withStep[@"m"] = mat3Array( mat3Mul( toTopLeft, mat3Mul( step, fromTopLeft ) ) );
-        frames[i] = withStep;
+    // Bottom-left pixels of the small frame → top-left pixels of the full one.
+    Mat3 toTopLeft = mat3Mul( mat3Scale( 1 / scale ), mat3FlipY( smallHeight ) );
+    Mat3 fromTopLeft = mat3Inv( toTopLeft );
+    for ( NSUInteger i = 0; i < frames.count; i++ ) {
+      Mat3 step;
+      [steps[i] getValue:&step];
+      frames[i][@"m"] = mat3Array( mat3Mul( toTopLeft, mat3Mul( i == 0 ? mat3Identity( ) : step, fromTopLeft ) ) );
+      if ( reference ) {
+        Mat3 r;
+        [toFirst[i] getValue:&r];
+        frames[i][@"r"] = mat3Array( mat3Mul( toTopLeft, mat3Mul( r, fromTopLeft ) ) );
       }
     }
 
-    [self emitProgress:@"analyze" progress:1 force:YES];
+    [self emitProgress:@"analyze" job:job progress:1 force:YES];
     resolve( @{
       @"method": method,
       @"width": @( fullWidth ),
       @"height": @( fullHeight ),
       @"fps": @( frameRateOf( [asset tracksWithMediaType:AVMediaTypeVideo].firstObject ) ),
       @"frames": frames,
-      // Which reading of Vision's registration transform won (see above),
-      // logged by JS so a fixed convention can replace the vote one day.
-      @"registrationReading": readingName,
-      @"registrationVotes": @( votesCast ),
+      // How many frames the lock against the first frame could refine.
+      @"refinedFrames": @( refined ),
     } );
   } );
 }
@@ -735,19 +734,20 @@ RCT_EXPORT_METHOD( render
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  _cancelled = NO;
+  NSInteger generation = ++_generation;
   dispatch_async( _queue, ^{
+    id job = options[@"job"];
     NSArray<NSNumber *> *flat = options[@"transforms"];
     NSInteger outWidth = [options[@"outputWidth"] integerValue];
     NSInteger outHeight = [options[@"outputHeight"] integerValue];
     NSString *prefix = [options[@"preview"] boolValue] ? @"preview-" : @"stabilized-";
-    NSInteger transformCount = (NSInteger)flat.count / 6;
+    NSInteger transformCount = (NSInteger)flat.count / 9;
     if ( transformCount == 0 || outWidth < 2 || outHeight < 2 ) {
       reject( @"RENDER_FAILED", @"Nothing to render", nil );
       return;
     }
-    double *transforms = malloc( sizeof( double ) * transformCount * 6 );
-    for ( NSInteger i = 0; i < transformCount * 6; i++ ) transforms[i] = flat[i].doubleValue;
+    double *transforms = malloc( sizeof( double ) * transformCount * 9 );
+    for ( NSInteger i = 0; i < transformCount * 9; i++ ) transforms[i] = flat[i].doubleValue;
 
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( path )] options:nil];
     CMTimeRange range = timeRangeFor( asset, options );
@@ -763,7 +763,6 @@ RCT_EXPORT_METHOD( render
       return;
     }
 
-    removeWorkingFiles( prefix );
     NSString *outPath = [workingDirectory( ) stringByAppendingPathComponent:
       [NSString stringWithFormat:@"%@%@.mov", prefix, [NSUUID UUID].UUIDString]];
     AVAssetWriter *writer = [AVAssetWriter assetWriterWithURL:[NSURL fileURLWithPath:outPath]
@@ -773,6 +772,7 @@ RCT_EXPORT_METHOD( render
       reject( @"RENDER_FAILED", error.localizedDescription, error );
       return;
     }
+    writer.metadata = metadataToKeep( asset );
     // About 0.15 bits per pixel per frame: 1080p30 at ~9 Mb/s.
     double bitrate = MIN( 50e6, MAX( 2e6, 0.15 * outWidth * outHeight * fps ) );
     AVAssetWriterInput *videoInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:@{
@@ -800,7 +800,7 @@ RCT_EXPORT_METHOD( render
     AVAssetReaderTrackOutput *audioOutput = nil;
     AVAssetWriterInput *audioInput = nil;
     AVAssetTrack *audioTrack = [asset tracksWithMediaType:AVMediaTypeAudio].firstObject;
-    if ( audioTrack && [options[@"includeAudio"] boolValue] ) {
+    if ( audioTrack ) {
       audioOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:audioTrack outputSettings:nil];
       audioInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio outputSettings:nil
         sourceFormatHint:(__bridge CMFormatDescriptionRef)audioTrack.formatDescriptions.firstObject];
@@ -837,7 +837,7 @@ RCT_EXPORT_METHOD( render
                                       usingBlock:^{
       while ( !videoDone && videoInput.isReadyForMoreMediaData ) {
         @autoreleasepool {
-          CMSampleBufferRef sample = self->_cancelled ? NULL : [videoOutput copyNextSampleBuffer];
+          CMSampleBufferRef sample = [self isCurrent:generation] ? [videoOutput copyNextSampleBuffer] : NULL;
           if ( !sample ) {
             videoDone = YES;
             [videoInput markAsFinished];
@@ -846,14 +846,13 @@ RCT_EXPORT_METHOD( render
           }
           CVPixelBufferRef source = CMSampleBufferGetImageBuffer( sample );
           CMTime pts = CMSampleBufferGetPresentationTimeStamp( sample );
-          const double *m = transforms + MIN( index, transformCount - 1 ) * 6;
-          // JS's affine is top-left source pixels → top-left output pixels;
-          // Core Image needs it between the two bottom-left spaces.
-          CGAffineTransform topLeft = CGAffineTransformMake( m[0], m[1], m[2], m[3], m[4], m[5] );
-          CGAffineTransform flipIn = CGAffineTransformMake( 1, 0, 0, -1, 0, CVPixelBufferGetHeight( source ) );
-          CGAffineTransform flipOut = CGAffineTransformMake( 1, 0, 0, -1, 0, outHeight );
-          CGAffineTransform warp = CGAffineTransformConcat( CGAffineTransformConcat( flipIn, topLeft ), flipOut );
-          CIImage *frame = [[[CIImage imageWithCVPixelBuffer:source] imageByApplyingTransform:warp]
+          Mat3 topLeft;
+          memcpy( topLeft.m, transforms + MIN( index, transformCount - 1 ) * 9, sizeof( topLeft.m ) );
+          // JS's homography is top-left source pixels → top-left output
+          // pixels; Core Image needs it between the two bottom-left spaces.
+          Mat3 warp = mat3Mul( mat3FlipY( outHeight ),
+            mat3Mul( topLeft, mat3FlipY( CVPixelBufferGetHeight( source ) ) ) );
+          CIImage *frame = [warpImage( [CIImage imageWithCVPixelBuffer:source], warp )
             imageByCroppingToRect:outRect];
           CVPixelBufferRef target = NULL;
           CVPixelBufferPoolCreatePixelBuffer( NULL, adaptor.pixelBufferPool, &target );
@@ -866,6 +865,7 @@ RCT_EXPORT_METHOD( render
           CFRelease( sample );
           index += 1;
           [self emitProgress:@"render"
+                         job:job
                     progress:( CMTimeGetSeconds( pts ) - CMTimeGetSeconds( range.start ) ) / rangeSeconds
                        force:NO];
           if ( appendFailed ) {
@@ -884,7 +884,9 @@ RCT_EXPORT_METHOD( render
       [audioInput requestMediaDataWhenReadyOnQueue:dispatch_queue_create( "org.inaturalist.videostabilizer.audio", NULL )
                                         usingBlock:^{
         while ( !audioDone && audioInput.isReadyForMoreMediaData ) {
-          CMSampleBufferRef sample = ( self->_cancelled || appendFailed ) ? NULL : [audioOutput copyNextSampleBuffer];
+          CMSampleBufferRef sample = ( ![self isCurrent:generation] || appendFailed )
+            ? NULL
+            : [audioOutput copyNextSampleBuffer];
           if ( !sample || ![audioInput appendSampleBuffer:sample] ) {
             if ( sample ) CFRelease( sample );
             audioDone = YES;
@@ -900,12 +902,13 @@ RCT_EXPORT_METHOD( render
     dispatch_group_notify( group, self->_queue, ^{
       free( transforms );
       CGColorSpaceRelease( sRGB );
-      if ( self->_cancelled || appendFailed || reader.status == AVAssetReaderStatusFailed ) {
+      BOOL cancelled = ![self isCurrent:generation];
+      if ( cancelled || appendFailed || reader.status == AVAssetReaderStatusFailed ) {
         NSError *failure = writer.error ?: reader.error;
         [reader cancelReading];
         [writer cancelWriting];
         [[NSFileManager defaultManager] removeItemAtPath:outPath error:nil];
-        if ( self->_cancelled ) {
+        if ( cancelled ) {
           reject( @"CANCELLED", @"Cancelled", nil );
         } else {
           reject( @"RENDER_FAILED", failure.localizedDescription ?: @"Rendering failed", failure );
@@ -917,7 +920,10 @@ RCT_EXPORT_METHOD( render
           reject( @"RENDER_FAILED", writer.error.localizedDescription ?: @"Could not finish the video", writer.error );
           return;
         }
-        [self emitProgress:@"render" progress:1 force:YES];
+        // Only now is the last finished file replaced, so whatever is
+        // playing it keeps playing until there's something newer.
+        removeWorkingFiles( prefix, outPath );
+        [self emitProgress:@"render" job:job progress:1 force:YES];
         resolve( @{
           @"uri": [@"file://" stringByAppendingString:outPath],
           @"frames": @( index ),
@@ -939,5 +945,136 @@ RCT_EXPORT_METHOD( play : ( NSString * )path )
     }];
   } );
 }
+
+// ─── Saving ──────────────────────────────────────────────────────────────────
+
+// Adds `path` to the photo library dated and placed like `original`, the
+// imported video; the date is moved on by `start`, where the stabilized copy
+// begins. Photos would otherwise date it when it was saved, with no place.
+RCT_EXPORT_METHOD( saveToPhotos
+                  : ( NSString * )path original
+                  : ( NSString * )original start
+                  : ( double )start resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly handler:^( PHAuthorizationStatus status ) {
+    if ( status != PHAuthorizationStatusAuthorized && status != PHAuthorizationStatusLimited ) {
+      reject( @"SAVE_DENIED", @"Allow the app to add to your photo library in Settings to save the video.", nil );
+      return;
+    }
+    AVURLAsset *source = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( original )] options:nil];
+    NSDate *date = metadataDate( source );
+    CLLocation *location = metadataLocation( source );
+    NSURL *url = [NSURL fileURLWithPath:stripFileScheme( path )];
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
+      [request addResourceWithType:PHAssetResourceTypeVideo fileURL:url options:nil];
+      if ( date ) request.creationDate = [date dateByAddingTimeInterval:MAX( 0, start )];
+      if ( location ) request.location = location;
+    } completionHandler:^( BOOL success, NSError *error ) {
+      if ( success ) {
+        resolve( nil );
+      } else {
+        reject( @"SAVE_FAILED", error.localizedDescription ?: @"Could not save the video", error );
+      }
+    }];
+  }];
+}
+
+@end
+
+// ─── Inline player ───────────────────────────────────────────────────────────
+
+// The preview under the settings: loops silently until the viewer unmutes it,
+// with the system's controls, and pauses while off screen.
+@interface VideoStabilizerPlayerView : UIView
+@property ( nonatomic, copy ) NSString *uri;
+@end
+
+@implementation VideoStabilizerPlayerView {
+  AVPlayerViewController *_controller;
+  AVQueuePlayer *_player;
+  AVPlayerLooper *_looper;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame
+{
+  if ( ( self = [super initWithFrame:frame] ) ) {
+    self.backgroundColor = [UIColor blackColor];
+    _player = [[AVQueuePlayer alloc] init];
+    _player.muted = YES;
+    _controller = [[AVPlayerViewController alloc] init];
+    _controller.player = _player;
+    _controller.showsPlaybackControls = YES;
+    _controller.videoGravity = AVLayerVideoGravityResizeAspect;
+    _controller.view.frame = self.bounds;
+    _controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _controller.view.backgroundColor = [UIColor blackColor];
+    [self addSubview:_controller.view];
+  }
+  return self;
+}
+
+- (void)setUri:(NSString *)uri
+{
+  if ( [uri isEqualToString:_uri] || ( !uri && !_uri ) ) return;
+  _uri = [uri copy];
+  [_looper disableLooping];
+  _looper = nil;
+  [_player removeAllItems];
+  if ( uri.length == 0 ) return;
+  AVPlayerItem *item = [AVPlayerItem playerItemWithURL:[NSURL fileURLWithPath:stripFileScheme( uri )]];
+  _looper = [AVPlayerLooper playerLooperWithPlayer:_player templateItem:item];
+  if ( self.window ) [_player play];
+}
+
+- (UIViewController *)owningViewController
+{
+  UIResponder *responder = self.nextResponder;
+  while ( responder && ![responder isKindOfClass:[UIViewController class]] ) responder = responder.nextResponder;
+  return (UIViewController *)responder;
+}
+
+- (void)didMoveToWindow
+{
+  [super didMoveToWindow];
+  if ( self.window ) {
+    // A child view controller, so full screen and picture in picture work.
+    UIViewController *parent = [self owningViewController];
+    if ( parent && _controller.parentViewController != parent ) {
+      [parent addChildViewController:_controller];
+      [_controller didMoveToParentViewController:parent];
+    }
+    if ( _uri.length > 0 ) [_player play];
+  } else if ( !_controller.presentedViewController ) {
+    // Going full screen can also take the view out of the window; only a
+    // real removal pauses.
+    [_player pause];
+    if ( _controller.parentViewController ) {
+      [_controller willMoveToParentViewController:nil];
+      [_controller removeFromParentViewController];
+    }
+  }
+}
+
+- (void)dealloc
+{
+  [_player pause];
+  [_looper disableLooping];
+}
+
+@end
+
+@interface VideoStabilizerPlayerManager : RCTViewManager
+@end
+
+@implementation VideoStabilizerPlayerManager
+
+RCT_EXPORT_MODULE( )
+
+RCT_EXPORT_VIEW_PROPERTY( uri, NSString )
+
+- (UIView *)view { return [VideoStabilizerPlayerView new]; }
 
 @end

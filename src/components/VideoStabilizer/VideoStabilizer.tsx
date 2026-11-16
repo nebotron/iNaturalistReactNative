@@ -1,4 +1,3 @@
-import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import FineSlider from "components/MediaViewer/FineSlider";
 import {
   Body2,
@@ -6,7 +5,6 @@ import {
   Button,
   Heading4,
   SwitchRow,
-  Tabs,
 } from "components/SharedComponents";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo, useState } from "react";
@@ -22,7 +20,6 @@ import type {
 } from "sharedHelpers/videoStabilization";
 import {
   flattenTransforms,
-  isSubjectMethod,
   outputSize,
   planStabilization,
   strengthToSigmaSeconds,
@@ -38,7 +35,9 @@ import {
   playVideo,
   probeVideo,
   renderStabilizedVideo,
+  saveStabilizedVideo,
   videoFrameAt,
+  VideoStabilizerPlayer,
 } from "sharedHelpers/videoStabilizerNative";
 import { useTranslation } from "sharedHooks";
 import type { BusyPhase } from "stores/videoStabilizer";
@@ -54,8 +53,13 @@ const PREVIEW_MAX_DIMENSION = 640;
 const EXPORT_MAX_DIMENSION = 1920;
 const MAX_ZOOM = 6;
 
-const BACKGROUND_METHODS: StabilizeMethod[] = ["similarity", "translation"];
-const SUBJECT_METHODS: StabilizeMethod[] = ["tracker", "saliency"];
+const METHODS: StabilizeMethod[] = ["similarity", "translation"];
+
+// The job the screen last started. Kept outside the component so that a
+// remount (a tab switch) neither repeats a job that's still running nor
+// lets a superseded job's result overwrite a newer one.
+let activeJob: { id: number; key: string } | null = null;
+let jobCount = 0;
 
 const formatTime = ( seconds: number ) => {
   const minutes = Math.floor( seconds / 60 );
@@ -66,7 +70,8 @@ const percent = ( progress: number ) => Math.round( progress * 100 );
 
 interface Choices {
   strength: number;
-  lockSize: boolean;
+  still: boolean;
+  rollingShutter: number;
   zoom: number;
   avoidEdges: boolean;
   cropCenter: Point | null;
@@ -80,7 +85,8 @@ const settingsFor = (
   const size = outputSize( analysis.width, analysis.height, maxDimension );
   return {
     strength: choices.strength,
-    lockSize: choices.lockSize,
+    still: choices.still,
+    rollingShutter: choices.rollingShutter,
     zoom: choices.zoom,
     avoidEdges: choices.avoidEdges,
     maxZoom: MAX_ZOOM,
@@ -96,20 +102,19 @@ const VideoStabilizer = ( ) => {
   const { t } = useTranslation( );
   const { width: windowWidth, height: windowHeight } = useWindowDimensions( );
   const {
-    videoPath, info, frame, start, method, box, cropCenter, strength, lockSize,
-    zoom, avoidEdges, includeAudio, analysis, busy, previewUri, exportUri,
-    set, setMethod, setBox, setStart,
+    videoPath, info, frame, start, method, cropCenter, strength, still, rollingShutter,
+    zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, exportUri,
+    exportKey, set, setStart,
   } = useVideoStabilizer( );
-  // Slider positions while dragging; the plan is only recomputed on release.
+  // Slider positions while dragging; settings are only committed on release.
   const [startDraft, setStartDraft] = useState<number | null>( null );
   const [strengthDraft, setStrengthDraft] = useState<number | null>( null );
+  const [rollingShutterDraft, setRollingShutterDraft] = useState<number | null>( null );
   const [zoomDraft, setZoomDraft] = useState<number | null>( null );
-  const [drawing, setDrawing] = useState( false );
-  const subjectMode = isSubjectMethod( method );
 
-  useEffect( ( ) => onVideoStabilizerProgress( ( { progress } ) => {
+  useEffect( ( ) => onVideoStabilizerProgress( ( { progress, job } ) => {
     const current = useVideoStabilizer.getState( ).busy;
-    if ( current && current.phase !== "importing" ) {
+    if ( current && current.job !== undefined && current.job === job ) {
       set( { busy: { ...current, progress } } );
     }
   } ), [set] );
@@ -120,21 +125,6 @@ const VideoStabilizer = ( ) => {
     if ( !current && !working ) clearVideoStabilizerFiles( ).catch( ( ) => undefined );
   }, [] );
 
-  const startOver = ( ) => {
-    useVideoStabilizer.getState( ).reset( );
-    clearVideoStabilizerFiles( ).catch( ( ) => undefined );
-  };
-
-  const startBusy = ( phase: BusyPhase ) => {
-    holdKeepAwake( KEEP_AWAKE_HOLDER );
-    set( { busy: { phase, progress: 0 } } );
-  };
-
-  const endBusy = ( ) => {
-    releaseKeepAwake( KEEP_AWAKE_HOLDER );
-    set( { busy: null } );
-  };
-
   const showError = ( error: unknown, context: string ) => {
     if ( isCancellation( error ) ) return;
     logger.error( `${context} failed`, error );
@@ -144,22 +134,161 @@ const VideoStabilizer = ( ) => {
     );
   };
 
+  // What each result has to have been made with to be current. A result made
+  // with anything else is stale, and the effect below reruns it.
+  const wantedAnalysisKey = videoPath
+    ? JSON.stringify( [videoPath, start, method, still] )
+    : null;
+  const currentAnalysis = analysis && analysisKey === wantedAnalysisKey
+    ? analysis
+    : null;
   const choices: Choices = {
-    strength, lockSize, zoom, avoidEdges, cropCenter,
+    strength, still, rollingShutter, zoom, avoidEdges, cropCenter,
   };
+  const wantedPreviewKey = currentAnalysis
+    ? JSON.stringify( [wantedAnalysisKey, choices] )
+    : null;
+  const currentExport = exportUri && exportKey === wantedPreviewKey
+    ? exportUri
+    : null;
+  const exporting = busy?.phase === "exporting";
+
   // Recomputed only when a setting is committed, never per drag event.
   const plan = useMemo( ( ) => (
-    analysis
-      ? planStabilization( analysis, settingsFor( analysis, EXPORT_MAX_DIMENSION, {
-        strength, lockSize, zoom, avoidEdges, cropCenter,
+    currentAnalysis
+      ? planStabilization( currentAnalysis, settingsFor( currentAnalysis, EXPORT_MAX_DIMENSION, {
+        strength, still, rollingShutter, zoom, avoidEdges, cropCenter,
       } ) )
       : null
-  ), [analysis, strength, lockSize, zoom, avoidEdges, cropCenter] );
+  ), [currentAnalysis, strength, still, rollingShutter, zoom, avoidEdges, cropCenter] );
 
-  const importVideo = async ( source: "library" | "files" ) => {
-    startBusy( "importing" );
+  // Runs one native job. Starting a job cancels the one before (natively,
+  // too), and only the latest job's result, error and progress count.
+  const runJob = async <T, >(
+    key: string,
+    phase: BusyPhase,
+    work: ( job: number ) => Promise<T>,
+    onDone: ( result: T ) => void,
+  ) => {
+    jobCount += 1;
+    const id = jobCount;
+    activeJob = { id, key };
+    holdKeepAwake( KEEP_AWAKE_HOLDER );
+    set( { busy: { phase, progress: 0, job: id } } );
     try {
-      const path = await pickVideo( source );
+      const result = await work( id );
+      if ( activeJob?.id === id ) onDone( result );
+    } catch ( error ) {
+      if ( activeJob?.id === id ) showError( error, phase );
+    } finally {
+      if ( activeJob?.id === id ) {
+        releaseKeepAwake( KEEP_AWAKE_HOLDER );
+        set( { busy: null } );
+      }
+    }
+  };
+
+  const runAnalysis = ( key: string ) => {
+    const {
+      videoPath: path, start: from, method: using, still: reference,
+    } = useVideoStabilizer.getState( );
+    if ( !path ) return;
+    runJob(
+      key,
+      "analyzing",
+      job => analyzeVideo( path, {
+        method: using, start: from, reference, job,
+      } ),
+      result => {
+        const lost = result.frames.filter( f => !f.ok ).length;
+        logger.info(
+          `analyzed ${result.frames.length} frames with ${using}, ${lost} unusable`
+          + `${reference
+            ? `, ${result.refinedFrames} locked to the first frame`
+            : ""}`,
+        );
+        set( { analysis: result, analysisKey: key } );
+      },
+    );
+  };
+
+  const render = ( key: string, preview: boolean ) => {
+    const state = useVideoStabilizer.getState( );
+    if ( !state.videoPath || !currentAnalysis ) return;
+    const path = state.videoPath;
+    const settings = settingsFor(
+      currentAnalysis,
+      preview
+        ? PREVIEW_MAX_DIMENSION
+        : EXPORT_MAX_DIMENSION,
+      choices,
+    );
+    const rendered = planStabilization( currentAnalysis, settings );
+    runJob(
+      preview
+        ? key
+        : `export:${key}`,
+      preview
+        ? "previewing"
+        : "exporting",
+      job => renderStabilizedVideo( path, {
+        start: state.start,
+        transforms: flattenTransforms( rendered.transforms ),
+        outputWidth: settings.outputWidth,
+        outputHeight: settings.outputHeight,
+        preview,
+        job,
+      } ),
+      result => {
+        if ( preview ) {
+          set( { previewUri: result.uri, previewKey: key } );
+          return;
+        }
+        logger.info(
+          `exported ${result.frames} frames at ${settings.outputWidth}x${settings.outputHeight}, `
+          + `zoom ${rendered.zoom.toFixed( 2 )}`,
+        );
+        set( { exportUri: result.uri, exportKey: key } );
+      },
+    );
+  };
+
+  // Analyze as soon as there's a video and whenever a setting the analysis
+  // depends on changes; once it's current, keep the preview up to date.
+  useEffect( ( ) => {
+    if ( !videoPath || exporting || busy?.phase === "importing" ) return;
+    if ( wantedAnalysisKey && !currentAnalysis ) {
+      if ( activeJob?.key !== wantedAnalysisKey ) runAnalysis( wantedAnalysisKey );
+      return;
+    }
+    if (
+      wantedPreviewKey
+      && previewKey !== wantedPreviewKey
+      && activeJob?.key !== wantedPreviewKey
+    ) {
+      render( wantedPreviewKey, true );
+    }
+  // runAnalysis and render read the latest settings when they're called.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    videoPath, exporting, busy?.phase, wantedAnalysisKey, currentAnalysis,
+    wantedPreviewKey, previewKey,
+  ] );
+
+  const startOver = ( ) => {
+    activeJob = null;
+    cancelVideoStabilizer( );
+    releaseKeepAwake( KEEP_AWAKE_HOLDER );
+    useVideoStabilizer.getState( ).reset( );
+    clearVideoStabilizerFiles( ).catch( ( ) => undefined );
+  };
+
+  const importVideo = async ( ) => {
+    activeJob = null;
+    holdKeepAwake( KEEP_AWAKE_HOLDER );
+    set( { busy: { phase: "importing", progress: 0 } } );
+    try {
+      const path = await pickVideo( );
       if ( !path ) return;
       const probed = await probeVideo( path );
       const firstFrame = await videoFrameAt( path, 0, FRAME_MAX_DIMENSION );
@@ -167,14 +296,24 @@ const VideoStabilizer = ( ) => {
         `imported ${probed.width}x${probed.height} ${probed.fps}fps`
         + ` ${probed.duration.toFixed( 1 )}s`,
       );
+      // The stabilizing choices carry over to the next video.
+      const kept = useVideoStabilizer.getState( );
       useVideoStabilizer.getState( ).reset( );
       set( {
-        videoPath: path, info: probed, frame: firstFrame, method,
+        videoPath: path,
+        info: probed,
+        frame: firstFrame,
+        method: kept.method,
+        strength: kept.strength,
+        still: kept.still,
+        rollingShutter: kept.rollingShutter,
+        busy: { phase: "importing", progress: 0 },
       } );
     } catch ( error ) {
       showError( error, "import" );
     } finally {
-      endBusy( );
+      releaseKeepAwake( KEEP_AWAKE_HOLDER );
+      set( { busy: null } );
     }
   };
 
@@ -189,79 +328,11 @@ const VideoStabilizer = ( ) => {
     }
   };
 
-  const runAnalysis = async ( ) => {
-    if ( !videoPath ) return;
-    if ( method === "tracker" && !box ) {
-      Alert.alert( t( "Draw-a-box-around-the-subject-first" ) );
-      return;
-    }
-    startBusy( "analyzing" );
-    try {
-      const result = await analyzeVideo( videoPath, {
-        method,
-        start,
-        box: box ?? undefined,
-      } );
-      const lost = result.frames.filter( f => !f.ok ).length;
-      logger.info(
-        `analyzed ${result.frames.length} frames with ${method}, ${lost} unusable`
-        + `${result.registrationReading
-          ? `, registration read ${result.registrationReading} (${result.registrationVotes} votes)`
-          : ""}`,
-      );
-      set( { analysis: result, previewUri: null, exportUri: null } );
-    } catch ( error ) {
-      showError( error, "analysis" );
-    } finally {
-      endBusy( );
-    }
-  };
-
-  const runRender = async ( preview: boolean ) => {
-    if ( !videoPath || !analysis ) return;
-    const maxDimension = preview
-      ? PREVIEW_MAX_DIMENSION
-      : EXPORT_MAX_DIMENSION;
-    const settings = settingsFor( analysis, maxDimension, choices );
-    const rendered = planStabilization( analysis, settings );
-    startBusy( preview
-      ? "previewing"
-      : "exporting" );
-    try {
-      const result = await renderStabilizedVideo( videoPath, {
-        start,
-        transforms: flattenTransforms( rendered.transforms ),
-        outputWidth: settings.outputWidth,
-        outputHeight: settings.outputHeight,
-        includeAudio,
-        preview,
-      } );
-      if ( preview ) {
-        set( { previewUri: result.uri } );
-        playVideo( result.uri );
-      } else {
-        logger.info(
-          `exported ${result.frames} frames at ${settings.outputWidth}x${settings.outputHeight}, `
-          + `zoom ${rendered.zoom.toFixed( 2 )}`,
-        );
-        set( { exportUri: result.uri } );
-      }
-    } catch ( error ) {
-      showError( error, preview
-        ? "preview"
-        : "export" );
-    } finally {
-      endBusy( );
-    }
-  };
-
   const saveToPhotos = async ( ) => {
-    if ( !exportUri ) return;
+    if ( !currentExport || !videoPath ) return;
     try {
-      // No album: adding to one needs full library access, and saving alone
-      // needs only add-only access.
       await enqueuePhotoLibraryWrite( holdChainUntil => {
-        const save = CameraRoll.saveAsset( exportUri, { type: "video" } );
+        const save = saveStabilizedVideo( currentExport, videoPath, start );
         holdChainUntil( save );
         return save;
       } );
@@ -272,13 +343,8 @@ const VideoStabilizer = ( ) => {
   };
 
   const shareExport = ( ) => {
-    if ( exportUri ) Share.share( { url: exportUri } ).catch( ( ) => undefined );
+    if ( currentExport ) Share.share( { url: currentExport } ).catch( ( ) => undefined );
   };
-
-  // A settings change keeps the analysis but makes the rendered files stale.
-  const updateSettings = ( partial: Parameters<typeof set>[0] ) => set( {
-    ...partial, previewUri: null, exportUri: null,
-  } );
 
   if ( !isVideoStabilizerSupported( ) ) {
     return (
@@ -294,6 +360,8 @@ const VideoStabilizer = ( ) => {
       case "importing": return t( "Importing-video" );
       case "analyzing":
         return t( "Analyzing-motion-x-percent", { percent: percent( busy.progress ) } );
+      case "previewing":
+        return t( "Updating-preview-x-percent", { percent: percent( busy.progress ) } );
       default:
         return t( "Rendering-video-x-percent", { percent: percent( busy.progress ) } );
     }
@@ -308,7 +376,7 @@ const VideoStabilizer = ( ) => {
           style={{ width: `${percent( busy.progress )}%` }}
         />
       </View>
-      {busy.phase !== "importing" && (
+      {exporting && (
         <Button
           className="mt-3"
           text={t( "CANCEL" )}
@@ -327,13 +395,7 @@ const VideoStabilizer = ( ) => {
           level="primary"
           text={t( "IMPORT-FROM-PHOTOS" )}
           disabled={!!busy}
-          onPress={( ) => importVideo( "library" )}
-        />
-        <Button
-          className="mt-3"
-          text={t( "IMPORT-FROM-FILES" )}
-          disabled={!!busy}
-          onPress={( ) => importVideo( "files" )}
+          onPress={importVideo}
         />
         {busyBar}
       </View>
@@ -347,12 +409,13 @@ const VideoStabilizer = ( ) => {
   const previewHeight = previewWidth / aspect;
 
   const shownZoom = zoomDraft ?? zoom;
-  const roughCenter: Point = subjectMode
-    ? ( box && { x: box[0] + box[2] / 2, y: box[1] + box[3] / 2 } ) || { x: 0.5, y: 0.5 }
-    : cropCenter ?? { x: 0.5, y: 0.5 };
+  const roughCenter: Point = cropCenter ?? { x: 0.5, y: 0.5 };
   const half = 0.5 / shownZoom;
-  const cropOutline: Point[] = plan && analysis && zoomDraft === null
-    ? plan.firstFrameCrop.map( p => ( { x: p.x / analysis.width, y: p.y / analysis.height } ) )
+  const cropOutline: Point[] = plan && currentAnalysis && zoomDraft === null
+    ? plan.firstFrameCrop.map( p => ( {
+      x: p.x / currentAnalysis.width,
+      y: p.y / currentAnalysis.height,
+    } ) )
     : [
       { x: roughCenter.x - half, y: roughCenter.y - half },
       { x: roughCenter.x + half, y: roughCenter.y - half },
@@ -361,9 +424,10 @@ const VideoStabilizer = ( ) => {
     ];
 
   const sigma = strengthToSigmaSeconds( strengthDraft ?? strength );
-  const strengthLabel = Number.isFinite( sigma )
-    ? t( "Stabilization-smooths-over-x-seconds", { seconds: sigma.toFixed( 1 ) } )
-    : t( "Stabilization-locked" );
+  const shownReadout = rollingShutterDraft ?? rollingShutter;
+  const readoutLabel = shownReadout > 0.005
+    ? t( "Rolling-shutter-readout-x-percent", { percent: percent( shownReadout ) } )
+    : t( "Rolling-shutter-off" );
 
   const methodLabels: Record<StabilizeMethod, { label: string; hint: string }> = {
     similarity: {
@@ -374,50 +438,29 @@ const VideoStabilizer = ( ) => {
       label: t( "Shift-only--stabilize-method" ),
       hint: t( "Fastest-removes-up-down-and-sideways-shake" ),
     },
-    tracker: {
-      label: t( "Track-the-box-I-draw--stabilize-method" ),
-      hint: t( "Follows-what-you-draw-a-box-around" ),
-    },
-    saliency: {
-      label: t( "Find-the-subject-automatically--stabilize-method" ),
-      hint: t( "Follows-the-most-prominent-object" ),
-    },
   };
-  const methods = subjectMode
-    ? SUBJECT_METHODS
-    : BACKGROUND_METHODS;
-  const disabled = !!busy;
-  const source = analysis && {
-    width: Math.round( analysis.width / ( plan?.zoom ?? zoom ) ),
-    height: Math.round( analysis.height / ( plan?.zoom ?? zoom ) ),
+  const disabled = exporting;
+  const source = currentAnalysis && {
+    width: Math.round( currentAnalysis.width / ( plan?.zoom ?? zoom ) ),
+    height: Math.round( currentAnalysis.height / ( plan?.zoom ?? zoom ) ),
   };
   const exportSize = outputSize( info.width, info.height, EXPORT_MAX_DIMENSION );
+  const previewIsCurrent = !!previewUri && previewKey === wantedPreviewKey;
 
   return (
     <ScrollView
-      scrollEnabled={!drawing}
       contentContainerClassName="p-4 pb-[96px]"
     >
       <FramePreview
         uri={frame.uri}
         width={previewWidth}
         height={previewHeight}
-        interaction={subjectMode
-          ? "box"
-          : "point"}
-        box={subjectMode
-          ? box
-          : null}
         crop={cropOutline}
         cropCenter={cropCenter ?? { x: 0.5, y: 0.5 }}
-        onBoxDrawn={setBox}
-        onPointPicked={point => updateSettings( { cropCenter: point } )}
-        onDrawingChange={setDrawing}
+        onPointPicked={point => set( { cropCenter: point } )}
       />
       <Body3 className="mt-2 text-center">
-        {subjectMode
-          ? t( "Drag-on-the-frame-to-draw-a-box-around-the-subject" )
-          : t( "Tap-the-frame-to-choose-where-to-crop" )}
+        {t( "Tap-the-frame-to-choose-where-to-crop" )}
       </Body3>
 
       <View className="flex-row items-center mt-4">
@@ -435,32 +478,15 @@ const VideoStabilizer = ( ) => {
         />
       </View>
 
-      <Heading4 className="mt-6 mb-2">{t( "STABILIZE-ON" )}</Heading4>
-      <Tabs
-        activeId={subjectMode
-          ? "subject"
-          : "background"}
-        tabs={[
-          {
-            id: "background",
-            text: t( "BACKGROUND--stabilize-on" ),
-            onPress: ( ) => !disabled && setMethod( BACKGROUND_METHODS[0] ),
-          },
-          {
-            id: "subject",
-            text: t( "SUBJECT--stabilize-on" ),
-            onPress: ( ) => !disabled && setMethod( SUBJECT_METHODS[0] ),
-          },
-        ]}
-      />
-      <View className="mt-3" accessibilityRole="radiogroup">
-        {methods.map( option => (
+      <Heading4 className="mt-6 mb-2">{t( "MOTION-TO-REMOVE" )}</Heading4>
+      <View accessibilityRole="radiogroup">
+        {METHODS.map( option => (
           <Pressable
             key={option}
             accessibilityRole="radio"
             accessibilityState={{ checked: method === option, disabled }}
             disabled={disabled}
-            onPress={( ) => setMethod( option )}
+            onPress={( ) => set( { method: option } )}
             className={`p-3 mb-2 rounded-lg border-2 ${method === option
               ? "border-inatGreen"
               : "border-lightGray"}`}
@@ -471,49 +497,58 @@ const VideoStabilizer = ( ) => {
         ) )}
       </View>
 
-      <Button
-        className="mt-3"
-        level={analysis
-          ? undefined
-          : "primary"}
-        text={analysis
-          ? t( "ANALYZE-MOTION-AGAIN" )
-          : t( "ANALYZE-MOTION" )}
-        disabled={disabled}
-        onPress={runAnalysis}
-      />
-      {analysis && !busy && (
-        <Body3 className="mt-2">
-          {t( "Motion-analyzed-across-x-frames", { count: analysis.frames.length } )}
-        </Body3>
-      )}
-      {busyBar}
-
       <Heading4 className="mt-6 mb-2">{t( "SMOOTHING" )}</Heading4>
+      <SwitchRow
+        label={t( "Hold-the-background-completely-still" )}
+        value={still}
+        disabled={disabled}
+        onValueChange={value => set( { still: value } )}
+      />
+      {still
+        ? (
+          <Body3 className="mt-2">
+            {t( "Pins-the-background-where-it-is-at-the-start" )}
+          </Body3>
+        )
+        : (
+          <View className="flex-row items-center mt-3">
+            <Body2 className="w-[110px]">
+              {t( "Stabilization-smooths-over-x-seconds", { seconds: sigma.toFixed( 1 ) } )}
+            </Body2>
+            <FineSlider
+              accessibilityLabel={t( "Stabilization-strength" )}
+              disabled={disabled}
+              minimumValue={0}
+              maximumValue={1}
+              value={strengthDraft ?? strength}
+              onChange={setStrengthDraft}
+              onComplete={value => {
+                setStrengthDraft( null );
+                set( { strength: value } );
+              }}
+            />
+          </View>
+        )}
+
+      <Heading4 className="mt-6 mb-2">{t( "ROLLING-SHUTTER" )}</Heading4>
       <View className="flex-row items-center">
-        <Body2 className="w-[110px]">{strengthLabel}</Body2>
+        <Body2 className="w-[110px]">{readoutLabel}</Body2>
         <FineSlider
-          accessibilityLabel={t( "Stabilization-strength" )}
+          accessibilityLabel={t( "Rolling-shutter-correction" )}
           disabled={disabled}
           minimumValue={0}
           maximumValue={1}
-          value={strengthDraft ?? strength}
-          onChange={setStrengthDraft}
+          value={shownReadout}
+          snapValue={0}
+          snapThreshold={0.03}
+          onChange={setRollingShutterDraft}
           onComplete={value => {
-            setStrengthDraft( null );
-            updateSettings( { strength: value } );
+            setRollingShutterDraft( null );
+            set( { rollingShutter: value } );
           }}
         />
       </View>
-      {subjectMode && (
-        <SwitchRow
-          classNames="mt-3"
-          label={t( "Keep-the-subject-the-same-size" )}
-          value={lockSize}
-          disabled={disabled}
-          onValueChange={value => updateSettings( { lockSize: value } )}
-        />
-      )}
+      <Body3 className="mt-2">{t( "Straightens-lines-that-lean-or-wobble-in-fast-pans" )}</Body3>
 
       <Heading4 className="mt-6 mb-2">{t( "CROP" )}</Heading4>
       <View className="flex-row items-center">
@@ -531,7 +566,7 @@ const VideoStabilizer = ( ) => {
           onChange={setZoomDraft}
           onComplete={value => {
             setZoomDraft( null );
-            updateSettings( { zoom: value } );
+            set( { zoom: value } );
           }}
         />
       </View>
@@ -540,23 +575,14 @@ const VideoStabilizer = ( ) => {
         label={t( "Zoom-in-to-hide-empty-edges" )}
         value={avoidEdges}
         disabled={disabled}
-        onValueChange={value => updateSettings( { avoidEdges: value } )}
+        onValueChange={value => set( { avoidEdges: value } )}
       />
-      {info.hasAudio && (
-        <SwitchRow
-          classNames="mt-3"
-          label={t( "Keep-audio" )}
-          value={includeAudio}
-          disabled={disabled}
-          onValueChange={value => updateSettings( { includeAudio: value } )}
-        />
-      )}
       {plan && avoidEdges && plan.zoom > zoom + 0.01 && (
         <Body3 className="mt-2">
           {t( "Zoomed-to-x-to-hide-empty-edges", { zoom: plan.zoom.toFixed( 2 ) } )}
         </Body3>
       )}
-      {plan?.edgesVisible && (
+      {plan?.edgesVisible && avoidEdges && (
         <Body3 className="mt-2">{t( "Some-frames-still-show-empty-edges" )}</Body3>
       )}
       {source && (
@@ -570,26 +596,54 @@ const VideoStabilizer = ( ) => {
         </Body3>
       )}
 
-      <View className="flex-row mt-6">
-        <Button
-          className="flex-1 mr-2"
-          text={t( "PREVIEW" )}
-          disabled={disabled || !analysis}
-          onPress={( ) => ( previewUri
-            ? playVideo( previewUri )
-            : runRender( true ) )}
-        />
-        <Button
-          className="flex-1 ml-2"
-          level="primary"
-          text={t( "EXPORT" )}
-          disabled={disabled || !analysis}
-          onPress={( ) => runRender( false )}
-        />
-      </View>
-      {exportUri && !busy && (
+      <Heading4 className="mt-6 mb-2">{t( "PREVIEW--video-stabilizer" )}</Heading4>
+      {previewUri && VideoStabilizerPlayer
+        ? (
+          <View
+            className={`self-center ${previewIsCurrent
+              ? ""
+              : "opacity-50"}`}
+          >
+            <VideoStabilizerPlayer
+              accessibilityLabel={t( "Stabilized-preview" )}
+              uri={previewUri}
+              style={{ width: previewWidth, height: previewHeight }}
+            />
+          </View>
+        )
+        : (
+          <View
+            className="self-center items-center justify-center bg-lightGray p-4"
+            style={{ width: previewWidth, height: previewHeight }}
+          >
+            <Body3 className="text-center">
+              {t( "The-preview-appears-here-once-the-motion-is-analyzed" )}
+            </Body3>
+          </View>
+        )}
+      {!exporting && busyBar}
+      {currentAnalysis && !busy && (
+        <Body3 className="mt-2">
+          {t( "Motion-analyzed-across-x-frames", { count: currentAnalysis.frames.length } )}
+        </Body3>
+      )}
+      <Button
+        className="mt-4"
+        text={t( "PLAY-ORIGINAL" )}
+        onPress={( ) => playVideo( videoPath )}
+      />
+
+      <Button
+        className="mt-6"
+        level="primary"
+        text={t( "EXPORT" )}
+        disabled={disabled || !currentAnalysis}
+        onPress={( ) => wantedPreviewKey && render( wantedPreviewKey, false )}
+      />
+      {exporting && busyBar}
+      {currentExport && !busy && (
         <View className="mt-4">
-          <Button text={t( "PLAY" )} onPress={( ) => playVideo( exportUri )} />
+          <Button text={t( "PLAY" )} onPress={( ) => playVideo( currentExport )} />
           <Button className="mt-3" text={t( "SAVE-TO-PHOTOS" )} onPress={saveToPhotos} />
           <Button className="mt-3" text={t( "SHARE" )} onPress={shareExport} />
         </View>

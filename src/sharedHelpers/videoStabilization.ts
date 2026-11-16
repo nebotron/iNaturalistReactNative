@@ -1,30 +1,30 @@
 // The math behind the video stabilizer (components/VideoStabilizer). The native
 // module (ios/.../VideoStabilizer.m) only measures and renders: one pass reads
-// the video and reports, per frame, either how the camera moved since the last
-// frame (background methods) or where the subject is (subject methods), and a
-// second pass warps every frame by the transform this file computes for it.
-// Keeping the camera-path math here means changing how smooth or how tight the
-// result is never re-reads the video, and the math can be unit tested.
+// the video and reports, per frame, how the camera moved since the last frame
+// (and, for a full lock, where the frame sits on the start frame), and a second
+// pass warps every frame by the transform this file computes for it. Keeping
+// the camera-path math here means changing how smooth or how tight the result
+// is never re-reads the video, and the math can be unit tested.
 //
 // Coordinates: pixels of the upright (display-oriented) source frame, origin
-// top-left, y down. Transforms are 2D affines, x' = a·x + c·y + e and
-// y' = b·x + d·y + f, the same layout as CGAffineTransform.
+// top-left, y down. Affines are x' = a·x + c·y + e and y' = b·x + d·y + f, the
+// same layout as CGAffineTransform. Homographies are row-major 3×3 matrices
+// for column vectors (x, y, 1).
 //
 // The model, for frame i:
 //   P_i  the measured path: maps frame i (centered on the frame center) into a
-//        stable space. For the background it's the accumulated camera motion
-//        back to the first frame; for a subject it moves the subject to the
-//        origin (and optionally rescales it to its first-frame size).
+//        stable space, the camera motion accumulated back to the first frame.
 //   S_i  the virtual camera's path: P smoothed over time, or the identity when
-//        locked (a tripod for the background, a hard lock on the subject).
-// A pixel x of frame i is drawn at  S_i⁻¹ · P_i · (x − center)  in stable
-// space, and the crop window (center k, zoom z) maps that to the output.
+//        the background is held completely still (a tripod).
+//   R_i  the rolling-shutter correction: undoes the lean and squash a moving
+//        camera puts into a frame whose rows were read one after another.
+// A pixel x of frame i is drawn at  S_i⁻¹ · P_i · (R_i · x − center)  in
+// stable space: straightened, placed where the camera was pointing, and viewed
+// through the virtual camera. The crop window (center k, zoom z) maps that to
+// the output. For a complete lock measured against the first frame, P_i is
+// that full homography (perspective included) instead of a similarity.
 
-export type StabilizeMethod = "translation" | "similarity" | "tracker" | "saliency";
-
-export const isSubjectMethod = ( method: StabilizeMethod ) => (
-  method === "tracker" || method === "saliency"
-);
+export type StabilizeMethod = "translation" | "similarity";
 
 export interface Affine {
   a: number;
@@ -34,6 +34,9 @@ export interface Affine {
   e: number;
   f: number;
 }
+
+// Row-major 3×3.
+export type Homography = number[];
 
 export interface Point {
   x: number;
@@ -53,13 +56,13 @@ export interface AnalysisFrame {
   t: number;
   // Whether the measurement for this frame is usable.
   ok: boolean;
-  // Background methods: row-major 3×3 homography mapping this frame's pixels
-  // onto the previous frame's (identity for the first frame).
+  // Homography mapping this frame's pixels onto the previous frame's
+  // (identity for the first frame).
   m?: number[];
-  // Subject methods: [x, y, width, height], normalized 0–1, origin top-left.
-  box?: number[];
-  // Subject methods: the tracker's or detector's confidence, 0–1.
-  conf?: number;
+  // Analyses for a full lock: homography mapping this frame's pixels onto the
+  // first frame's, measured against the first frame itself so that errors
+  // don't add up over the clip.
+  r?: number[];
 }
 
 export interface VideoAnalysis {
@@ -73,6 +76,8 @@ export interface VideoAnalysis {
 export const IDENTITY: Affine = {
   a: 1, b: 0, c: 0, d: 1, e: 0, f: 0,
 };
+
+const IDENTITY_H: Homography = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 
 // first ∘ second: apply `second`, then `first`.
 export const compose = ( first: Affine, second: Affine ): Affine => ( {
@@ -105,6 +110,45 @@ export const translation = ( x: number, y: number ): Affine => ( { ...IDENTITY, 
 
 export const scaling = ( s: number ): Affine => ( { ...IDENTITY, a: s, d: s } );
 
+export const homographyFromAffine = ( m: Affine ): Homography => [
+  m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1,
+];
+
+// first ∘ second: apply `second`, then `first`.
+export const multiplyHomographies = ( first: Homography, second: Homography ): Homography => {
+  const r: number[] = [];
+  for ( let i = 0; i < 3; i += 1 ) {
+    for ( let j = 0; j < 3; j += 1 ) {
+      r.push( first[i * 3] * second[j]
+        + first[i * 3 + 1] * second[3 + j]
+        + first[i * 3 + 2] * second[6 + j] );
+    }
+  }
+  return r;
+};
+
+export const invertHomography = ( h: Homography ): Homography => {
+  const [a, b, c, d, e, f, g, k, l] = h;
+  const det = a * ( e * l - f * k ) - b * ( d * l - f * g ) + c * ( d * k - e * g );
+  if ( Math.abs( det ) < 1e-12 ) return [...IDENTITY_H];
+  return [
+    ( e * l - f * k ) / det, ( c * k - b * l ) / det, ( b * f - c * e ) / det,
+    ( f * g - d * l ) / det, ( a * l - c * g ) / det, ( c * d - a * f ) / det,
+    ( d * k - e * g ) / det, ( b * g - a * k ) / det, ( a * e - b * d ) / det,
+  ];
+};
+
+// A point at infinity (or behind the camera) comes back as NaN, which fails
+// every comparison, so a crop corner there never counts as inside the frame.
+export const applyHomography = ( h: Homography, p: Point ): Point => {
+  const w = h[6] * p.x + h[7] * p.y + h[8];
+  if ( !( w > 1e-9 ) ) return { x: NaN, y: NaN };
+  return {
+    x: ( h[0] * p.x + h[1] * p.y + h[2] ) / w,
+    y: ( h[3] * p.x + h[4] * p.y + h[5] ) / w,
+  };
+};
+
 export const paramsToAffine = ( p: PathParams ): Affine => {
   const s = Math.exp( p.logScale );
   const cos = s * Math.cos( p.rot );
@@ -121,15 +165,6 @@ export const affineToParams = ( m: Affine ): PathParams => ( {
   rot: Math.atan2( m.b - m.c, m.a + m.d ),
   logScale: Math.log( Math.max( 1e-6, Math.hypot( ( m.a + m.d ) / 2, ( m.b - m.c ) / 2 ) ) ),
 } );
-
-const applyHomography = ( h: number[], p: Point ): Point | null => {
-  const w = h[6] * p.x + h[7] * p.y + h[8];
-  if ( Math.abs( w ) < 1e-9 ) return null;
-  return {
-    x: ( h[0] * p.x + h[1] * p.y + h[2] ) / w,
-    y: ( h[3] * p.x + h[4] * p.y + h[5] ) / w,
-  };
-};
 
 // Least-squares similarity (rotation, uniform scale, shift) between point sets.
 export const fitSimilarity = ( from: Point[], to: Point[] ): Affine => {
@@ -167,8 +202,8 @@ export const fitSimilarity = ( from: Point[], to: Point[] ): Affine => {
 };
 
 // The similarity closest to a homography over a frame: a perspective term
-// from frame-to-frame registration is mostly noise, and warping by it makes
-// the picture wobble like jelly.
+// from frame-to-frame registration is mostly noise, and smoothing a path
+// built from it makes the picture wobble like jelly.
 export const homographyToSimilarity = ( h: number[], width: number, height: number ): Affine => {
   const from: Point[] = [];
   const to: Point[] = [];
@@ -176,7 +211,7 @@ export const homographyToSimilarity = ( h: number[], width: number, height: numb
     for ( let gy = 0; gy <= 4; gy += 1 ) {
       const p = { x: ( width * gx ) / 4, y: ( height * gy ) / 4 };
       const q = applyHomography( h, p );
-      if ( q ) {
+      if ( Number.isFinite( q.x ) && Number.isFinite( q.y ) ) {
         from.push( p );
         to.push( q );
       }
@@ -203,25 +238,6 @@ const unwrapAngles = ( path: PathParams[] ): PathParams[] => {
       if ( delta < -Math.PI ) offset += 2 * Math.PI;
     }
     return { ...p, rot: p.rot + offset };
-  } );
-};
-
-// Fills gaps (NaN) by linear interpolation, holding the nearest value at ends.
-export const fillGaps = ( values: number[] ): number[] => {
-  const known = values
-    .map( ( v, i ) => ( Number.isFinite( v )
-      ? i
-      : -1 ) )
-    .filter( i => i >= 0 );
-  if ( known.length === 0 ) return values.map( ( ) => 0 );
-  return values.map( ( v, i ) => {
-    if ( Number.isFinite( v ) ) return v;
-    const next = known.find( k => k > i );
-    const prev = [...known].reverse( ).find( k => k < i );
-    if ( prev === undefined ) return values[next as number];
-    if ( next === undefined ) return values[prev];
-    const t = ( i - prev ) / ( next - prev );
-    return values[prev] + t * ( values[next] - values[prev] );
   } );
 };
 
@@ -258,89 +274,115 @@ const smoothParams = ( path: PathParams[], sigma: number ): PathParams[] => {
   } ) );
 };
 
-// Below this a tracker's box is treated as lost and its position interpolated.
-const MIN_SUBJECT_CONFIDENCE = 0.3;
-// How far "keep subject size" may rescale a frame, either way.
-const MAX_SIZE_CORRECTION = 2;
+const usableStep = ( frame: AnalysisFrame, i: number ) => (
+  i > 0 && frame.ok && frame.m?.length === 9
+);
 
 // Measured path P for every frame, as similarities in centered coordinates.
-export const measuredPath = (
-  analysis: VideoAnalysis,
-  { lockSize = false }: { lockSize?: boolean } = {},
-): Affine[] => {
+export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
   const { width, height, frames } = analysis;
   const center = { x: width / 2, y: height / 2 };
-  if ( !isSubjectMethod( analysis.method ) ) {
-    const path: Affine[] = [];
-    frames.forEach( ( frame, i ) => {
-      // A frame whose registration failed is assumed not to have moved.
-      const step = i > 0 && frame.ok && frame.m?.length === 9
-        ? aboutCenter( homographyToSimilarity( frame.m, width, height ), center )
-        : IDENTITY;
-      path.push( i === 0
-        ? IDENTITY
-        : compose( path[i - 1], step ) );
-    } );
-    return path;
-  }
-
-  const usable = ( frame: AnalysisFrame ) => frame.ok
-    && frame.box?.length === 4
-    && ( frame.conf ?? 1 ) >= MIN_SUBJECT_CONFIDENCE;
-  const column = ( pick: ( box: number[] ) => number ) => fillGaps( frames.map( frame => (
-    usable( frame )
-      ? pick( frame.box as number[] )
-      : NaN
-  ) ) );
-  // Trackers' boxes jitter by a pixel or two every frame; a light smooth
-  // keeps a hard lock from passing that on as shake.
-  const cx = gaussianSmooth( column( box => ( box[0] + box[2] / 2 ) * width ), 1.5 );
-  const cy = gaussianSmooth( column( box => ( box[1] + box[3] / 2 ) * height ), 1.5 );
-  // Box sizes are noisier than positions, so the size is smoothed harder.
-  const size = gaussianSmooth( column( box => Math.log(
-    Math.max( 1e-4, Math.sqrt( box[2] * width * box[3] * height ) ),
-  ) ), 4 );
-  return frames.map( ( _frame, i ) => {
-    const s = lockSize
-      ? Math.min( MAX_SIZE_CORRECTION, Math.max(
-        1 / MAX_SIZE_CORRECTION,
-        Math.exp( size[0] - size[i] ),
-      ) )
-      : 1;
-    // x ↦ s · (x − subject offset): the subject lands on the origin.
-    return compose( scaling( s ), translation( -( cx[i] - center.x ), -( cy[i] - center.y ) ) );
+  const path: Affine[] = [];
+  frames.forEach( ( frame, i ) => {
+    // A frame whose registration failed is assumed not to have moved.
+    const step = usableStep( frame, i )
+      ? aboutCenter( homographyToSimilarity( frame.m as number[], width, height ), center )
+      : IDENTITY;
+    path.push( i === 0
+      ? IDENTITY
+      : compose( path[i - 1], step ) );
   } );
+  return path;
 };
 
-// Strength 0–1 from the slider. 1 locks the shot completely; below that the
-// virtual camera follows a Gaussian-smoothed path, from 0.2 s (keeps the
-// operator's intent, removes only jitter) to 8 s (nearly locked).
+// Whether the analysis measured every frame against the first one, which a
+// complete lock needs to hold the background without drifting.
+export const hasReferencePath = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
+  && analysis.frames.every( frame => frame.r?.length === 9 );
+
+// Strength 0–1 from the slider: the virtual camera follows a Gaussian-smoothed
+// path, from 0.2 s (keeps the operator's intent, removes only jitter) to 8 s
+// (nearly a tripod). Holding the background completely still is a separate
+// setting.
 export const strengthToSigmaSeconds = ( strength: number ): number => (
-  strength >= 1
-    ? Infinity
-    : 0.2 * 40 ** Math.max( 0, strength )
+  0.2 * 40 ** Math.min( 1, Math.max( 0, strength ) )
 );
 
 export const virtualCameraPath = (
   path: Affine[],
-  { strength, fps }: { strength: number; fps: number },
+  { strength, fps, still = false }: { strength: number; fps: number; still?: boolean },
 ): Affine[] => {
+  if ( still ) return path.map( ( ) => IDENTITY );
   const sigmaSeconds = strengthToSigmaSeconds( strength );
-  if ( !Number.isFinite( sigmaSeconds ) ) return path.map( ( ) => IDENTITY );
   const params = unwrapAngles( path.map( affineToParams ) );
   return smoothParams( params, sigmaSeconds * Math.max( 1, fps ) ).map( paramsToAffine );
 };
 
+// How fast the picture moves across the frame at each frame, in pixels per
+// frame, from the registration steps either side of it.
+export const contentVelocity = ( analysis: VideoAnalysis ): Point[] => {
+  const { width, height, frames } = analysis;
+  const center = { x: width / 2, y: height / 2 };
+  // Step i: where the content at the center of frame i came from in frame i−1.
+  const steps = frames.map( ( frame, i ) => {
+    if ( !usableStep( frame, i ) ) return null;
+    const before = applyHomography( frame.m as number[], center );
+    return Number.isFinite( before.x ) && Number.isFinite( before.y )
+      ? { x: center.x - before.x, y: center.y - before.y }
+      : null;
+  } );
+  const raw = frames.map( ( _frame, i ) => {
+    const around = [steps[i], steps[i + 1]].filter( Boolean ) as Point[];
+    if ( around.length === 0 ) return { x: 0, y: 0 };
+    return {
+      x: around.reduce( ( sum, p ) => sum + p.x, 0 ) / around.length,
+      y: around.reduce( ( sum, p ) => sum + p.y, 0 ) / around.length,
+    };
+  } );
+  // Registration is noisy by a pixel or so; a light smooth keeps that from
+  // turning into a wobble of its own.
+  const xs = gaussianSmooth( raw.map( v => v.x ), 1 );
+  const ys = gaussianSmooth( raw.map( v => v.y ), 1 );
+  return raw.map( ( _v, i ) => ( { x: xs[i], y: ys[i] } ) );
+};
+
+// A rolling shutter reads the sensor top to bottom, so a row below the middle
+// is captured later than the middle row, and a moving picture has moved on by
+// then. Sideways motion leans verticals over; up-and-down motion stretches or
+// squashes the frame. `readout` is the time the sensor takes to read the frame
+// top to bottom, as a fraction of the time between frames. The returned
+// affine maps the frame as recorded onto the frame as if every row had been
+// read at the moment the middle row was.
+export const rollingShutterCorrection = (
+  velocity: Point,
+  readout: number,
+  height: number,
+): Affine => {
+  // Frames of delay per pixel down the frame.
+  const k = readout / height;
+  const middle = height / 2;
+  return {
+    a: 1,
+    b: 0,
+    c: -velocity.x * k,
+    d: 1 - velocity.y * k,
+    e: velocity.x * k * middle,
+    f: velocity.y * k * middle,
+  };
+};
+
 export interface StabilizationSettings {
   strength: number;
-  // Rescale every frame so the subject keeps its first-frame size.
-  lockSize?: boolean;
+  // Hold the background exactly where it was in the first frame, including
+  // perspective changes when the analysis measured them.
+  still?: boolean;
+  // Rolling-shutter readout as a fraction of the frame interval; 0 is off.
+  rollingShutter?: number;
   // Requested zoom, ≥ 1.
   zoom: number;
   // Zoom in further, if needed, until no frame shows an empty edge.
   avoidEdges: boolean;
-  // Background methods: the source pixel in the first frame the crop should
-  // center on. Subject methods always center on the subject.
+  // The source pixel in the first frame the crop should center on.
   cropCenter?: Point;
   outputWidth: number;
   outputHeight: number;
@@ -349,7 +391,7 @@ export interface StabilizationSettings {
 
 export interface StabilizationPlan {
   // Per frame: source pixels → output pixels.
-  transforms: Affine[];
+  transforms: Homography[];
   // The zoom actually used (≥ the requested one when avoiding edges).
   zoom: number;
   // Whether some frame still shows an empty edge at that zoom.
@@ -368,19 +410,38 @@ export const planStabilization = (
 ): StabilizationPlan => {
   const { width, height, fps } = analysis;
   const center = { x: width / 2, y: height / 2 };
+  const fromCentered = homographyFromAffine( translation( center.x, center.y ) );
+  const toCentered = homographyFromAffine( translation( -center.x, -center.y ) );
   const maxZoom = settings.maxZoom ?? DEFAULT_MAX_ZOOM;
-  const path = measuredPath( analysis, { lockSize: settings.lockSize } );
-  const camera = virtualCameraPath( path, { strength: settings.strength, fps } );
+  const still = !!settings.still;
+
   // Stable space → source pixels, per frame.
-  const toSource = path.map( ( p, i ) => compose(
-    translation( center.x, center.y ),
-    compose( invert( p ), camera[i] ),
-  ) );
-  const cropCenter = !isSubjectMethod( analysis.method ) && settings.cropCenter && path.length > 0
-    ? applyAffine(
-      compose( invert( camera[0] ), path[0] ),
-      { x: settings.cropCenter.x - center.x, y: settings.cropCenter.y - center.y },
-    )
+  let toSource: Homography[];
+  if ( still && hasReferencePath( analysis ) ) {
+    // The full homography onto the first frame: a flat background, or a
+    // distant one, stays exactly put, perspective and all.
+    toSource = analysis.frames.map( frame => invertHomography(
+      multiplyHomographies( toCentered, frame.r as number[] ),
+    ) );
+  } else {
+    const path = measuredPath( analysis );
+    const camera = virtualCameraPath( path, { strength: settings.strength, fps, still } );
+    toSource = path.map( ( p, i ) => multiplyHomographies(
+      fromCentered,
+      homographyFromAffine( compose( invert( p ), camera[i] ) ),
+    ) );
+  }
+  const readout = settings.rollingShutter ?? 0;
+  if ( readout > 0 ) {
+    const velocity = contentVelocity( analysis );
+    toSource = toSource.map( ( m, i ) => multiplyHomographies(
+      homographyFromAffine( invert( rollingShutterCorrection( velocity[i], readout, height ) ) ),
+      m,
+    ) );
+  }
+
+  const cropCenter = settings.cropCenter && toSource.length > 0
+    ? applyHomography( invertHomography( toSource[0] ), settings.cropCenter )
     : { x: 0, y: 0 };
   const corners = [
     { x: -width / 2, y: -height / 2 },
@@ -388,7 +449,7 @@ export const planStabilization = (
     { x: width / 2, y: height / 2 },
     { x: -width / 2, y: height / 2 },
   ];
-  const cropCorners = ( m: Affine, zoom: number ) => corners.map( u => applyAffine( m, {
+  const cropCorners = ( m: Homography, zoom: number ) => corners.map( u => applyHomography( m, {
     x: cropCenter.x + u.x / zoom,
     y: cropCenter.y + u.y / zoom,
   } ) );
@@ -396,7 +457,8 @@ export const planStabilization = (
     && p.y >= -EDGE_TOLERANCE_PX
     && p.x <= width + EDGE_TOLERANCE_PX
     && p.y <= height + EDGE_TOLERANCE_PX;
-  // A convex window lies inside the frame exactly when its corners do.
+  // A convex window lies inside the frame exactly when its corners do, and a
+  // homography that keeps every corner in front of the camera keeps it convex.
   const covered = ( zoom: number ) => toSource.every(
     m => cropCorners( m, zoom ).every( inside ),
   );
@@ -421,12 +483,12 @@ export const planStabilization = (
   }
 
   const outputScale = settings.outputWidth / width;
-  const toOutput = compose(
+  const toOutput = homographyFromAffine( compose(
     translation( settings.outputWidth / 2, settings.outputHeight / 2 ),
     compose( scaling( outputScale * zoom ), translation( -cropCenter.x, -cropCenter.y ) ),
-  );
+  ) );
   return {
-    transforms: toSource.map( m => compose( toOutput, invert( m ) ) ),
+    transforms: toSource.map( m => multiplyHomographies( toOutput, invertHomography( m ) ) ),
     zoom,
     edgesVisible: !covered( zoom ),
     firstFrameCrop: toSource.length > 0
@@ -443,6 +505,9 @@ export const outputSize = ( width: number, height: number, maxDimension: number 
   return { width: even( width ), height: even( height ) };
 };
 
-export const flattenTransforms = ( transforms: Affine[] ): number[] => transforms.flatMap(
-  m => [m.a, m.b, m.c, m.d, m.e, m.f],
+// Nine numbers per frame, scaled so the last is 1.
+export const flattenTransforms = ( transforms: Homography[] ): number[] => transforms.flatMap(
+  h => ( Math.abs( h[8] ) > 1e-12
+    ? h.map( v => v / h[8] )
+    : h ),
 );

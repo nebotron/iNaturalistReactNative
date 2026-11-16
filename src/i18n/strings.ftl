@@ -134,10 +134,6 @@ Also-removes-tilt-and-zoom-wobble = Also removes tilt and zoom wobble. Best for 
 # Display name for the iconic taxa category for amphibia
 Amphibians = Amphibians
 An-Internet-connection-is-required = An Internet connection is required to load more observations.
-# Button that measures how a video's camera or subject moves, before stabilizing it
-ANALYZE-MOTION = ANALYZE MOTION
-# Button that measures a video's motion again after its settings changed
-ANALYZE-MOTION-AGAIN = ANALYZE MOTION AGAIN
 # Message shown to the user after they have left the AI camera where they may
 # have seen a species suggestion but before they land on the match screen,
 # where they might see a better suggestion.
@@ -225,8 +221,6 @@ Audio-ID-model-error = Model error: { $error }
 August = August
 # Returns user to login screen
 BACK-TO-LOGIN = BACK TO LOGIN
-# Tab: stabilize a video so the background holds still
-BACKGROUND--stabilize-on = BACKGROUND
 # Explanation on observation details for an observation with casual quality grade
 Because-this-observation-is-of-a-pet-garden-plant-or-zoo-animal = Because this observation is of a pet, garden plant, or zoo animal, it is not eligible for research grade.
 # Display name for the iconic taxa category for aves
@@ -652,12 +646,6 @@ Download-for-offline-use = Download for offline use
 DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
-# Instruction under the video frame when stabilizing on a subject
-Drag-on-the-frame-to-draw-a-box-around-the-subject = Drag on the frame to draw a box around the subject.
-# Alert when trying to track a subject before marking it
-Draw-a-box-around-the-subject-first = Draw a box around the subject first.
-# Accessibility hint for the video frame when stabilizing on a subject
-Draws-a-box-around-the-subject = Draws a box around the subject.
 # Maximum total driving time chosen for planning a route through wildlife hotspots
 Drive-time-limit =
     Max drive: { $hours ->
@@ -817,8 +805,6 @@ Filter-by-sex = Filter by Sex
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
 Filters = Filters
-# Video stabilization method that finds the subject without the user marking it
-Find-the-subject-automatically--stabilize-method = Find the subject automatically
 # Display name for the iconic taxa category for actinopterygii
 Fish = Fish
 # Status when an item has been flagged
@@ -837,10 +823,6 @@ FOLLOWING-X-PEOPLE =
         [one] FOLLOWING { $count } PERSON
        *[other] FOLLOWING { $count } PEOPLE
     }
-# Hint for the "Find the subject automatically" video stabilization method
-Follows-the-most-prominent-object = Follows the most prominent object. Draw a box to pick which one.
-# Hint for the "Track the box I draw" video stabilization method
-Follows-what-you-draw-a-box-around = Follows whatever you draw a box around, even as it turns or changes shape.
 For-most-other-projects-observations-will-automatically-be-included = For most other projects, observations that meet project requirements will automatically be included in projects.
 # Label for button that stops photo import from a USB drive folder
 FORGET-USB-FOLDER = FORGET USB FOLDER
@@ -890,6 +872,8 @@ Hide-gear = Hide gear
 Hide-saved-photos = Hide saved photos
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
+# Toggle in the video stabilizer that locks the view to the first frame instead of smoothing the camera's motion
+Hold-the-background-completely-still = Hold the background completely still
 # Label used for a stop added to a route from a wildlife hotspot
 Hotspot = Hotspot
 # Label for the bbox padding setting in the hotspot finder filter
@@ -975,8 +959,6 @@ Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
 Import-complete = Import complete
 Import-finished-with-errors = Import finished with errors
-# Button that imports a video from the device's file browser
-IMPORT-FROM-FILES = IMPORT FROM FILES
 # Button that imports a video from the photo library
 IMPORT-FROM-PHOTOS = IMPORT FROM PHOTOS
 # Accessibility label for the My Observations button that imports photos from a USB drive
@@ -1085,14 +1067,10 @@ June = June
 Just-make-sure-the-organism-is-wild = Just make sure the organism is wild (not a pet, zoo animal, or garden plant)
 # Species game option for a life stage
 Juvenile--life-stage = Juvenile
-# Toggle to keep a video's sound in the stabilized copy
-Keep-audio = Keep audio
 KEEP-EDITING = KEEP EDITING
 Keep-in-mind-that-project-curators = Keep in mind that project curators will still be able to add your observations to their project unless you change your account settings.
 # Settings option to keep imported photos on the USB drive or SD card
 Keep-on-drive = Keep on Drive
-# Toggle that rescales each frame so a tracked subject doesn't grow or shrink
-Keep-the-subject-the-same-size = Keep the subject the same size
 # Display name for the iconic taxa category chromista
 Kelp-and-Diatoms = Kelp & Diatoms
 # Unit after the nearby search radius input
@@ -1252,6 +1230,8 @@ Motion-analyzed-across-x-frames =
         [one] Motion analyzed across 1 frame
        *[other] Motion analyzed across { $count } frames
     }
+# Header above the choice of which kinds of camera motion the video stabilizer removes
+MOTION-TO-REMOVE = MOTION TO REMOVE
 # Accessibility hint for the video frame when stabilizing on the background
 Moves-the-crop-to-the-tapped-point = Moves the crop to the tapped point.
 must-be-captive-cultivated = must be captive / cultivated
@@ -1575,6 +1555,8 @@ Photos-stopped-responding-restart-the-app = Photos stopped responding on this de
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Settings option: the green observation button opens the photo picker
 Pick-photos = Pick photos
+# Explains the video stabilizer's "Hold the background completely still" toggle
+Pins-the-background-where-it-is-at-the-start = Pins the background where it is at the start, perspective and all. Pans and walks will show black edges.
 # Button that adds the hotspots with the most observations that fit within the time limit to the route
 Plan-route = Plan route
 # Result of planning a hotspot route within a time limit
@@ -1592,6 +1574,8 @@ Plants = Plants
 PLAY = PLAY
 # Accessibility label for a button that plays audio
 Play--audio = Play
+# Button that plays the video as it was imported, before stabilizing
+PLAY-ORIGINAL = PLAY ORIGINAL
 Play-species-identification-game = Play species identification game
 Plays-the-clip = Plays the clip.
 Plays-the-sound = Plays the sound.
@@ -1619,8 +1603,8 @@ Potential-disagreement-description = <0>Is the evidence enough to confirm this i
 Potential-disagreement-disagree = <0>No, but this is a member of </0><1></1>
 Potential-disagreement-unsure = <0>I don't know but I am sure this is </0><1></1>
 Press-and-hold-to-view-more-options = Press and hold to view more options
-# Button that renders and plays a quick, low-resolution version of the stabilized video
-PREVIEW = PREVIEW
+# Section header above the automatically updated preview of the stabilized video
+PREVIEW--video-stabilizer = PREVIEW
 # Accessibility label for a button that shows the previous day in location history
 Previous-day = Previous day
 Previous-observation = Previous observation
@@ -1806,6 +1790,14 @@ Reviewed = Reviewed
 Reviewed-observations-only = Reviewed observations only
 # Accessibility label for tagging an Audio ID result as correct
 Right--correct = Right
+# Section header in the video stabilizer for correcting rolling-shutter distortion
+ROLLING-SHUTTER = ROLLING SHUTTER
+# Accessibility label for the slider that sets how much rolling-shutter distortion the video stabilizer corrects
+Rolling-shutter-correction = Rolling-shutter correction
+# Rolling-shutter correction is turned off
+Rolling-shutter-off = Off
+# How long the camera's sensor takes to read a frame, as a share of the time between frames, e.g. "Readout 50%"
+Rolling-shutter-readout-x-percent = Readout { $percent }%
 # Shown when the route without any hotspots already takes longer to drive than the chosen time limit
 Route-is-longer-than-time-limit = The route without hotspots is longer than the time limit
 # Number of stops on a route, shown after the start and end in the collapsed route summary
@@ -2030,14 +2022,12 @@ Specific-identification--project-rule = Specific identification
 # Header for a project rule requiring an observation to be in a place chosen
 # by the project
 Specific-location--project-rule = Specific location
-# Smoothing setting at its maximum: the shot is held completely still
-Stabilization-locked = Locked
 # Smoothing setting: how many seconds of camera motion are averaged
 Stabilization-smooths-over-x-seconds = Smooth over { $seconds } s
 # Accessibility label for the slider that sets how strongly a video is stabilized
 Stabilization-strength = Stabilization strength
-# Header above the choice of stabilizing a video on its background or its subject
-STABILIZE-ON = STABILIZE ON
+# Accessibility label for the looping preview of the stabilized video
+Stabilized-preview = Stabilized preview
 # Label for the standard map type
 Standard--map-type = Standard
 # Button that starts Audio ID listening to the microphone
@@ -2076,8 +2066,8 @@ Stops-the-sound = Stops the sound.
 STORAGE-USAGE = STORAGE USAGE
 # Shown on the storage usage screen when folder sizes could not be read
 Storage-usage-could-not-be-measured = Storage usage could not be measured.
-# Tab: stabilize a video so the subject holds still
-SUBJECT--stabilize-on = SUBJECT
+# Explains the video stabilizer's rolling-shutter slider
+Straightens-lines-that-lean-or-wobble-in-fast-pans = Straightens lines that lean, stretch or wobble when the camera moves fast. Raise it until upright things stay upright in a pan.
 # Sort option: distance from camera to subject, nearest first
 Subject-distance-Nearest = Subject distance (nearest)
 SUBMIT = SUBMIT
@@ -2132,6 +2122,8 @@ The-iNaturalist-Network = The iNaturalist network is a collection of localized w
 # Describes what happens when geoprivacy is set to private
 The-location-will-not-be-visible-to-others = The location will not be visible to others, which might make the observation impossible to identify.
 The-models-that-suggest-species = The models that suggest species based on visual similarity and location are thanks in part to collaborations with Sara Beery, Tom Brooks, Elijah Cole, Christian Lange, Oisin Mac Aodha, Pietro Perona, and Grant Van Horn.
+# Placeholder where the stabilized video's preview will appear
+The-preview-appears-here-once-the-motion-is-analyzed = The preview appears here once the motion is analyzed.
 # Shown when an Audio ID clip was deleted
 This-clip-is-no-longer-saved = This clip is no longer saved.
 This-comment-was-hidden-for-violating-community-guidelines-or-terms = This comment was hidden for violating Community Guidelines or Terms of Use.
@@ -2181,8 +2173,6 @@ TOTAL-STORAGE-USED = TOTAL STORAGE USED
 Track--evidence = Track
 # Switch label for enabling continuous background location tracking
 Track-location-in-the-background = Track location in the background
-# Video stabilization method that follows a box the user draws
-Track-the-box-I-draw--stabilize-method = Track the box I draw
 # Legend label for the marker showing a location from tracked history
 Tracked-location = Tracked location
 # Title of the Android foreground service notification while tracking location
@@ -2475,6 +2465,8 @@ Unknown-gear = Unknown gear
 Unknown-organism = Unknown organism
 Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
+# Progress while the stabilized video's preview is rendered again after a settings change
+Updating-preview-x-percent = Updating preview… { $percent }%
 Upload-Complete = Upload Complete
 Upload-in-progress = Upload in progress
 UPLOAD-NOW = UPLOAD NOW
@@ -2559,7 +2551,7 @@ VIDEO-STABILIZER = VIDEO STABILIZER
 # Alert title when the video stabilizer hits an error
 Video-stabilizer-failed = Couldn’t stabilize the video
 # Introduction on the video stabilizer screen
-Video-stabilizer-intro = Import a video, then hold either the background or a subject steady, and crop in closer.
+Video-stabilizer-intro = Import a video from Photos to hold its background steady and crop in closer. The stabilized copy keeps the original’s sound, date, location, and camera details.
 # Shown on platforms the video stabilizer doesn't support
 Video-stabilizer-is-only-available-on-iOS = The video stabilizer is only available on iOS.
 # Storage category: videos saved in the app
