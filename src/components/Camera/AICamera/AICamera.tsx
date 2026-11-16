@@ -4,11 +4,12 @@ import FadeInOutView from "components/Camera/FadeInOutView";
 import { useCameraDevices } from "components/Camera/helpers/visionCameraWrapper";
 import useRotation from "components/Camera/hooks/useRotation";
 import useZoom from "components/Camera/hooks/useZoom";
+import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import {
   ActivityIndicator, Body1, INatIcon, TaxonResult,
 } from "components/SharedComponents";
 import Toast from "components/SharedComponents/Toast";
-import { Pressable, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
 import type { RefObject } from "react";
 import React, {
@@ -23,13 +24,11 @@ import type {
 } from "react-native-vision-camera";
 import { VolumeManager } from "react-native-volume-manager";
 import ObservationPhoto from "realmModels/ObservationPhoto";
-import { BREAKPOINTS } from "sharedHelpers/breakpoint";
 import convertScoreToConfidence from "sharedHelpers/convertScores";
 import { completeSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
 import { logFirebaseEvent } from "sharedHelpers/tracking";
 import {
   useDebugMode,
-  useDeviceOrientation,
   useLayoutPrefs,
   useTranslation,
 } from "sharedHooks";
@@ -47,7 +46,6 @@ import {
 } from "../helpers";
 import DiscardChangesSheet from "../StandardCamera/DiscardChangesSheet";
 import useBackPress from "../StandardCamera/hooks/useBackPress";
-import PhotoPreview from "../StandardCamera/PhotoPreview";
 import AICameraButtons from "./AICameraButtons";
 import FrameProcessorCamera from "./FrameProcessorCamera";
 import usePredictions from "./hooks/usePredictions";
@@ -153,7 +151,6 @@ const AICamera = ( {
   } = useZoom( device );
   const {
     rotatableAnimatedStyle,
-    rotation,
   } = useRotation( );
   const {
     handleTaxaDetected,
@@ -162,8 +159,8 @@ const AICamera = ( {
     setResult,
   } = usePredictions( );
   const [initialVolume, setInitialVolume] = useState<number | null>( null );
-  const [deletePhotoMode, setDeletePhotoMode] = useState( false );
   const [showMaxPhotosAlert, setShowMaxPhotosAlert] = useState( false );
+  const [showMediaViewer, setShowMediaViewer] = useState( false );
   // The last confident prediction the shutter was pressed on, offered as the
   // AI suggestion once the user is done taking photos
   const visionResultRef = useRef<typeof result>( null );
@@ -173,7 +170,6 @@ const AICamera = ( {
   const prepareCamera = useStore( state => state.prepareCamera );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
   const { trackImageDeleted } = useInputImageTracking( );
-  const { screenWidth } = useDeviceOrientation( );
 
   const totalObsPhotoUris = cameraUris.length + photoLibraryUris.length;
   const disallowAddingPhotos = totalObsPhotoUris >= MAX_PHOTOS_ALLOWED;
@@ -324,9 +320,6 @@ const AICamera = ( {
     handleBackButtonPress( );
   };
 
-  const isLargeScreen = screenWidth > BREAKPOINTS.md;
-  const showPhotoPreview = cameraUris.length > 0 || takingPhoto;
-
   return (
     <>
       {device && (
@@ -424,33 +417,6 @@ const AICamera = ( {
           <ActivityIndicator size={50} color={colors.white} />
         </View>
       )}
-      {deletePhotoMode && (
-        // Tapping anywhere outside the photos leaves delete mode
-        <Pressable
-          accessibilityRole="button"
-          className="absolute w-full h-full"
-          onPress={( ) => setDeletePhotoMode( false )}
-        />
-      )}
-      {showPhotoPreview && (
-        <View
-          className="absolute left-[72px] right-[72px]"
-          style={{ bottom: insets.bottom + 32 + 74 + 16 }}
-          pointerEvents="box-none"
-        >
-          <PhotoPreview
-            deletePhotoMode={deletePhotoMode}
-            rotation={rotation}
-            setDeletePhotoMode={setDeletePhotoMode}
-            takingPhoto={takingPhoto}
-            isLandscapeMode={isLandscapeMode}
-            isLargeScreen={isLargeScreen}
-            isTablet={isTablet}
-            photoUris={cameraUris}
-            onDelete={deletePhotoByUri}
-          />
-        </View>
-      )}
       <AICameraButtons
         handleZoomButtonPress={handleZoomButtonPress}
         flipCamera={onFlipCamera}
@@ -460,12 +426,9 @@ const AICamera = ( {
         handleCheckmarkPress={handleConfirmPhotos}
         confirmDisabled={takingPhoto || confirmPhotosInProgress}
         rotatableAnimatedStyle={rotatableAnimatedStyle}
-        showPrediction={showPrediction}
         showZoomButton={showZoomButton}
         takePhoto={handleTakePhoto}
-        disallowAddingPhotos={disallowAddingPhotos}
         takePhotoOptions={takePhotoOptions}
-        takingPhoto={takingPhoto}
         toggleFlash={toggleFlash}
         zoomTextValue={zoomTextValue}
         useLocation={useLocation}
@@ -473,6 +436,15 @@ const AICamera = ( {
         macroMode={macroMode}
         toggleMacro={toggleMacro}
         latestPhotoUri={cameraUris[cameraUris.length - 1]}
+        onPressLatestPhoto={( ) => setShowMediaViewer( true )}
+      />
+      <MediaViewerModal
+        editable
+        showModal={showMediaViewer && cameraUris.length > 0}
+        onClose={( ) => setShowMediaViewer( false )}
+        onDeletePhoto={deletePhotoByUri}
+        uri={cameraUris[cameraUris.length - 1]}
+        photos={cameraUris.slice( ).reverse( ).map( uri => ( { url: uri } ) )}
       />
       <Snackbar visible={showMaxPhotosAlert} onDismiss={() => setShowMaxPhotosAlert( false )}>
         {t( "You-can-only-add-20-photos-per-observation" )}

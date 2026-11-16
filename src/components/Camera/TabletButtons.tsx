@@ -46,6 +46,7 @@ interface Props {
   hasFlash?: boolean;
   hasLatestPhoto?: boolean;
   latestPhotoUri?: string;
+  onPressLatestPhoto?: ( ) => void;
   photosTaken?: boolean;
   rotatableAnimatedStyle: AnimatedStyle;
   showPrediction?: boolean;
@@ -83,6 +84,7 @@ const TabletButtons = ( {
   hasFlash,
   hasLatestPhoto,
   latestPhotoUri,
+  onPressLatestPhoto,
   photosTaken,
   rotatableAnimatedStyle,
   showPrediction,
@@ -166,6 +168,7 @@ const TabletButtons = ( {
       { hasLatestPhoto && (
         <View className="absolute bottom-6">
           <LatestPhoto
+            onPress={onPressLatestPhoto}
             photoUri={latestPhotoUri}
             rotatableAnimatedStyle={rotatableAnimatedStyle}
           />
