@@ -6,7 +6,7 @@ import {
   Heading4,
   SwitchRow,
 } from "components/SharedComponents";
-import { Pressable, ScrollView, View } from "components/styledComponents";
+import { ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Share, useWindowDimensions } from "react-native";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
@@ -15,7 +15,6 @@ import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevi
 import type {
   Point,
   StabilizationSettings,
-  StabilizeMethod,
   VideoAnalysis,
 } from "sharedHelpers/videoStabilization";
 import {
@@ -52,8 +51,6 @@ const FRAME_MAX_DIMENSION = 1080;
 const PREVIEW_MAX_DIMENSION = 640;
 const EXPORT_MAX_DIMENSION = 1920;
 const MAX_ZOOM = 6;
-
-const METHODS: StabilizeMethod[] = ["similarity", "translation"];
 
 // The job the screen last started. Kept outside the component so that a
 // remount (a tab switch) neither repeats a job that's still running nor
@@ -102,7 +99,7 @@ const VideoStabilizer = ( ) => {
   const { t } = useTranslation( );
   const { width: windowWidth, height: windowHeight } = useWindowDimensions( );
   const {
-    videoPath, info, frame, start, method, cropCenter, strength, still, rollingShutter,
+    videoPath, info, frame, start, cropCenter, strength, still, rollingShutter,
     zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, exportUri,
     exportKey, set, setStart,
   } = useVideoStabilizer( );
@@ -137,7 +134,7 @@ const VideoStabilizer = ( ) => {
   // What each result has to have been made with to be current. A result made
   // with anything else is stale, and the effect below reruns it.
   const wantedAnalysisKey = videoPath
-    ? JSON.stringify( [videoPath, start, method, still] )
+    ? JSON.stringify( [videoPath, start, still] )
     : null;
   const currentAnalysis = analysis && analysisKey === wantedAnalysisKey
     ? analysis
@@ -190,19 +187,17 @@ const VideoStabilizer = ( ) => {
 
   const runAnalysis = ( key: string ) => {
     const {
-      videoPath: path, start: from, method: using, still: reference,
+      videoPath: path, start: from, still: reference,
     } = useVideoStabilizer.getState( );
     if ( !path ) return;
     runJob(
       key,
       "analyzing",
-      job => analyzeVideo( path, {
-        method: using, start: from, reference, job,
-      } ),
+      job => analyzeVideo( path, { start: from, reference, job } ),
       result => {
         const lost = result.frames.filter( f => !f.ok ).length;
         logger.info(
-          `analyzed ${result.frames.length} frames with ${using}, ${lost} unusable`
+          `analyzed ${result.frames.length} frames, ${lost} unusable`
           + `${reference
             ? `, ${result.refinedFrames} locked to the first frame`
             : ""}`,
@@ -303,7 +298,6 @@ const VideoStabilizer = ( ) => {
         videoPath: path,
         info: probed,
         frame: firstFrame,
-        method: kept.method,
         strength: kept.strength,
         still: kept.still,
         rollingShutter: kept.rollingShutter,
@@ -429,16 +423,6 @@ const VideoStabilizer = ( ) => {
     ? t( "Rolling-shutter-readout-x-percent", { percent: percent( shownReadout ) } )
     : t( "Rolling-shutter-off" );
 
-  const methodLabels: Record<StabilizeMethod, { label: string; hint: string }> = {
-    similarity: {
-      label: t( "Shift-rotation-and-zoom--stabilize-method" ),
-      hint: t( "Also-removes-tilt-and-zoom-wobble" ),
-    },
-    translation: {
-      label: t( "Shift-only--stabilize-method" ),
-      hint: t( "Fastest-removes-up-down-and-sideways-shake" ),
-    },
-  };
   const disabled = exporting;
   const source = currentAnalysis && {
     width: Math.round( currentAnalysis.width / ( plan?.zoom ?? zoom ) ),
@@ -476,25 +460,6 @@ const VideoStabilizer = ( ) => {
           onChange={setStartDraft}
           onComplete={commitStart}
         />
-      </View>
-
-      <Heading4 className="mt-6 mb-2">{t( "MOTION-TO-REMOVE" )}</Heading4>
-      <View accessibilityRole="radiogroup">
-        {METHODS.map( option => (
-          <Pressable
-            key={option}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: method === option, disabled }}
-            disabled={disabled}
-            onPress={( ) => set( { method: option } )}
-            className={`p-3 mb-2 rounded-lg border-2 ${method === option
-              ? "border-inatGreen"
-              : "border-lightGray"}`}
-          >
-            <Body2>{methodLabels[option].label}</Body2>
-            <Body3 className="mt-1">{methodLabels[option].hint}</Body3>
-          </Pressable>
-        ) )}
       </View>
 
       <Heading4 className="mt-6 mb-2">{t( "SMOOTHING" )}</Heading4>

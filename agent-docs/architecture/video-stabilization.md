@@ -1,14 +1,15 @@
 # Video stabilization
 
 Menu → **Video Stabilizer** (iOS only). Import a video from Photos, hold its
-background steady (smoothed, or completely still), optionally correct rolling
+background steady (smoothed, or completely still) by correcting shift only
+(rotation and zoom are left as shot), optionally correct rolling
 shutter, and crop in closer. The copy keeps the original's sound and metadata.
 
 ## How it is split
 
 | Layer | File | Job |
 | --- | --- | --- |
-| Screen | `src/components/VideoStabilizer/` | Import, start time, method, still lock, smoothing, rolling shutter, crop, inline preview, export/save |
+| Screen | `src/components/VideoStabilizer/` | Import, start time, still lock, smoothing, rolling shutter, crop, inline preview, export/save |
 | Session state | `src/stores/videoStabilizer.ts` | Zustand, not persisted, so a tab switch doesn't drop a finished analysis |
 | Math | `src/sharedHelpers/videoStabilization.ts` | Camera path, smoothing, rolling shutter, crop/zoom planning; unit tested |
 | Bridge | `src/sharedHelpers/videoStabilizerNative.ts` | Typed wrapper, progress events, the inline player view |
@@ -19,7 +20,7 @@ The native module runs two passes over the same upright, constant-frame-rate
 frame *i* of the render.
 
 1. **Analyze**: the native pass measures per-frame motion. It's slow, so it
-   runs once per video, method, start time and still lock.
+   runs once per video, start time and still lock.
 2. **Plan**: JS turns the measurements into one homography per frame. This is
    instant, so smoothing, rolling shutter, zoom, crop position and "hide
    edges" can change without re-reading the video.
@@ -45,19 +46,19 @@ finished, so the player never loses the file it's playing.
 ### The model
 
 For each frame the measured path `P_i` maps the frame into a stable space,
-the camera motion accumulated back to the first frame. The virtual camera
+the camera's shift accumulated back to the first frame. Registration is
+translational only, so rotation and zoom are never corrected. The virtual camera
 `S_i` is `P` smoothed with a Gaussian (σ 0.2 s–8 s), or the identity when the
 background is held completely still. A pixel is drawn at
 `S_i⁻¹ · P_i · (R_i · x − center)`, then cropped by the zoom and crop center.
 "Hide black edges" (off by default) binary-searches the smallest zoom at which
 every frame's crop window stays inside its source frame.
 
-**Completely still.** Chaining frame-to-frame registrations drifts, and a
-similarity can't hold a background seen in changing perspective. With the
-lock on, the analysis also warps each frame onto the first by the chained
+**Completely still.** Chaining frame-to-frame registrations drifts. With the
+lock on, the analysis also shifts each frame onto the first by the chained
 estimate and registers what's left against the first frame itself, so `P_i`
-is a drift-free full homography (`r` per frame). Pans and walks show black
-edges by design.
+is a drift-free shift (`r` per frame). Pans and walks show black edges by
+design.
 
 **Rolling shutter** (`R_i`). Rows are read top to bottom over a readout time
 `r` (a fraction of the frame interval, the slider). With the picture moving
@@ -86,8 +87,8 @@ now a constant.
 
 | Approach | Pros | Cons |
 | --- | --- | --- |
-| **Vision translational registration** *(implemented: "Shift only")* | Built in, fast at 480 px, very robust on low-texture scenes such as water or sky | Can't remove roll or zoom wobble. A large moving subject drags the estimate |
-| **Vision homographic registration → similarity** *(implemented: "Shift, rotation and zoom", default)* | Removes roll and breathing as well as shift. Perspective is discarded to avoid jello | Slightly slower. Same subject bias. Rolling-shutter skew is corrected separately |
+| **Vision translational registration** *(implemented, the only method)* | Built in, fast at 480 px, very robust on low-texture scenes such as water or sky | Can't remove roll or zoom wobble. A large moving subject drags the estimate |
+| Vision homographic registration → similarity *(removed)* | Removes roll and breathing as well as shift | Rotation and zoom correction was taken out; only shift is corrected |
 | Feature tracking + RANSAC (OpenCV `videostab`-style, or Vision optical flow with outlier rejection) | Rejects a moving subject as outliers, so it handles an animal walking through the frame best. Can mask out the subject box | Needs OpenCV (~10 MB+) or a hand-written robust estimator. Most code to maintain |
 | Dense optical flow (`VNGenerateOpticalFlowRequest`) with a median over the background | Robust and separates subject from background naturally | Slow at useful resolutions. More conventions to verify |
 | Gyroscope metadata | Exact, and immune to subject motion | Imported iPhone videos don't carry it (GoPro and some action cams do) |
@@ -105,6 +106,7 @@ now a constant.
 ## Known limitations
 
 - iOS only. Android has no native module, and the menu item is hidden there.
+- Only shift is corrected; camera roll and zoom wobble stay in the output.
 - HDR (HLG/Dolby Vision) clips are read as 8-bit BGRA and written SDR.
 - Frame rate is capped at 60 fps, so slow-motion clips lose frames.
 - Rolling-shutter correction models shear and stretch from shift only, with a

@@ -3,7 +3,7 @@ import type { ViewProps } from "react-native";
 import {
   NativeEventEmitter, NativeModules, Platform, requireNativeComponent,
 } from "react-native";
-import type { StabilizeMethod, VideoAnalysis } from "sharedHelpers/videoStabilization";
+import type { VideoAnalysis } from "sharedHelpers/videoStabilization";
 
 // JS side of the VideoStabilizer native module (iOS only). The native side
 // reads and writes video; the camera-path math is in videoStabilization.ts.
@@ -25,7 +25,6 @@ export interface VideoFrame {
 // Starting an analysis or a render cancels the one before. `job` comes back
 // on progress events, so a superseded job's progress can be told apart.
 export interface AnalyzeOptions {
-  method: StabilizeMethod;
   start: number;
   // Also measure every frame against the first, for a complete lock.
   reference: boolean;

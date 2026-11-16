@@ -1,4 +1,4 @@
-import type { StabilizeMethod, VideoAnalysis } from "sharedHelpers/videoStabilization";
+import type { VideoAnalysis } from "sharedHelpers/videoStabilization";
 import type { VideoFrame, VideoInfo } from "sharedHelpers/videoStabilizerNative";
 import { create } from "zustand";
 
@@ -23,7 +23,6 @@ export interface VideoStabilizerState {
   // Where the output starts, in seconds; the crop is drawn on the frame at
   // this time.
   start: number;
-  method: StabilizeMethod;
   // Crop center, normalized, on the start frame.
   cropCenter: { x: number; y: number } | null;
   strength: number;
@@ -53,7 +52,6 @@ const initialSession = {
   info: null,
   frame: null,
   start: 0,
-  method: "similarity" as StabilizeMethod,
   cropCenter: null,
   strength: 0.5,
   still: false,

@@ -9,12 +9,9 @@ import {
   applyHomography,
   compose,
   flattenTransforms,
-  homographyToSimilarity,
   invert,
   invertHomography,
-  multiplyHomographies,
   outputSize,
-  paramsToAffine,
   planStabilization,
   strengthToSigmaSeconds,
 } from "sharedHelpers/videoStabilization";
@@ -28,7 +25,6 @@ const spread = ( values: number[] ) => Math.max( ...values ) - Math.min( ...valu
 // so a world point at W appears at W − offset in that frame. Registration
 // reports the step from each frame onto the previous one.
 const shakyBackground = ( offsets: { x: number; y: number }[] ): VideoAnalysis => ( {
-  method: "translation",
   width: WIDTH,
   height: HEIGHT,
   fps: 30,
@@ -57,24 +53,13 @@ const baseSettings = {
 };
 
 describe( "affine helpers", ( ) => {
-  it( "inverts a similarity", ( ) => {
-    const m = paramsToAffine( {
-      tx: 12, ty: -40, rot: 0.3, logScale: 0.2,
-    } );
+  it( "inverts an affine", ( ) => {
+    const m = {
+      a: 1.1, b: 0.2, c: -0.3, d: 0.9, e: 12, f: -40,
+    };
     const p = applyAffine( compose( invert( m ), m ), { x: 123, y: 45 } );
     expect( p.x ).toBeCloseTo( 123 );
     expect( p.y ).toBeCloseTo( 45 );
-  } );
-
-  it( "reads a similarity out of a homography", ( ) => {
-    const m = paramsToAffine( {
-      tx: 5, ty: 7, rot: 0.05, logScale: 0.01,
-    } );
-    const fitted = homographyToSimilarity( [m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1], WIDTH, HEIGHT );
-    expect( fitted.a ).toBeCloseTo( m.a );
-    expect( fitted.b ).toBeCloseTo( m.b );
-    expect( fitted.e ).toBeCloseTo( m.e );
-    expect( fitted.f ).toBeCloseTo( m.f );
   } );
 } );
 
@@ -133,56 +118,59 @@ describe( "background stabilization", ( ) => {
     expect( spread( xs ) ).toBeCloseTo( WIDTH / 3 );
   } );
 
-  it( "keeps a steadily rolling shot consistent past 180°", ( ) => {
-    const n = 40;
-    const step = paramsToAffine( {
-      tx: 0, ty: 0, rot: 0.1, logScale: 0,
-    } );
+  it( "leaves rotation and zoom alone", ( ) => {
+    // Every step rotates and zooms about the frame center without shifting it.
+    const cos = 1.01 * Math.cos( 0.05 );
+    const sin = 1.01 * Math.sin( 0.05 );
+    const cx = WIDTH / 2;
+    const cy = HEIGHT / 2;
+    const step = [
+      cos, -sin, cx - cos * cx + sin * cy,
+      sin, cos, cy - sin * cx - cos * cy,
+      0, 0, 1,
+    ];
     const analysis: VideoAnalysis = {
-      method: "similarity",
       width: WIDTH,
       height: HEIGHT,
       fps: 30,
-      frames: Array.from( { length: n }, ( _v, i ) => ( {
+      frames: Array.from( { length: 20 }, ( _v, i ) => ( {
         t: i / 30,
         ok: true,
         m: i === 0
           ? [1, 0, 0, 0, 1, 0, 0, 0, 1]
-          : [step.a, step.c, step.e, step.b, step.d, step.f, 0, 0, 1],
+          : step,
       } ) ),
     };
-    const plan = planStabilization( analysis, { ...baseSettings, still: false } );
-    plan.transforms.forEach( m => {
-      expect( Number.isFinite( m[0] ) ).toBe( true );
-      expect( Math.hypot( m[0], m[3] ) ).toBeCloseTo( 1 );
+    [false, true].forEach( still => {
+      const plan = planStabilization( analysis, { ...baseSettings, still } );
+      plan.transforms.forEach( m => {
+        expect( m ).toEqual( plan.transforms[0] );
+      } );
     } );
   } );
 } );
 
 describe( "holding the background completely still", ( ) => {
-  // The camera turns, so a flat background is seen in changing perspective.
+  // The chained frame-to-frame steps drift; the shifts measured against the
+  // first frame don't.
   const n = 30;
+  const offset = ( i: number ) => ( { x: 3 * Math.sin( i ) * i, y: 2 * Math.cos( i ) - 2 } );
   const toFirst = ( i: number ): Homography => [
-    1 + 0.002 * i, 0.001 * i, 3 * Math.sin( i ),
-    -0.001 * i, 1, 2 * Math.cos( i ) - 2,
-    1e-6 * i, -2e-6 * i, 1,
+    1, 0, offset( i ).x, 0, 1, offset( i ).y, 0, 0, 1,
   ];
   const analysis: VideoAnalysis = {
-    method: "similarity",
     width: WIDTH,
     height: HEIGHT,
     fps: 30,
     frames: Array.from( { length: n }, ( _v, i ) => ( {
       t: i / 30,
       ok: true,
-      m: i === 0
-        ? [1, 0, 0, 0, 1, 0, 0, 0, 1]
-        : multiplyHomographies( invertHomography( toFirst( i - 1 ) ), toFirst( i ) ),
+      m: [1, 0, 0.5, 0, 1, -0.5, 0, 0, 1],
       r: toFirst( i ),
     } ) ),
   };
 
-  it( "pins every background point, perspective included", ( ) => {
+  it( "pins every background point to the first frame", ( ) => {
     const plan = planStabilization( analysis, { ...baseSettings, zoom: 1.5 } );
     [{ x: 100, y: 80 }, { x: 900, y: 520 }, { x: 500, y: 300 }].forEach( point => {
       const out = plan.transforms.map( ( m, i ) => applyHomography(
@@ -191,18 +179,6 @@ describe( "holding the background completely still", ( ) => {
       ) );
       expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
       expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
-    } );
-  } );
-
-  it( "falls back to the chained path when there is no reference", ( ) => {
-    const chained = {
-      ...analysis,
-      frames: analysis.frames.map( ( { r: _r, ...frame } ) => frame ),
-    };
-    const plan = planStabilization( chained, baseSettings );
-    plan.transforms.forEach( m => {
-      expect( m[6] ).toBeCloseTo( 0 );
-      expect( m[7] ).toBeCloseTo( 0 );
     } );
   } );
 } );

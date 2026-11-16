@@ -39,7 +39,6 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
 const INPUT = "/caches/VideoStabilizer/input.mov";
 
 const analysis = {
-  method: "similarity",
   width: 1920,
   height: 1080,
   fps: 30,
@@ -86,7 +85,7 @@ describe( "VideoStabilizer", ( ) => {
     expect( mockPickVideo ).toHaveBeenCalledWith( );
     expect( mockAnalyze ).toHaveBeenCalledWith(
       INPUT,
-      expect.objectContaining( { method: "similarity", start: 0, reference: false } ),
+      expect.objectContaining( { start: 0, reference: false } ),
     );
     await waitFor( ( ) => expect( mockRender ).toHaveBeenCalledWith(
       INPUT,

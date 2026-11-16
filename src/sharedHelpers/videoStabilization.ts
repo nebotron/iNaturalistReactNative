@@ -21,10 +21,8 @@
 // A pixel x of frame i is drawn at  S_i⁻¹ · P_i · (R_i · x − center)  in
 // stable space: straightened, placed where the camera was pointing, and viewed
 // through the virtual camera. The crop window (center k, zoom z) maps that to
-// the output. For a complete lock measured against the first frame, P_i is
-// that full homography (perspective included) instead of a similarity.
-
-export type StabilizeMethod = "translation" | "similarity";
+// the output. Only shifts are measured and corrected: rotation and zoom are
+// left as they were shot.
 
 export interface Affine {
   a: number;
@@ -43,14 +41,6 @@ export interface Point {
   y: number;
 }
 
-// A similarity transform as the quantities that get smoothed.
-export interface PathParams {
-  tx: number;
-  ty: number;
-  rot: number;
-  logScale: number;
-}
-
 export interface AnalysisFrame {
   // Presentation time in seconds.
   t: number;
@@ -59,14 +49,13 @@ export interface AnalysisFrame {
   // Homography mapping this frame's pixels onto the previous frame's
   // (identity for the first frame).
   m?: number[];
-  // Analyses for a full lock: homography mapping this frame's pixels onto the
+  // Analyses for a full lock: transform mapping this frame's pixels onto the
   // first frame's, measured against the first frame itself so that errors
   // don't add up over the clip.
   r?: number[];
 }
 
 export interface VideoAnalysis {
-  method: StabilizeMethod;
   width: number;
   height: number;
   fps: number;
@@ -149,98 +138,6 @@ export const applyHomography = ( h: Homography, p: Point ): Point => {
   };
 };
 
-export const paramsToAffine = ( p: PathParams ): Affine => {
-  const s = Math.exp( p.logScale );
-  const cos = s * Math.cos( p.rot );
-  const sin = s * Math.sin( p.rot );
-  return {
-    a: cos, b: sin, c: -sin, d: cos, e: p.tx, f: p.ty,
-  };
-};
-
-// Reads a similarity's parameters; any shear in `m` is ignored.
-export const affineToParams = ( m: Affine ): PathParams => ( {
-  tx: m.e,
-  ty: m.f,
-  rot: Math.atan2( m.b - m.c, m.a + m.d ),
-  logScale: Math.log( Math.max( 1e-6, Math.hypot( ( m.a + m.d ) / 2, ( m.b - m.c ) / 2 ) ) ),
-} );
-
-// Least-squares similarity (rotation, uniform scale, shift) between point sets.
-export const fitSimilarity = ( from: Point[], to: Point[] ): Affine => {
-  const n = from.length;
-  if ( n === 0 ) return IDENTITY;
-  const mean = ( points: Point[] ) => points.reduce(
-    ( s, p ) => ( { x: s.x + p.x / n, y: s.y + p.y / n } ),
-    { x: 0, y: 0 },
-  );
-  const fromMean = mean( from );
-  const toMean = mean( to );
-  let dot = 0;
-  let cross = 0;
-  let norm = 0;
-  from.forEach( ( p, i ) => {
-    const px = p.x - fromMean.x;
-    const py = p.y - fromMean.y;
-    const qx = to[i].x - toMean.x;
-    const qy = to[i].y - toMean.y;
-    dot += px * qx + py * qy;
-    cross += px * qy - py * qx;
-    norm += px * px + py * py;
-  } );
-  if ( norm < 1e-12 ) return translation( toMean.x - fromMean.x, toMean.y - fromMean.y );
-  const a = dot / norm;
-  const b = cross / norm;
-  return {
-    a,
-    b,
-    c: -b,
-    d: a,
-    e: toMean.x - ( a * fromMean.x - b * fromMean.y ),
-    f: toMean.y - ( b * fromMean.x + a * fromMean.y ),
-  };
-};
-
-// The similarity closest to a homography over a frame: a perspective term
-// from frame-to-frame registration is mostly noise, and smoothing a path
-// built from it makes the picture wobble like jelly.
-export const homographyToSimilarity = ( h: number[], width: number, height: number ): Affine => {
-  const from: Point[] = [];
-  const to: Point[] = [];
-  for ( let gx = 0; gx <= 4; gx += 1 ) {
-    for ( let gy = 0; gy <= 4; gy += 1 ) {
-      const p = { x: ( width * gx ) / 4, y: ( height * gy ) / 4 };
-      const q = applyHomography( h, p );
-      if ( Number.isFinite( q.x ) && Number.isFinite( q.y ) ) {
-        from.push( p );
-        to.push( q );
-      }
-    }
-  }
-  return fitSimilarity( from, to );
-};
-
-// Re-expresses a transform about `center` instead of the origin, so rotation
-// and zoom in the path turn the picture about its middle.
-const aboutCenter = ( m: Affine, center: Point ): Affine => compose(
-  translation( -center.x, -center.y ),
-  compose( m, translation( center.x, center.y ) ),
-);
-
-const unwrapAngles = ( path: PathParams[] ): PathParams[] => {
-  let offset = 0;
-  return path.map( ( p, i ) => {
-    // atan2 jumps by 2π when the camera rolls past ±180°; undo the jump so
-    // smoothing doesn't average across it.
-    if ( i > 0 ) {
-      const delta = p.rot - path[i - 1].rot;
-      if ( delta > Math.PI ) offset -= 2 * Math.PI;
-      if ( delta < -Math.PI ) offset += 2 * Math.PI;
-    }
-    return { ...p, rot: p.rot + offset };
-  } );
-};
-
 // Gaussian smoothing with the ends held, sigma in samples.
 export const gaussianSmooth = ( values: number[], sigma: number ): number[] => {
   if ( !( sigma > 0 ) || values.length < 2 ) return [...values];
@@ -263,22 +160,20 @@ export const gaussianSmooth = ( values: number[], sigma: number ): number[] => {
   } );
 };
 
-const smoothParams = ( path: PathParams[], sigma: number ): PathParams[] => {
-  const pick = ( key: keyof PathParams ) => gaussianSmooth( path.map( p => p[key] ), sigma );
-  const tx = pick( "tx" );
-  const ty = pick( "ty" );
-  const rot = pick( "rot" );
-  const logScale = pick( "logScale" );
-  return path.map( ( _p, i ) => ( {
-    tx: tx[i], ty: ty[i], rot: rot[i], logScale: logScale[i],
-  } ) );
-};
-
 const usableStep = ( frame: AnalysisFrame, i: number ) => (
   i > 0 && frame.ok && frame.m?.length === 9
 );
 
-// Measured path P for every frame, as similarities in centered coordinates.
+// The shift a registration step makes at the frame's center. Any rotation or
+// zoom in the step is ignored.
+const shiftOf = ( m: number[], center: Point ): Affine => {
+  const moved = applyHomography( m, center );
+  return Number.isFinite( moved.x ) && Number.isFinite( moved.y )
+    ? translation( moved.x - center.x, moved.y - center.y )
+    : IDENTITY;
+};
+
+// Measured path P for every frame, as shifts.
 export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
   const { width, height, frames } = analysis;
   const center = { x: width / 2, y: height / 2 };
@@ -286,7 +181,7 @@ export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
   frames.forEach( ( frame, i ) => {
     // A frame whose registration failed is assumed not to have moved.
     const step = usableStep( frame, i )
-      ? aboutCenter( homographyToSimilarity( frame.m as number[], width, height ), center )
+      ? shiftOf( frame.m as number[], center )
       : IDENTITY;
     path.push( i === 0
       ? IDENTITY
@@ -313,9 +208,10 @@ export const virtualCameraPath = (
   { strength, fps, still = false }: { strength: number; fps: number; still?: boolean },
 ): Affine[] => {
   if ( still ) return path.map( ( ) => IDENTITY );
-  const sigmaSeconds = strengthToSigmaSeconds( strength );
-  const params = unwrapAngles( path.map( affineToParams ) );
-  return smoothParams( params, sigmaSeconds * Math.max( 1, fps ) ).map( paramsToAffine );
+  const sigma = strengthToSigmaSeconds( strength ) * Math.max( 1, fps );
+  const xs = gaussianSmooth( path.map( p => p.e ), sigma );
+  const ys = gaussianSmooth( path.map( p => p.f ), sigma );
+  return path.map( ( _p, i ) => translation( xs[i], ys[i] ) );
 };
 
 // How fast the picture moves across the frame at each frame, in pixels per
@@ -373,8 +269,7 @@ export const rollingShutterCorrection = (
 
 export interface StabilizationSettings {
   strength: number;
-  // Hold the background exactly where it was in the first frame, including
-  // perspective changes when the analysis measured them.
+  // Hold the background exactly where it was in the first frame.
   still?: boolean;
   // Rolling-shutter readout as a fraction of the frame interval; 0 is off.
   rollingShutter?: number;
@@ -418,10 +313,12 @@ export const planStabilization = (
   // Stable space → source pixels, per frame.
   let toSource: Homography[];
   if ( still && hasReferencePath( analysis ) ) {
-    // The full homography onto the first frame: a flat background, or a
-    // distant one, stays exactly put, perspective and all.
+    // The shift onto the first frame, measured against it directly.
     toSource = analysis.frames.map( frame => invertHomography(
-      multiplyHomographies( toCentered, frame.r as number[] ),
+      multiplyHomographies(
+        toCentered,
+        homographyFromAffine( shiftOf( frame.r as number[], center ) ),
+      ),
     ) );
   } else {
     const path = measuredPath( analysis );

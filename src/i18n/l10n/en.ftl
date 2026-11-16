@@ -129,8 +129,6 @@ All-your-observations-have-been-uploaded = All your observations have been uploa
 ALLOW-LOCATION-ACCESS = ALLOW LOCATION ACCESS
 # Button asking if user has an existing iNaturalist account
 Already-have-an-iNaturalist-account = Already have an iNaturalist account?
-# Hint for the "Shift, rotation and zoom" video stabilization method
-Also-removes-tilt-and-zoom-wobble = Also removes tilt and zoom wobble. Best for handheld shots.
 # Display name for the iconic taxa category for amphibia
 Amphibians = Amphibians
 An-Internet-connection-is-required = An Internet connection is required to load more observations.
@@ -772,8 +770,6 @@ Failed-to-load-game-data-Please-try-again = Failed to load game data. Please try
 Failed-to-load-hotspot-data = Failed to load hotspot data
 # Error message with log in fails
 Failed-to-log-in = Failed to log in
-# Hint for the "Shift only" video stabilization method
-Fastest-removes-up-down-and-sideways-shake = Fastest. Removes up, down and sideways shake, but not tilt.
 # Option for showing a star button to fave or unfave an observation on its photo
 Fave-star = Fave/unfave star
 # Heading for the list of users who favorited an observation
@@ -1230,8 +1226,6 @@ Motion-analyzed-across-x-frames =
         [one] Motion analyzed across 1 frame
        *[other] Motion analyzed across { $count } frames
     }
-# Header above the choice of which kinds of camera motion the video stabilizer removes
-MOTION-TO-REMOVE = MOTION TO REMOVE
 # Accessibility hint for the video frame when stabilizing on the background
 Moves-the-crop-to-the-tapped-point = Moves the crop to the tapped point.
 must-be-captive-cultivated = must be captive / cultivated
@@ -1915,10 +1909,6 @@ Share-location = Share Location
 Share-map = Share map
 # Preceded by the fragment # Preceded by the fragment, "By uploading your observation to iNaturalist, you can:"
 Share-your-observation-where-it-can-help-scientists = Share your observation, where it can help scientists across the world better understand biodiversity.
-# Video stabilization method that only removes shifting, not rotation
-Shift-only--stabilize-method = Shift only
-# Video stabilization method that removes shifting, rotation and zoom changes
-Shift-rotation-and-zoom--stabilize-method = Shift, rotation and zoom
 SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
 # Accessibility label for the button that decreases the hotspot route time limit
 Shorten-time-limit = Shorten time limit

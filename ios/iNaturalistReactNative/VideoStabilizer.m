@@ -526,45 +526,22 @@ RCT_EXPORT_METHOD( cancel )
 // once settled by a vote on every analysis; every device log showed it as is,
 // so it's now taken as given.
 //
-// Registers `targeted` against `reference`, returning the homography from the
-// targeted image's bottom-left pixels onto the reference's.
+// Registers `targeted` against `reference`, returning the shift from the
+// targeted image's bottom-left pixels onto the reference's. Only shifts are
+// measured: rotation and zoom are left as they were shot.
 static BOOL registerImages(
   CVPixelBufferRef targeted,
   CVPixelBufferRef reference,
-  BOOL homographic,
   Mat3 *out
 )
 {
-  VNImageRegistrationRequest *request;
-  if ( homographic ) {
-    request = [[VNHomographicImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:targeted options:@{}];
-  } else {
-    request = [[VNTranslationalImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:targeted options:@{}];
-  }
+  VNImageRegistrationRequest *request =
+    [[VNTranslationalImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:targeted options:@{}];
   VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCVPixelBuffer:reference options:@{}];
   NSError *visionError = nil;
   id observation = [handler performRequests:@[request] error:&visionError]
     ? request.results.firstObject
     : nil;
-  if ( [observation isKindOfClass:[VNImageHomographicAlignmentObservation class]] ) {
-    matrix_float3x3 w = ( (VNImageHomographicAlignmentObservation *)observation ).warpTransform;
-    Mat3 step;
-    for ( int r = 0; r < 3; r++ ) {
-      for ( int c = 0; c < 3; c++ ) step.m[r * 3 + c] = w.columns[c][r];
-    }
-    // simd matrices are column-major for column vectors; if the pixel-sized
-    // shift turns up in the bottom row instead of the right column, the
-    // matrix is for row vectors and is transposed.
-    if ( fabs( step.m[6] ) + fabs( step.m[7] ) > fabs( step.m[2] ) + fabs( step.m[5] ) + 1e-3 ) {
-      Mat3 transposed;
-      for ( int r = 0; r < 3; r++ ) {
-        for ( int c = 0; c < 3; c++ ) transposed.m[r * 3 + c] = step.m[c * 3 + r];
-      }
-      step = transposed;
-    }
-    *out = step;
-    return YES;
-  }
   if ( [observation isKindOfClass:[VNImageTranslationAlignmentObservation class]] ) {
     *out = mat3FromAffine( ( (VNImageTranslationAlignmentObservation *)observation ).alignmentTransform );
     return YES;
@@ -580,8 +557,6 @@ RCT_EXPORT_METHOD( analyze
 {
   NSInteger generation = ++_generation;
   dispatch_async( _queue, ^{
-    NSString *method = [options[@"method"] isEqualToString:@"translation"] ? @"translation" : @"similarity";
-    BOOL homographic = [method isEqualToString:@"similarity"];
     // A complete lock also measures every frame against the first, so the
     // small errors of chaining frame to frame don't add up to a drift.
     BOOL reference = [options[@"reference"] boolValue];
@@ -646,7 +621,7 @@ RCT_EXPORT_METHOD( analyze
 
         NSMutableDictionary *frame = [@{ @"t": @( t ), @"ok": @YES } mutableCopy];
         Mat3 step = mat3Identity( );
-        if ( previous && !registerImages( small, previous, homographic, &step ) ) {
+        if ( previous && !registerImages( small, previous, &step ) ) {
           step = mat3Identity( );
           frame[@"ok"] = @NO;
         }
@@ -667,7 +642,7 @@ RCT_EXPORT_METHOD( analyze
                 imageByCompositingOverImage:blackSmall];
               [self->_ciContext render:[aligned imageByCroppingToRect:blackSmall.extent] toCVPixelBuffer:warped];
               Mat3 residual;
-              if ( registerImages( warped, first, homographic, &residual )
+              if ( registerImages( warped, first, &residual )
                 && hypot( residual.m[2], residual.m[5] ) < 0.2 * MAX( smallWidth, smallHeight ) ) {
                 chain = mat3Mul( residual, chain );
                 refined += 1;
@@ -715,7 +690,6 @@ RCT_EXPORT_METHOD( analyze
 
     [self emitProgress:@"analyze" job:job progress:1 force:YES];
     resolve( @{
-      @"method": method,
       @"width": @( fullWidth ),
       @"height": @( fullHeight ),
       @"fps": @( frameRateOf( [asset tracksWithMediaType:AVMediaTypeVideo].firstObject ) ),
