@@ -21,20 +21,18 @@ const isTablet = DeviceInfo.isTablet();
 
 interface Props {
   confirmDisabled: boolean;
-  disallowAddingPhotos: boolean;
   handleCheckmarkPress: ( ) => void;
   handleZoomButtonPress: ( ) => void;
   flipCamera: ( ) => void;
   handleClose: ( ) => void;
   hasFlash: boolean;
   latestPhotoUri?: string;
+  onPressLatestPhoto: ( ) => void;
   photosTaken: boolean;
   rotatableAnimatedStyle: AnimatedStyle;
-  showPrediction: boolean;
   showZoomButton: boolean;
   takePhoto: () => Promise<void>;
   takePhotoOptions: CapturePhotoSettings;
-  takingPhoto: boolean;
   toggleFlash: ( ) => void;
   zoomTextValue: string;
   useLocation: boolean;
@@ -45,20 +43,18 @@ interface Props {
 
 const AICameraButtons = ( {
   confirmDisabled,
-  disallowAddingPhotos,
   handleCheckmarkPress,
   handleZoomButtonPress,
   flipCamera,
   handleClose,
   hasFlash,
   latestPhotoUri,
+  onPressLatestPhoto,
   photosTaken,
   rotatableAnimatedStyle,
-  showPrediction,
   showZoomButton,
   takePhoto,
   takePhotoOptions,
-  takingPhoto,
   toggleFlash,
   zoomTextValue,
   useLocation,
@@ -72,9 +68,9 @@ const AICameraButtons = ( {
     return (
       <TabletButtons
         handleZoomButtonPress={handleZoomButtonPress}
-        // Photos can be taken before the model has loaded, they just won't
-        // come with a live suggestion
-        disabled={disallowAddingPhotos || takingPhoto}
+        // The shutter looks the same at all times; handleTakePhoto ignores
+        // taps mid-capture and explains the photo limit
+        disabled={false}
         // TODO: once we re-visit tablet views, we'll want to ensure users cannot spam the submit
         // button while taking photos. see:
         // https://linear.app/inaturalist/issue/MOB-1084/multicapture-camera-multiple-copies-of-photos-can-be-saved
@@ -87,9 +83,9 @@ const AICameraButtons = ( {
         hasFlash={hasFlash}
         hasLatestPhoto
         latestPhotoUri={latestPhotoUri}
+        onPressLatestPhoto={onPressLatestPhoto}
         photosTaken={photosTaken}
         rotatableAnimatedStyle={rotatableAnimatedStyle}
-        showPrediction={showPrediction}
         showZoomButton={showZoomButton}
         takePhoto={takePhoto}
         takePhotoOptions={takePhotoOptions}
@@ -163,17 +159,18 @@ const AICameraButtons = ( {
         </View>
         <View>
           <LatestPhoto
+            onPress={onPressLatestPhoto}
             photoUri={latestPhotoUri}
             rotatableAnimatedStyle={rotatableAnimatedStyle}
           />
         </View>
       </View>
       <View className="flex-row justify-center items-center w-full" pointerEvents="box-none">
+        {/* The shutter looks the same at all times; handleTakePhoto ignores
+            taps mid-capture and explains the photo limit */}
         <TakePhoto
-          disabled={disallowAddingPhotos || takingPhoto}
+          disabled={false}
           takePhoto={takePhoto}
-          showPrediction={showPrediction}
-          rotatableAnimatedStyle={rotatableAnimatedStyle}
         />
         {photosTaken && (
           // Sits just right of the shutter, clear of the column of options

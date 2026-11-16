@@ -107,10 +107,10 @@ describe( "Photo Deletion", ( ) => {
   }
 
   async function expectNoPhotosInStandardCamera() {
-    // Back on the camera, with no photos left in its photo strip
+    // Back on the camera, with no latest-photo thumbnail left
     expect( await screen.findByTestId( "take-photo-button" ) ).toBeVisible();
     await waitFor( () => {
-      expect( screen.queryAllByTestId( /PhotoCarousel\.displayPhoto/ ) ).toHaveLength( 0 );
+      expect( screen.queryByTestId( "AICamera.latestPhoto" ) ).toBeNull( );
     } );
   }
 
@@ -133,9 +133,8 @@ describe( "Photo Deletion", ( ) => {
     renderApp( );
     await navigateToStandardCameraFromMyObs();
     await actor.press( await screen.findByTestId( "take-photo-button" ) );
-    // Tap the photo preview to enter the MediaViewer
-    const carouselPhoto = await screen.findByTestId( /PhotoCarousel\.displayPhoto/ );
-    await actor.press( carouselPhoto );
+    // Tap the latest-photo thumbnail to enter the MediaViewer
+    await actor.press( await screen.findByTestId( "AICamera.latestPhoto" ) );
     await deletePhotoInMediaViewer();
     await expectNoPhotosInStandardCamera();
   } );

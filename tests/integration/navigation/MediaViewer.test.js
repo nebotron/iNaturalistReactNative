@@ -360,7 +360,7 @@ describe( "MediaViewer navigation", ( ) => {
       await renderApp( );
       await navigateToStandardCameraFromMyObs( );
       await findAndPressByLabelText( "Take photo" );
-      await findAndPressByLabelText( "View photo" );
+      await findAndPressByLabelText( "Most recent photo" );
       expect( await screen.findByTestId( /CustomImageZoom/ ) ).toBeVisible( );
     } );
 
@@ -374,7 +374,7 @@ describe( "MediaViewer navigation", ( ) => {
       await renderApp( );
       await navigateToStandardCameraFromMyObs( );
       await findAndPressByLabelText( "Take photo" );
-      await findAndPressByLabelText( "View photo" );
+      await findAndPressByLabelText( "Most recent photo" );
       expect( await screen.findByLabelText( "Delete photo" ) ).toBeVisible( );
     } );
   } );
