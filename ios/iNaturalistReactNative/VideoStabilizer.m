@@ -58,6 +58,21 @@ static Mat3 mat3Mul( Mat3 a, Mat3 b )
   return r;
 }
 
+// The inverse, or the identity when `a` has none.
+static Mat3 mat3Invert( Mat3 a )
+{
+  const double *m = a.m;
+  double det = m[0] * ( m[4] * m[8] - m[5] * m[7] ) - m[1] * ( m[3] * m[8] - m[5] * m[6] )
+    + m[2] * ( m[3] * m[7] - m[4] * m[6] );
+  if ( fabs( det ) < 1e-12 ) return mat3Identity( );
+  Mat3 r = { {
+    ( m[4] * m[8] - m[5] * m[7] ) / det, ( m[2] * m[7] - m[1] * m[8] ) / det, ( m[1] * m[5] - m[2] * m[4] ) / det,
+    ( m[5] * m[6] - m[3] * m[8] ) / det, ( m[0] * m[8] - m[2] * m[6] ) / det, ( m[2] * m[3] - m[0] * m[5] ) / det,
+    ( m[3] * m[7] - m[4] * m[6] ) / det, ( m[1] * m[6] - m[0] * m[7] ) / det, ( m[0] * m[4] - m[1] * m[3] ) / det,
+  } };
+  return r;
+}
+
 // y ↦ height − y, its own inverse: converts between top-left and bottom-left.
 static Mat3 mat3FlipY( double height )
 {
@@ -461,6 +476,21 @@ static const double kMinTileCover = 0.95;
 // and its reference shows some texture (Laplacian standard deviation, in
 // 0–255 gray levels): a flat sky or wall has no shift to find.
 static const double kMinTileTexture = 1;
+// Sensor and compression noise alone gives an out-of-focus background a
+// Laplacian deviation of 2–3, which passes the test above, yet such a tile
+// reports no motion or lags the camera. Structure is therefore also measured
+// on the tile averaged over kStructureBlock × kStructureBlock pixels, where
+// noise averages away and edges remain.
+static const int kStructureBlock = 4;
+static const double kMinTileStructure = 2;
+// Each tile's phase-correlation shift is refined by up to this many
+// Gauss-Newton (Lucas-Kanade) steps on the pixels themselves. Phase
+// correlation whitens the spectrum, and a motion-blurred frame's spectrum
+// changes sign, so on the blurred frames of a fast pan its peak splits and
+// misses by pixels; the intensity fit doesn't.
+static const int kRefineSteps = 10;
+static const double kRefineMaxStep = 2;
+static const double kRefineDone = 0.01;
 static const int kMinTiles = 2;
 // Peak height (0–1) a whole-frame fallback must reach to be believed.
 static const float kFallbackResponse = 0.02f;
@@ -700,11 +730,132 @@ static double textureOf( const GrayImage *g, int x0, int y0, int w, int h )
   return sqrt( MAX( 0, sumSq / count - mean * mean ) );
 }
 
+// textureOf on the region averaged over kStructureBlock-pixel squares.
+static double structureOf( const GrayImage *g, int x0, int y0, int w, int h )
+{
+  int k = kStructureBlock;
+  int bw = w / k;
+  int bh = h / k;
+  if ( bw < 3 || bh < 3 ) return 0;
+  GrayImage blocks = grayImageCreate( bw, bh );
+  if ( !blocks.px ) return 0;
+  for ( int by = 0; by < bh; by++ ) {
+    for ( int bx = 0; bx < bw; bx++ ) {
+      float sum = 0;
+      for ( int y = 0; y < k; y++ ) {
+        const float *row = g->px + (size_t)( y0 + by * k + y ) * g->width + x0 + bx * k;
+        for ( int x = 0; x < k; x++ ) sum += row[x];
+      }
+      blocks.px[(size_t)by * bw + bx] = sum / ( k * k );
+    }
+  }
+  double structure = textureOf( &blocks, 0, 0, bw, bh );
+  grayImageFree( &blocks );
+  return structure;
+}
+
+// Bilinear sample, clamped so the 2 × 2 neighbourhood stays in the image.
+static inline float sampleBilinear( const GrayImage *g, double x, double y )
+{
+  int ix = (int)floor( x );
+  int iy = (int)floor( y );
+  float fx = (float)( x - ix );
+  float fy = (float)( y - iy );
+  ix = MIN( MAX( ix, 0 ), g->width - 2 );
+  iy = MIN( MAX( iy, 0 ), g->height - 2 );
+  const float *p = g->px + (size_t)iy * g->width + ix;
+  return p[0] * ( 1 - fx ) * ( 1 - fy ) + p[1] * fx * ( 1 - fy )
+    + p[g->width] * ( 1 - fx ) * fy + p[g->width + 1] * fx * fy;
+}
+
+// Refines (*sx, *sy), the shift that maps `targeted` onto `reference`, over
+// the w × h window of `reference` at (x0, y0), weighted by `window`: Gauss-
+// Newton on the intensity difference, each image's mean over the overlap
+// removed. `scratch` holds (w + 2) × (h + 2) floats.
+static void refineShift(
+  const GrayImage *targeted, const GrayImage *reference,
+  int x0, int y0, int w, int h, const float *window, float *scratch,
+  double *sx, double *sy
+)
+{
+  double x = *sx;
+  double y = *sy;
+  int sw = w + 2;
+  for ( int step = 0; step < kRefineSteps; step++ ) {
+    // targeted, moved by the shift, on the window's grid plus a 1-pixel rim
+    // for the gradient; pixels whose rim leaves the frame don't count.
+    for ( int j = -1; j <= h; j++ ) {
+      for ( int i = -1; i <= w; i++ ) {
+        scratch[( j + 1 ) * sw + i + 1] = sampleBilinear( targeted, x0 + i - x, y0 + j - y );
+      }
+    }
+    double sumT = 0;
+    double sumR = 0;
+    int valid = 0;
+    for ( int j = 0; j < h; j++ ) {
+      double qy = y0 + j - y;
+      if ( qy < 1 || qy >= targeted->height - 2 ) continue;
+      for ( int i = 0; i < w; i++ ) {
+        double qx = x0 + i - x;
+        if ( qx < 1 || qx >= targeted->width - 2 ) continue;
+        valid += 1;
+        sumT += scratch[( j + 1 ) * sw + i + 1];
+        sumR += reference->px[(size_t)( y0 + j ) * reference->width + x0 + i];
+      }
+    }
+    if ( valid < w * h / 2 ) break;
+    double meanT = sumT / valid;
+    double meanR = sumR / valid;
+    double a = 0;
+    double b = 0;
+    double c = 0;
+    double ex = 0;
+    double ey = 0;
+    for ( int j = 0; j < h; j++ ) {
+      double qy = y0 + j - y;
+      if ( qy < 1 || qy >= targeted->height - 2 ) continue;
+      const float *t = scratch + ( j + 1 ) * sw + 1;
+      const float *r = reference->px + (size_t)( y0 + j ) * reference->width + x0;
+      const float *win = window + (size_t)j * w;
+      for ( int i = 0; i < w; i++ ) {
+        double qx = x0 + i - x;
+        if ( qx < 1 || qx >= targeted->width - 2 ) continue;
+        double gx = 0.5 * ( t[i + 1] - t[i - 1] );
+        double gy = 0.5 * ( t[i + sw] - t[i - sw] );
+        double e = ( t[i] - meanT ) - ( r[i] - meanR );
+        double v = win[i];
+        a += v * gx * gx;
+        b += v * gx * gy;
+        c += v * gy * gy;
+        ex += v * gx * e;
+        ey += v * gy * e;
+      }
+    }
+    a += 1e-6;
+    c += 1e-6;
+    double det = a * c - b * b;
+    if ( !( fabs( det ) > 1e-12 ) ) break;
+    // Moving the shift by d moves targeted's sample by −d, so the residual
+    // changes by −grad · d.
+    double dx = MIN( kRefineMaxStep, MAX( -kRefineMaxStep, ( c * ex - b * ey ) / det ) );
+    double dy = MIN( kRefineMaxStep, MAX( -kRefineMaxStep, ( a * ey - b * ex ) / det ) );
+    x += dx;
+    y += dy;
+    if ( hypot( dx, dy ) < kRefineDone ) break;
+  }
+  if ( isfinite( x ) && isfinite( y ) ) {
+    *sx = x;
+    *sy = y;
+  }
+}
+
 typedef struct {
   int tileWidth;
   int tileHeight;
   PhaseCorrelator *tiles;
   PhaseCorrelator *whole;
+  // refineShift's working rows, for a tile's correlated window.
+  float *refineScratch;
 } Registration;
 
 static Registration registrationCreate( int width, int height )
@@ -714,6 +865,9 @@ static Registration registrationCreate( int width, int height )
   r.tileHeight = ( height / kTileRows ) / 4 * 4;
   r.tiles = phaseCorrelatorCreate( dftLength( r.tileWidth ), dftLength( r.tileHeight ) );
   r.whole = phaseCorrelatorCreate( dftLength( width ), dftLength( height ) );
+  r.refineScratch = r.tiles
+    ? calloc( (size_t)( r.tiles->width + 2 ) * ( r.tiles->height + 2 ), sizeof( float ) )
+    : NULL;
   return r;
 }
 
@@ -721,8 +875,10 @@ static void registrationFree( Registration *r )
 {
   phaseCorrelatorFree( r->tiles );
   phaseCorrelatorFree( r->whole );
+  free( r->refineScratch );
   r->tiles = NULL;
   r->whole = NULL;
+  r->refineScratch = NULL;
 }
 
 // Every tile's shift from `targeted` onto `reference`, with `targeted` moved
@@ -751,6 +907,7 @@ static int tileShifts(
       int x0 = i * tw;
       int y0 = j * th;
       if ( textureOf( reference, x0, y0, tw, th ) < kMinTileTexture ) continue;
+      if ( structureOf( reference, x0, y0, tw, th ) < kMinTileStructure ) continue;
       // The part of the moved tile that comes from inside the frame.
       int sx0 = MAX( 0, x0 - moveX );
       int sy0 = MAX( 0, y0 - moveY );
@@ -765,9 +922,15 @@ static int tileShifts(
       float response;
       phaseCorrelate( r->tiles, targeted, x0 - moveX + ox, y0 - moveY + oy, reference, x0 + ox, y0 + oy,
         &dx, &dy, &response );
+      dx += moveX;
+      dy += moveY;
+      if ( r->refineScratch ) {
+        refineShift( targeted, reference, x0 + ox, y0 + oy, r->tiles->width, r->tiles->height,
+          r->tiles->window, r->refineScratch, &dx, &dy );
+      }
       int k = j * kTileCols + i;
-      shifts[k][0] = dx + moveX;
-      shifts[k][1] = dy + moveY;
+      shifts[k][0] = dx;
+      shifts[k][1] = dy;
       found[k] = YES;
       count += 1;
     }
@@ -896,6 +1059,340 @@ static void trackerMeasure( Tracker *t, const GrayImage *current, FrameMeasure *
 }
 
 // END FFT REGISTRATION
+
+// BEGIN SHARP FUSION (plain C, like the registration block above, so it can
+// be compiled and tested off-device)
+//
+// A handheld pan smears some frames and not others. Once the background is
+// held still, a stationary perch then flickers between sharp and smeared,
+// the smear pointing a new way each frame, and that reads as the picture
+// vibrating. Fusion draws each pixel of a still part of the scene from the
+// sharpest of the stabilized frames around it: every frame within
+// kFusionRadius of the output frame is weighted by its local sharpness,
+// where its low-pass picture agrees with the output frame's. Where it
+// doesn't (the subject moved), the output frame's own pixel is kept.
+//
+// The sharpness and agreement maps are smooth, so they're worked out on a
+// copy kFusionMapBlock times smaller and interpolated back up.
+
+enum { kFusionRadius = 3, kFusionSlots = 2 * kFusionRadius + 1 };
+// The maps' long side, roughly.
+static const double kFusionMapSize = 480;
+// Sizes in pixels of an output 960 px on its long side, scaled with it.
+static const double kFusionReferenceSize = 960;
+static const double kFusionSharpSigma = 6;
+static const double kFusionLowSigma = 5;
+static const double kFusionErodeRadius = 4;
+static const double kFusionAgreeSigma = 3;
+// A neighbour stops agreeing as its low-pass gray (0–255) moves from
+// kFusionAgreeStart to kFusionAgreeStart + kFusionAgreeRange away.
+static const float kFusionAgreeStart = 3;
+static const float kFusionAgreeRange = 5;
+
+typedef struct {
+  // The stabilized frame, width × height BGRA, rows packed.
+  uint8_t *bgra;
+  // Maps: local sharpness (squared, so the sharpest frame dominates), and
+  // the picture low-passed.
+  float *sharp;
+  float *low;
+  // Output pixel → source pixel, row-major, and the source's size, to tell
+  // the frame's own pixels from the empty edge around them.
+  double toSource[9];
+  int sourceWidth;
+  int sourceHeight;
+} FusionFrame;
+
+typedef struct {
+  int width;
+  int height;
+  int block;
+  int mapWidth;
+  int mapHeight;
+  // Map pixels per pixel of an output 960 px on its long side.
+  double mapScale;
+  FusionFrame frames[kFusionSlots];
+  // Frames added so far; frame i lives in slot i % kFusionSlots.
+  int added;
+  float *gray;
+  // Per slot: a neighbour's weight map, and scratch for blurring it.
+  float *weights[kFusionSlots];
+  float *scratch[kFusionSlots];
+} SharpFusion;
+
+static void fusionParallel( size_t count, void *context, void ( *work )( void *, size_t ) )
+{
+#ifdef __APPLE__
+  dispatch_apply_f( count, dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), context, work );
+#else
+  for ( size_t i = 0; i < count; i++ ) work( context, i );
+#endif
+}
+
+// Box blur of radius r, edges clamped, in place; tmp holds w × h floats.
+static void boxBlur( float *img, int w, int h, int r, float *tmp )
+{
+  if ( r <= 0 ) return;
+  float norm = 1.0f / ( 2 * r + 1 );
+  for ( int y = 0; y < h; y++ ) {
+    const float *in = img + (size_t)y * w;
+    float *out = tmp + (size_t)y * w;
+    float sum = 0;
+    for ( int k = -r; k <= r; k++ ) sum += in[MIN( MAX( k, 0 ), w - 1 )];
+    for ( int x = 0; x < w; x++ ) {
+      out[x] = sum * norm;
+      sum += in[MIN( x + r + 1, w - 1 )] - in[MAX( x - r, 0 )];
+    }
+  }
+  for ( int x = 0; x < w; x++ ) {
+    float sum = 0;
+    for ( int k = -r; k <= r; k++ ) sum += tmp[(size_t)MIN( MAX( k, 0 ), h - 1 ) * w + x];
+    for ( int y = 0; y < h; y++ ) {
+      img[(size_t)y * w + x] = sum * norm;
+      sum += tmp[(size_t)MIN( y + r + 1, h - 1 ) * w + x] - tmp[(size_t)MAX( y - r, 0 ) * w + x];
+    }
+  }
+}
+
+// Gaussian blur, σ in pixels, as three box blurs.
+static void gaussianBlur( float *img, int w, int h, double sigma, float *tmp )
+{
+  int r = (int)lround( ( sqrt( 4 * sigma * sigma + 1 ) - 1 ) / 2 );
+  for ( int pass = 0; pass < 3; pass++ ) boxBlur( img, w, h, r, tmp );
+}
+
+// Minimum over a (2r + 1)-pixel square, edges clamped, in place.
+static void erodeMin( float *img, int w, int h, int r, float *tmp )
+{
+  if ( r <= 0 ) return;
+  for ( int y = 0; y < h; y++ ) {
+    for ( int x = 0; x < w; x++ ) {
+      float m = img[(size_t)y * w + x];
+      for ( int k = MAX( 0, x - r ); k <= MIN( w - 1, x + r ); k++ ) m = MIN( m, img[(size_t)y * w + k] );
+      tmp[(size_t)y * w + x] = m;
+    }
+  }
+  for ( int y = 0; y < h; y++ ) {
+    for ( int x = 0; x < w; x++ ) {
+      float m = tmp[(size_t)y * w + x];
+      for ( int k = MAX( 0, y - r ); k <= MIN( h - 1, y + r ); k++ ) m = MIN( m, tmp[(size_t)k * w + x] );
+      img[(size_t)y * w + x] = m;
+    }
+  }
+}
+
+static void sharpFusionFree( SharpFusion *f )
+{
+  if ( !f ) return;
+  for ( int s = 0; s < kFusionSlots; s++ ) {
+    free( f->frames[s].bgra );
+    free( f->frames[s].sharp );
+    free( f->frames[s].low );
+    free( f->weights[s] );
+    free( f->scratch[s] );
+  }
+  free( f->gray );
+  free( f );
+}
+
+static SharpFusion *sharpFusionCreate( int width, int height )
+{
+  if ( width < 8 || height < 8 ) return NULL;
+  SharpFusion *f = calloc( 1, sizeof( SharpFusion ) );
+  if ( !f ) return NULL;
+  f->width = width;
+  f->height = height;
+  f->block = MAX( 1, (int)lround( MAX( width, height ) / kFusionMapSize ) );
+  f->mapWidth = width / f->block;
+  f->mapHeight = height / f->block;
+  f->mapScale = MAX( width, height ) / kFusionReferenceSize / f->block;
+  size_t pixels = (size_t)width * height;
+  size_t mapPixels = (size_t)f->mapWidth * f->mapHeight;
+  BOOL ok = ( f->gray = malloc( pixels * sizeof( float ) ) ) != NULL;
+  for ( int s = 0; s < kFusionSlots && ok; s++ ) {
+    ok = ( f->frames[s].bgra = malloc( pixels * 4 ) )
+      && ( f->frames[s].sharp = malloc( mapPixels * sizeof( float ) ) )
+      && ( f->frames[s].low = malloc( mapPixels * sizeof( float ) ) )
+      && ( f->weights[s] = malloc( mapPixels * sizeof( float ) ) )
+      && ( f->scratch[s] = malloc( MAX( mapPixels, pixels ) * sizeof( float ) ) );
+  }
+  if ( !ok ) {
+    sharpFusionFree( f );
+    return NULL;
+  }
+  return f;
+}
+
+// Mean of each block × block square of a width × height image into a map.
+static void poolToMap( const SharpFusion *f, const float *full, float *map )
+{
+  int b = f->block;
+  float norm = 1.0f / ( b * b );
+  for ( int my = 0; my < f->mapHeight; my++ ) {
+    for ( int mx = 0; mx < f->mapWidth; mx++ ) {
+      float sum = 0;
+      for ( int y = my * b; y < ( my + 1 ) * b; y++ ) {
+        const float *row = full + (size_t)y * f->width + mx * b;
+        for ( int x = 0; x < b; x++ ) sum += row[x];
+      }
+      map[(size_t)my * f->mapWidth + mx] = sum * norm;
+    }
+  }
+}
+
+// Adds the next stabilized frame: `bgra` is width × height with rowBytes
+// per row, `toSource` maps its pixels back to the source frame, which is
+// sourceWidth × sourceHeight. Frame i must be output (sharpFusionOutput)
+// before frame i + kFusionRadius + 1 is added.
+static void sharpFusionAdd(
+  SharpFusion *f, const uint8_t *bgra, size_t rowBytes,
+  const double toSource[9], int sourceWidth, int sourceHeight
+)
+{
+  FusionFrame *frame = &f->frames[f->added % kFusionSlots];
+  int w = f->width;
+  int h = f->height;
+  for ( int y = 0; y < h; y++ ) memcpy( frame->bgra + (size_t)y * w * 4, bgra + y * rowBytes, (size_t)w * 4 );
+  memcpy( frame->toSource, toSource, sizeof( frame->toSource ) );
+  frame->sourceWidth = sourceWidth;
+  frame->sourceHeight = sourceHeight;
+  float *tmp = f->scratch[f->added % kFusionSlots];
+
+  for ( size_t i = 0; i < (size_t)w * h; i++ ) {
+    const uint8_t *p = frame->bgra + i * 4;
+    f->gray[i] = 0.114f * p[0] + 0.587f * p[1] + 0.299f * p[2];
+  }
+  // Sharpness: the Laplacian, squared, averaged over the neighbourhood.
+  for ( int y = 0; y < h; y++ ) {
+    for ( int x = 0; x < w; x++ ) {
+      float v = 0;
+      if ( x > 0 && y > 0 && x < w - 1 && y < h - 1 ) {
+        const float *g = f->gray + (size_t)y * w + x;
+        v = g[-1] + g[1] + g[-w] + g[w] - 4 * g[0];
+      }
+      tmp[(size_t)y * w + x] = v * v;
+    }
+  }
+  poolToMap( f, tmp, frame->sharp );
+  gaussianBlur( frame->sharp, f->mapWidth, f->mapHeight, kFusionSharpSigma * f->mapScale, tmp );
+  for ( size_t i = 0; i < (size_t)f->mapWidth * f->mapHeight; i++ ) {
+    float s = frame->sharp[i] + 1e-3f;
+    frame->sharp[i] = s * s;
+  }
+  poolToMap( f, f->gray, frame->low );
+  gaussianBlur( frame->low, f->mapWidth, f->mapHeight, kFusionLowSigma * f->mapScale, tmp );
+  f->added += 1;
+}
+
+typedef struct {
+  SharpFusion *f;
+  int index;
+  int first;
+  int count;
+  uint8_t *out;
+  size_t rowBytes;
+} FusionJob;
+
+// A neighbour's weight map: where it agrees with the output frame, times
+// its sharpness, less the further it is in time.
+static void fusionWeights( void *context, size_t n )
+{
+  FusionJob *job = context;
+  SharpFusion *f = job->f;
+  int j = job->first + (int)n;
+  int slot = j % kFusionSlots;
+  const FusionFrame *frame = &f->frames[slot];
+  const FusionFrame *current = &f->frames[job->index % kFusionSlots];
+  float *w = f->weights[slot];
+  int mw = f->mapWidth;
+  int mh = f->mapHeight;
+  size_t mapPixels = (size_t)mw * mh;
+  float temporal = (float)exp( -pow( ( j - job->index ) / ( kFusionRadius + 0.5 ), 2 ) );
+  if ( j == job->index ) {
+    for ( size_t i = 0; i < mapPixels; i++ ) w[i] = frame->sharp[i];
+    return;
+  }
+  for ( size_t i = 0; i < mapPixels; i++ ) {
+    float d = fabsf( frame->low[i] - current->low[i] );
+    w[i] = MIN( 1.0f, MAX( 0.0f, 1 - ( d - kFusionAgreeStart ) / kFusionAgreeRange ) );
+  }
+  erodeMin( w, mw, mh, (int)lround( kFusionErodeRadius * f->mapScale ), f->scratch[slot] );
+  gaussianBlur( w, mw, mh, kFusionAgreeSigma * f->mapScale, f->scratch[slot] );
+  for ( size_t i = 0; i < mapPixels; i++ ) w[i] *= temporal * frame->sharp[i];
+}
+
+static inline BOOL fusionCovers( const FusionFrame *frame, double x, double y )
+{
+  const double *m = frame->toSource;
+  double z = m[6] * x + m[7] * y + m[8];
+  if ( !( z > 1e-9 ) ) return NO;
+  double sx = ( m[0] * x + m[1] * y + m[2] ) / z;
+  double sy = ( m[3] * x + m[4] * y + m[5] ) / z;
+  return sx >= 1 && sy >= 1 && sx <= frame->sourceWidth - 1 && sy <= frame->sourceHeight - 1;
+}
+
+static void fusionRow( void *context, size_t y )
+{
+  FusionJob *job = context;
+  SharpFusion *f = job->f;
+  const FusionFrame *current = &f->frames[job->index % kFusionSlots];
+  uint8_t *out = job->out + y * job->rowBytes;
+  int w = f->width;
+  int b = f->block;
+  // The row's place on the maps, for interpolating them.
+  double my = ( y + 0.5 ) / b - 0.5;
+  int my0 = MIN( MAX( (int)floor( my ), 0 ), f->mapHeight - 1 );
+  int my1 = MIN( my0 + 1, f->mapHeight - 1 );
+  float fy = (float)MIN( MAX( my - my0, 0.0 ), 1.0 );
+  for ( int x = 0; x < w; x++ ) {
+    const uint8_t *own = current->bgra + ( (size_t)y * w + x ) * 4;
+    double px = x + 0.5;
+    double py = y + 0.5;
+    if ( !fusionCovers( current, px, py ) ) {
+      memcpy( out + x * 4, own, 4 );
+      continue;
+    }
+    double mx = ( x + 0.5 ) / b - 0.5;
+    int mx0 = MIN( MAX( (int)floor( mx ), 0 ), f->mapWidth - 1 );
+    int mx1 = MIN( mx0 + 1, f->mapWidth - 1 );
+    float fx = (float)MIN( MAX( mx - mx0, 0.0 ), 1.0 );
+    float sum[3] = { 0, 0, 0 };
+    float total = 0;
+    for ( int n = 0; n < job->count; n++ ) {
+      int slot = ( job->first + n ) % kFusionSlots;
+      const FusionFrame *frame = &f->frames[slot];
+      if ( frame != current && !fusionCovers( frame, px, py ) ) continue;
+      const float *m = f->weights[slot];
+      float weight = ( m[my0 * f->mapWidth + mx0] * ( 1 - fx ) + m[my0 * f->mapWidth + mx1] * fx ) * ( 1 - fy )
+        + ( m[my1 * f->mapWidth + mx0] * ( 1 - fx ) + m[my1 * f->mapWidth + mx1] * fx ) * fy;
+      const uint8_t *p = frame->bgra + ( (size_t)y * w + x ) * 4;
+      sum[0] += weight * p[0];
+      sum[1] += weight * p[1];
+      sum[2] += weight * p[2];
+      total += weight;
+    }
+    if ( !( total > 0 ) ) {
+      memcpy( out + x * 4, own, 4 );
+      continue;
+    }
+    for ( int c = 0; c < 3; c++ ) out[x * 4 + c] = (uint8_t)MIN( 255.0f, sum[c] / total + 0.5f );
+    out[x * 4 + 3] = 255;
+  }
+}
+
+// Writes frame `index`, fused with its neighbours, as BGRA into `out`.
+// Every frame up to index + kFusionRadius must have been added, or all of
+// them, at the end.
+static void sharpFusionOutput( SharpFusion *f, int index, uint8_t *out, size_t rowBytes )
+{
+  int first = MAX( 0, index - kFusionRadius );
+  int last = MIN( f->added - 1, index + kFusionRadius );
+  FusionJob job = { f, index, first, last - first + 1, out, rowBytes };
+  fusionParallel( (size_t)job.count, &job, fusionWeights );
+  fusionParallel( (size_t)f->height, &job, fusionRow );
+}
+
+// END SHARP FUSION
 
 // Tile shifts for the bridge: [dx, dy] per tile in full-frame pixels, or
 // null where the tile didn't count.
@@ -1039,6 +1536,7 @@ RCT_EXPORT_METHOD( render
     NSInteger outWidth = [options[@"outputWidth"] integerValue];
     NSInteger outHeight = [options[@"outputHeight"] integerValue];
     NSString *prefix = [options[@"preview"] boolValue] ? @"preview-" : @"stabilized-";
+    BOOL sharpen = [options[@"sharpen"] boolValue];
     NSInteger transformCount = (NSInteger)flat.count / 9;
     if ( transformCount == 0 || outWidth < 2 || outHeight < 2 ) {
       reject( @"RENDER_FAILED", @"Nothing to render", nil );
@@ -1120,6 +1618,13 @@ RCT_EXPORT_METHOD( render
     }
     [writer startSessionAtSourceTime:range.start];
 
+    // With fusion on, frame i goes out once the frames after it that it's
+    // fused with have been read; their presentation times wait in a ring.
+    SharpFusion *fusion = sharpen ? sharpFusionCreate( (int)outWidth, (int)outHeight ) : NULL;
+    CMTime *fusionTimes = fusion ? calloc( kFusionSlots, sizeof( CMTime ) ) : NULL;
+    __block NSInteger emitted = 0;
+    __block BOOL inputDone = NO;
+
     CGRect outRect = CGRectMake( 0, 0, outWidth, outHeight );
     CIImage *black = [[CIImage imageWithColor:[CIColor colorWithRed:0 green:0 blue:0]] imageByCroppingToRect:outRect];
     CGColorSpaceRef sRGB = CGColorSpaceCreateWithName( kCGColorSpaceSRGB );
@@ -1135,7 +1640,42 @@ RCT_EXPORT_METHOD( render
                                       usingBlock:^{
       while ( !videoDone && videoInput.isReadyForMoreMediaData ) {
         @autoreleasepool {
+          // Fused frames go out before the next frame is read, so that a
+          // frame still waiting to go out isn't overwritten in the ring.
+          if ( fusion && emitted < fusion->added && ( inputDone || emitted + kFusionRadius < fusion->added ) ) {
+            CVPixelBufferRef target = NULL;
+            CVPixelBufferPoolCreatePixelBuffer( NULL, adaptor.pixelBufferPool, &target );
+            if ( target ) {
+              CVPixelBufferLockBaseAddress( target, 0 );
+              sharpFusionOutput( fusion, (int)emitted, CVPixelBufferGetBaseAddress( target ),
+                CVPixelBufferGetBytesPerRow( target ) );
+              CVPixelBufferUnlockBaseAddress( target, 0 );
+              if ( ![adaptor appendPixelBuffer:target withPresentationTime:fusionTimes[emitted % kFusionSlots]] ) {
+                appendFailed = YES;
+              }
+              CVPixelBufferRelease( target );
+            }
+            emitted += 1;
+            if ( appendFailed ) {
+              videoDone = YES;
+              [videoInput markAsFinished];
+              dispatch_group_leave( group );
+              break;
+            }
+            continue;
+          }
+          if ( inputDone ) {
+            videoDone = YES;
+            [videoInput markAsFinished];
+            dispatch_group_leave( group );
+            break;
+          }
           CMSampleBufferRef sample = [self isCurrent:generation] ? [videoOutput copyNextSampleBuffer] : NULL;
+          if ( !sample && fusion && [self isCurrent:generation] ) {
+            // Out of frames: the last few still have to go out.
+            inputDone = YES;
+            continue;
+          }
           if ( !sample ) {
             videoDone = YES;
             [videoInput markAsFinished];
@@ -1157,7 +1697,16 @@ RCT_EXPORT_METHOD( render
           if ( target ) {
             [self->_ciContext render:[frame imageByCompositingOverImage:black] toCVPixelBuffer:target
                               bounds:outRect colorSpace:sRGB];
-            if ( ![adaptor appendPixelBuffer:target withPresentationTime:pts] ) appendFailed = YES;
+            if ( fusion ) {
+              Mat3 toSource = mat3Invert( topLeft );
+              fusionTimes[fusion->added % kFusionSlots] = pts;
+              CVPixelBufferLockBaseAddress( target, kCVPixelBufferLock_ReadOnly );
+              sharpFusionAdd( fusion, CVPixelBufferGetBaseAddress( target ), CVPixelBufferGetBytesPerRow( target ),
+                toSource.m, (int)CVPixelBufferGetWidth( source ), (int)CVPixelBufferGetHeight( source ) );
+              CVPixelBufferUnlockBaseAddress( target, kCVPixelBufferLock_ReadOnly );
+            } else if ( ![adaptor appendPixelBuffer:target withPresentationTime:pts] ) {
+              appendFailed = YES;
+            }
             CVPixelBufferRelease( target );
           }
           CFRelease( sample );
@@ -1199,6 +1748,8 @@ RCT_EXPORT_METHOD( render
 
     dispatch_group_notify( group, self->_queue, ^{
       free( transforms );
+      sharpFusionFree( fusion );
+      free( fusionTimes );
       CGColorSpaceRelease( sRGB );
       BOOL cancelled = ![self isCurrent:generation];
       if ( cancelled || appendFailed || reader.status == AVAssetReaderStatusFailed ) {

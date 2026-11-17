@@ -203,6 +203,24 @@ describe( "holding the background against the first frame", ( ) => {
     expect( worstError( walking ) ).toBeLessThan( 0.01 );
   } );
 
+  it( "stays on the background when a subject briefly outnumbers it", ( ) => {
+    // Seven tiles sit on a subject moving 4 px a frame against the
+    // background. Every third frame, motion blur costs four background tiles,
+    // leaving the subject the majority for that one frame.
+    const outnumbered = tiledAnalysis( ( k, i, step, reading ) => {
+      if ( k >= 9 ) {
+        return {
+          step: { x: step.x + 4, y: step.y },
+          reading: { x: reading.x + 4 * i, y: reading.y },
+        };
+      }
+      return i % 3 === 0 && k < 4
+        ? { step: null, reading: null }
+        : { step, reading };
+    } );
+    expect( worstError( outnumbered ) ).toBeLessThan( 0.01 );
+  } );
+
   it( "ignores readings that jump to the wrong match", ( ) => {
     // Every few frames, half the readings latch onto something 60 px away.
     const jumpy = tiledAnalysis( ( k, i, step, reading ) => ( i % 4 === 3 && k % 2 === 0

@@ -1920,6 +1920,9 @@ Share-location = Share Location
 Share-map = Share map
 # Preceded by the fragment # Preceded by the fragment, "By uploading your observation to iNaturalist, you can:"
 Share-your-observation-where-it-can-help-scientists = Share your observation, where it can help scientists across the world better understand biodiversity.
+# Toggle in the video stabilizer that fills in motion-blurred frames from
+# sharper frames around them
+Sharpen-blurred-frames = Sharpen blurred frames
 SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
 # Accessibility label for the button that decreases the hotspot route time limit
 Shorten-time-limit = Shorten time limit

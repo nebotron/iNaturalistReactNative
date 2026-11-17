@@ -208,6 +208,17 @@ const FIT_START_WIDTH = 48;
 const FIT_END_WIDTH = 3;
 const FIT_PASSES = 8;
 const FIT_REFERENCE_SIZE = 960;
+// A tile's agreement with the path is judged over the frames around it
+// (Gaussian, σ in frames), not one frame at a time. Otherwise, when the
+// layers in view move differently (a bird, the perch, a blurred background),
+// the fit can follow one layer in one frame and another in the next, which
+// shows as the stabilized picture vibrating while the camera moves.
+const FIT_PERSISTENCE = 4;
+// A frame whose tiles all disagree with their neighbours' consensus still
+// needs a step: its own tiles, judged on their own and at least this wide,
+// keep a small weight.
+const FIT_FALLBACK_WEIGHT = 1e-3;
+const FIT_FALLBACK_MIN_WIDTH = 6;
 
 const tukey = ( residual: number, width: number ) => (
   residual < width
@@ -223,14 +234,51 @@ const median = ( values: number[] ) => {
     : ( sorted[mid - 1] + sorted[mid] ) / 2;
 };
 
-const tileShifts = ( tiles: ( number[] | null )[] | undefined ): Point[] => ( tiles || [] )
-  .filter( ( v ): v is number[] => !!v && v.length === 2
-    && Number.isFinite( v[0] ) && Number.isFinite( v[1] ) )
-  .map( v => ( { x: v[0], y: v[1] } ) );
+// Per tile, its shift or null, keeping each tile at its place in the grid so
+// that a tile can be followed from frame to frame.
+const tileGrid = (
+  tiles: ( number[] | null )[] | undefined,
+  count: number,
+): ( Point | null )[] => (
+  Array.from( { length: count }, ( _v, k ) => {
+    const v = tiles?.[k];
+    return v && v.length === 2 && Number.isFinite( v[0] ) && Number.isFinite( v[1] )
+      ? { x: v[0], y: v[1] }
+      : null;
+  } )
+);
+
+const present = ( tiles: ( Point | null )[] ): Point[] => tiles.filter(
+  ( p ): p is Point => !!p,
+);
 
 // Whether the analysis measured tiles of every frame against the first frame.
 export const hasTiles = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
   && analysis.frames.every( frame => Array.isArray( frame.tr ) );
+
+// Each tile's squared residual (null where it wasn't measured), averaged
+// over its neighbouring frames with Gaussian weights, σ in frames.
+const persistentResiduals = ( squared: ( number | null )[][], sigma: number ) => {
+  const n = squared.length;
+  const radius = Math.ceil( 3 * sigma );
+  const kernel = Array.from(
+    { length: 2 * radius + 1 },
+    ( _v, j ) => Math.exp( -( ( j - radius ) ** 2 ) / ( 2 * sigma * sigma ) ),
+  );
+  return squared.map( ( row, i ) => row.map( ( value, k ) => {
+    if ( value === null ) return null;
+    let sum = 0;
+    let weight = 0;
+    for ( let j = Math.max( 0, i - radius ); j <= Math.min( n - 1, i + radius ); j += 1 ) {
+      const v = squared[j][k];
+      if ( v !== null ) {
+        sum += kernel[j - i + radius] * v;
+        weight += kernel[j - i + radius];
+      }
+    }
+    return sum / weight;
+  } ) );
+};
 
 // The camera path, as the shift from each frame onto the first, fitted to
 // every tile's measurements at once: each tile's step says how far the
@@ -238,25 +286,31 @@ export const hasTiles = ( analysis: VideoAnalysis ) => analysis.frames.length > 
 // first frame says where it is, with the readings weighted less so the steps
 // carry the frame-to-frame detail and the readings stop the drift. Iteratively
 // reweighted least squares with Tukey weights drops the tiles that disagree
-// with the path: on the subject, at another depth, or simply mismeasured.
+// with the path over the frames around them: on the subject, at another depth,
+// or simply mismeasured.
 export const fittedTilePath = ( analysis: VideoAnalysis ): Point[] => {
   const { frames } = analysis;
   const n = frames.length;
   if ( n === 0 ) return [];
   const scale = Math.max( analysis.width, analysis.height ) / FIT_REFERENCE_SIZE;
   const center = { x: analysis.width / 2, y: analysis.height / 2 };
+  const count = frames.reduce(
+    ( most, frame ) => Math.max( most, frame.ts?.length ?? 0, frame.tr?.length ?? 0 ),
+    0,
+  );
+  // One column per tile, and a last one for a frame with no tile measured,
+  // which falls back to the frame's own step.
   const steps = frames.map( ( frame, i ) => {
-    if ( i === 0 ) return [];
-    const tiles = tileShifts( frame.ts );
-    if ( tiles.length > 0 ) return tiles;
-    // No tile could be measured: fall back to the frame's own step.
-    if ( usableStep( frame, i ) ) {
+    if ( i === 0 ) return new Array<Point | null>( count + 1 ).fill( null );
+    const tiles = tileGrid( frame.ts, count );
+    let fallback: Point | null = null;
+    if ( present( tiles ).length === 0 && usableStep( frame, i ) ) {
       const s = shiftOf( frame.m as number[], center );
-      return [{ x: s.e, y: s.f }];
+      fallback = { x: s.e, y: s.f };
     }
-    return [];
+    return [...tiles, fallback];
   } );
-  const readings = frames.map( frame => tileShifts( frame.tr ) );
+  const readings = frames.map( frame => tileGrid( frame.tr, count ) );
 
   // Start from the median steps, chained.
   let path: Point[] = [];
@@ -264,31 +318,49 @@ export const fittedTilePath = ( analysis: VideoAnalysis ): Point[] => {
     const prev = i === 0
       ? { x: 0, y: 0 }
       : path[i - 1];
-    path.push( tiles.length > 0
-      ? { x: prev.x + median( tiles.map( p => p.x ) ), y: prev.y + median( tiles.map( p => p.y ) ) }
+    const measured = present( tiles );
+    path.push( measured.length > 0
+      ? {
+        x: prev.x + median( measured.map( p => p.x ) ),
+        y: prev.y + median( measured.map( p => p.y ) ),
+      }
       : prev );
   } );
 
   for ( let pass = 0; pass < FIT_PASSES; pass += 1 ) {
     const width = Math.max( FIT_END_WIDTH, FIT_START_WIDTH / 2 ** pass ) * scale;
+    const fallbackWidth = Math.max( width, FIT_FALLBACK_MIN_WIDTH * scale );
     const current = path;
+    const stepResiduals = steps.map( ( tiles, i ) => tiles.map( p => ( p && i > 0
+      ? ( p.x - ( current[i].x - current[i - 1].x ) ) ** 2
+        + ( p.y - ( current[i].y - current[i - 1].y ) ) ** 2
+      : null ) ) );
+    const readingResiduals = readings.map( ( tiles, i ) => tiles.map( p => ( p
+      ? ( p.x - current[i].x ) ** 2 + ( p.y - current[i].y ) ** 2
+      : null ) ) );
+    const stepAgreement = persistentResiduals( stepResiduals, FIT_PERSISTENCE );
+    const readingAgreement = persistentResiduals( readingResiduals, FIT_PERSISTENCE );
     // Normal equations of a chain: tridiagonal, solved in O(n).
     const diag = new Array( n ).fill( 1e-9 );
     const off = new Array( n ).fill( 0 ); // off[i] couples i − 1 and i
     const rhsX = new Array( n ).fill( 0 );
     const rhsY = new Array( n ).fill( 0 );
     for ( let i = 0; i < n; i += 1 ) {
-      readings[i].forEach( p => {
-        const w = FIT_READING_WEIGHT
-          * tukey( Math.hypot( p.x - current[i].x, p.y - current[i].y ), width );
+      readings[i].forEach( ( p, k ) => {
+        const r2 = readingAgreement[i][k];
+        if ( !p || r2 === null ) return;
+        const w = FIT_READING_WEIGHT * tukey( Math.sqrt( r2 ), width );
         diag[i] += w;
         rhsX[i] += w * p.x;
         rhsY[i] += w * p.y;
       } );
       if ( i > 0 ) {
-        const moved = { x: current[i].x - current[i - 1].x, y: current[i].y - current[i - 1].y };
-        steps[i].forEach( p => {
-          const w = tukey( Math.hypot( p.x - moved.x, p.y - moved.y ), width );
+        steps[i].forEach( ( p, k ) => {
+          const r2 = stepAgreement[i][k];
+          const own = stepResiduals[i][k];
+          if ( !p || r2 === null || own === null ) return;
+          const w = tukey( Math.sqrt( r2 ), width )
+            + FIT_FALLBACK_WEIGHT * tukey( Math.sqrt( own ), fallbackWidth );
           diag[i] += w;
           diag[i - 1] += w;
           off[i] -= w;

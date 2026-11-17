@@ -25,6 +25,8 @@ export interface VideoStabilizerState {
   cropCenter: { x: number; y: number } | null;
   zoom: number;
   avoidEdges: boolean;
+  // Sharp-frame fusion when rendering (see RenderOptions.sharpen).
+  sharpen: boolean;
   // Each result remembers the settings it was made with (see the screen's
   // analysisKey and previewKey), so a change makes it stale without a
   // separate invalidation step, and the screen reruns what's out of date.
@@ -55,6 +57,7 @@ const initialSession = {
   cropCenter: null,
   zoom: 1,
   avoidEdges: false,
+  sharpen: false,
   analysis: null,
   analysisKey: null,
   busy: null,

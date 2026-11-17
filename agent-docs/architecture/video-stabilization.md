@@ -28,7 +28,8 @@ frame *i* of the render.
    "hide edges" can change without re-reading the video.
 3. **Render**: the native pass warps each frame by its homography
    (`CIPerspectiveTransform`, or a plain affine when there's no perspective),
-   crops it, and writes H.264 with the audio passed through and the
+   crops it, optionally fuses it with its neighbours ("Sharpen blurred
+   frames", below), and writes H.264 with the audio passed through and the
    original's QuickTime metadata (date, location, make/model) copied. A
    low-resolution preview (640 px) and the export (1920 px long side) are
    rendered separately.
@@ -78,11 +79,18 @@ its long side and cut into a 4×4 grid of tiles. Every tile is registered by
 phase correlation (Hann window, normalized cross-power spectrum, a 5×5
 centroid around the peak for the fraction), with vDSP's DFT over the middle of
 the tile at the longest length it takes (f·2^k, f ∈ {1, 3, 5, 15}, so a
-240×132 tile correlates 240×128). Each tile is measured twice: onto the same
+240×132 tile correlates 240×128). The phase-correlation shift is then refined
+by up to 10 Gauss-Newton (Lucas-Kanade) steps on the pixels of that window:
+phase correlation whitens the spectrum, and the spectrum of a motion-blurred
+frame changes sign, so on the blurred frames of a fast pan its peak splits
+and misses by pixels. Each tile is measured twice: onto the same
 tile of the previous frame (`ts`), moved first by the last step, and onto the
 first frame (`tr`), moved first by the running estimate of the frame's shift
 onto it. Tiles with no texture (Laplacian standard deviation under 1 gray
-level) or that the move pushes more than 5% out of the frame report null. The
+level), with no structure once averaged over 4×4 pixels (under 2: sensor
+and compression noise alone gives an out-of-focus background a Laplacian
+deviation of 2–3, and such a tile reports no motion or lags the camera), or
+that the move pushes more than 5% out of the frame report null. The
 running estimate, chained medians corrected by the median reading, only
 places the tiles; it's also sent as `m`/`r`.
 
@@ -91,7 +99,13 @@ iteratively reweighted least squares, where each tile's step says how far the
 path moved since the previous frame and each reading (weighted 0.1) says where
 it is. Tukey weights, 48 px wide on the first pass and narrowing to 3 px (in
 960-px terms), drop the tiles that disagree with the path: tiles on a moving
-subject, on something at another depth, or simply mismeasured. The steps
+subject, on something at another depth, or simply mismeasured. A tile's
+disagreement is averaged over the frames around it (Gaussian, σ 4 frames)
+before it's weighted, so the fit can't follow the bird in one frame and the
+perch in the next when they move differently; that switching showed as the
+picture vibrating while the camera moved. A small weight from each frame's
+own residuals keeps a frame whose tiles all disagree with their neighbours
+solvable. The steps
 carry the frame-to-frame detail and the readings stop the drift. The normal
 equations are tridiagonal, so each pass is O(n). A frame with no tile
 measured falls back to its own step. Pans and walks show black edges by
@@ -103,6 +117,26 @@ model, software) to QuickTime keys. Saving goes through the native
 `saveToPhotos`, which sets the Photos asset's creation date (moved on by the
 start time) and location from the original, rather than leaving Photos to
 date it when it was saved.
+
+### Sharpen blurred frames
+
+A switch on the screen (off by default; `sharpen` in the store and in
+`RenderOptions`). Even a perfect lock leaves a handheld pan looking shaky:
+some frames are sharp and some smeared, the smear pointing a new way each
+frame, and once the background is held still a stationary perch flickers
+between the two. The render's `SharpFusion` (plain C between the `BEGIN SHARP
+FUSION` / `END SHARP FUSION` markers) keeps the last 7 stabilized frames and
+writes each frame once the 3 after it are in: every pixel is a weighted mean
+of the frames within 3 of it, weighted by local sharpness (the squared
+Laplacian, averaged, then squared again so the sharpest frame dominates), by
+time, and by whether the frame's low-passed picture agrees with the output
+frame's there (within 3–8 gray levels, eroded and blurred). Where the
+subject moved, neighbours disagree and the frame's own pixel stays. The
+sharpness and agreement maps are computed about 480 px on their long side and
+interpolated up; the per-neighbour maps and the rows run in parallel. Empty
+edges are never filled. On the test clip it halves the frame-to-frame change
+on the static perch. Rendering is slower, and a subject that's itself blurred
+stays blurred.
 
 ### Measuring the approaches
 

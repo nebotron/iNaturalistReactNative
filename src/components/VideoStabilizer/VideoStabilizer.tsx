@@ -61,12 +61,13 @@ interface Choices {
   zoom: number;
   avoidEdges: boolean;
   cropCenter: Point | null;
+  sharpen: boolean;
 }
 
 const settingsFor = (
   analysis: VideoAnalysis,
   maxDimension: number,
-  choices: Choices,
+  choices: Pick<Choices, "zoom" | "avoidEdges" | "cropCenter">,
 ): StabilizationSettings => {
   const size = outputSize( analysis.width, analysis.height, maxDimension );
   return {
@@ -85,7 +86,7 @@ const VideoStabilizer = ( ) => {
   const { t } = useTranslation( );
   const { width: windowWidth } = useWindowDimensions( );
   const {
-    videoPath, info, start, cropCenter, zoom, avoidEdges, analysis, analysisKey,
+    videoPath, info, start, cropCenter, zoom, avoidEdges, sharpen, analysis, analysisKey,
     busy, previewUri, previewKey, previewStart, previewCrop, exportUri, exportKey, set,
   } = useVideoStabilizer( );
   // Set while a zoom rectangle is being dragged, so the page doesn't scroll.
@@ -121,7 +122,9 @@ const VideoStabilizer = ( ) => {
   const currentAnalysis = analysis && analysisKey === wantedAnalysisKey
     ? analysis
     : null;
-  const choices: Choices = { zoom, avoidEdges, cropCenter };
+  const choices: Choices = {
+    zoom, avoidEdges, cropCenter, sharpen,
+  };
   const wantedPreviewKey = currentAnalysis
     ? JSON.stringify( [wantedAnalysisKey, choices] )
     : null;
@@ -211,6 +214,7 @@ const VideoStabilizer = ( ) => {
         outputWidth: settings.outputWidth,
         outputHeight: settings.outputHeight,
         preview,
+        sharpen: choices.sharpen,
         job,
       } ),
       result => {
@@ -477,6 +481,13 @@ const VideoStabilizer = ( ) => {
         {plan?.edgesVisible && avoidEdges && (
           <Body3 className="mt-2">{t( "Some-frames-still-show-empty-edges" )}</Body3>
         )}
+        <SwitchRow
+          classNames="mt-3"
+          label={t( "Sharpen-blurred-frames" )}
+          value={sharpen}
+          disabled={disabled}
+          onValueChange={value => set( { sharpen: value } )}
+        />
 
         {!exporting && busyBar}
         <Button

@@ -55,6 +55,12 @@ const importVideo = async ( user: ReturnType<typeof userEvent.setup> ) => {
   await waitFor( ( ) => expect( mockAnalyze ).toHaveBeenCalled( ) );
 };
 
+// The preview is rendered and on screen, ready to pick a crop on.
+const previewShown = ( ) => waitFor( ( ) => {
+  expect( useVideoStabilizer.getState( ).previewCrop ).not.toBeNull( );
+  expect( useVideoStabilizer.getState( ).busy ).toBeNull( );
+} );
+
 describe( "VideoStabilizer", ( ) => {
   beforeAll( async ( ) => {
     await initI18next( );
@@ -93,9 +99,7 @@ describe( "VideoStabilizer", ( ) => {
       INPUT,
       expect.objectContaining( { preview: true } ),
     ) );
-    expect( await screen.findByText(
-      i18next.t( "Motion-analyzed-across-x-frames", { count: 3 } ),
-    ) ).toBeVisible( );
+    await previewShown( );
 
     await user.press( screen.getByText( i18next.t( "EXPORT" ) ) );
     await waitFor( ( ) => expect( mockRender ).toHaveBeenCalledWith(
@@ -122,14 +126,38 @@ describe( "VideoStabilizer", ( ) => {
     } ) ).not.toBeChecked( );
   } );
 
+  it( "renders with sharp-frame fusion only once it's switched on", async ( ) => {
+    const user = userEvent.setup( );
+    renderComponent( <VideoStabilizer /> );
+    await importVideo( user );
+    await previewShown( );
+    expect( mockRender ).toHaveBeenLastCalledWith(
+      INPUT,
+      expect.objectContaining( { preview: true, sharpen: false } ),
+    );
+    const toggle = screen.getByRole( "switch", { name: i18next.t( "Sharpen-blurred-frames" ) } );
+    expect( toggle ).not.toBeChecked( );
+
+    await user.press( toggle );
+    await waitFor( ( ) => expect( mockRender ).toHaveBeenLastCalledWith(
+      INPUT,
+      expect.objectContaining( { preview: true, sharpen: true } ),
+    ) );
+    await previewShown( );
+    await user.press( screen.getByText( i18next.t( "EXPORT" ) ) );
+    await waitFor( ( ) => expect( mockRender ).toHaveBeenLastCalledWith(
+      INPUT,
+      expect.objectContaining( { preview: false, sharpen: true } ),
+    ) );
+  } );
+
   it( "sets the crop from two fingers at opposite corners of the stabilized preview", async ( ) => {
     const user = userEvent.setup( );
     renderComponent( <VideoStabilizer /> );
     await importVideo( user );
-    expect( await screen.findByText(
-      i18next.t( "Motion-analyzed-across-x-frames", { count: 3 } ),
-    ) ).toBeVisible( );
-    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
+    await previewShown( );
+    const zoom = ( ) => useVideoStabilizer.getState( ).zoom;
+    expect( zoom( ) ).toBe( 1 );
 
     const overlay = screen.getByAccessibilityHint(
       i18next.t( "Drag-two-fingers-to-set-opposite-corners-of-the-crop" ),
@@ -149,7 +177,7 @@ describe( "VideoStabilizer", ( ) => {
     fireEvent( overlay, "touchMove", touches( [width / 2, height / 4] ) );
     expect( scrollEnabled( ) ).toBe( true );
     fireEvent( overlay, "touchEnd", touches( ) );
-    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
+    expect( zoom( ) ).toBe( 1 );
 
     // The fingers start close together and drag apart to the corners of the
     // right half's middle: a window half the preview across, centered three
@@ -168,13 +196,13 @@ describe( "VideoStabilizer", ( ) => {
     fireEvent( overlay, "touchEnd", touches( [width, height * 0.75] ) );
 
     expect( scrollEnabled( ) ).toBe( true );
-    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "2.0" } ) ) ).toBeVisible( );
+    expect( zoom( ) ).toBeCloseTo( 2, 1 );
     const { cropCenter } = useVideoStabilizer.getState( );
     expect( cropCenter?.x ).toBeCloseTo( 0.75, 1 );
     expect( cropCenter?.y ).toBeCloseTo( 0.5, 1 );
 
     await user.press( screen.getByText( i18next.t( "RESET-ZOOM" ) ) );
-    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
+    expect( zoom( ) ).toBe( 1 );
     expect( useVideoStabilizer.getState( ).cropCenter ).toBeNull( );
   } );
 } );
