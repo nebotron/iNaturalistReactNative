@@ -1,4 +1,3 @@
-import FineSlider from "components/MediaViewer/FineSlider";
 import {
   Body2,
   Body3,
@@ -56,11 +55,6 @@ const MAX_ZOOM = 6;
 let activeJob: { id: number; key: string } | null = null;
 let jobCount = 0;
 
-const formatTime = ( seconds: number ) => {
-  const minutes = Math.floor( seconds / 60 );
-  return `${minutes}:${( seconds - minutes * 60 ).toFixed( 1 ).padStart( 4, "0" )}`;
-};
-
 const percent = ( progress: number ) => Math.round( progress * 100 );
 
 interface Choices {
@@ -92,10 +86,8 @@ const VideoStabilizer = ( ) => {
   const { width: windowWidth } = useWindowDimensions( );
   const {
     videoPath, info, start, cropCenter, zoom, avoidEdges, analysis, analysisKey,
-    busy, previewUri, previewKey, previewStart, previewCrop, exportUri, exportKey, set, setStart,
+    busy, previewUri, previewKey, previewStart, previewCrop, exportUri, exportKey, set,
   } = useVideoStabilizer( );
-  // Slider positions while dragging; settings are only committed on release.
-  const [startDraft, setStartDraft] = useState<number | null>( null );
   // Set while a zoom rectangle is being dragged, so the page doesn't scroll.
   const [pinchingCrop, setPinchingCrop] = useState( false );
 
@@ -313,11 +305,6 @@ const VideoStabilizer = ( ) => {
     } );
   };
 
-  const commitStart = ( seconds: number ) => {
-    setStartDraft( null );
-    if ( videoPath ) setStart( seconds );
-  };
-
   const saveToPhotos = async ( ) => {
     if ( !currentExport || !videoPath ) return;
     try {
@@ -394,11 +381,6 @@ const VideoStabilizer = ( ) => {
 
   const aspect = info.width / info.height;
   const disabled = exporting;
-  const source = currentAnalysis && {
-    width: Math.round( currentAnalysis.width / ( plan?.zoom ?? zoom ) ),
-    height: Math.round( currentAnalysis.height / ( plan?.zoom ?? zoom ) ),
-  };
-  const exportSize = outputSize( info.width, info.height, EXPORT_MAX_DIMENSION );
   const previewIsCurrent = !!previewUri && previewKey === wantedPreviewKey;
 
   // The original above the stabilized preview, each the full screen width,
@@ -471,32 +453,12 @@ const VideoStabilizer = ( ) => {
         contentContainerClassName="p-4 pb-6"
         scrollEnabled={!pinchingCrop}
       >
-        <View className="flex-row items-center">
-          <Body2 className="w-[110px]">
-            {t( "Starts-at-x", { time: formatTime( startDraft ?? start ) } )}
-          </Body2>
-          <FineSlider
-            accessibilityLabel={t( "Start-time" )}
-            disabled={disabled}
-            minimumValue={0}
-            maximumValue={Math.max( 0.1, info.duration - 0.5 )}
-            value={startDraft ?? start}
-            onChange={setStartDraft}
-            onComplete={commitStart}
-          />
-        </View>
-
-        <Heading4 className="mt-6 mb-2">{t( "CROP" )}</Heading4>
-        <View className="flex-row items-center">
-          <Body2 className="flex-1">
-            {t( "Crop-zoom-x", { zoom: zoom.toFixed( 1 ) } )}
-          </Body2>
-          <Button
-            text={t( "RESET-ZOOM" )}
-            disabled={disabled || ( zoom === 1 && !cropCenter )}
-            onPress={( ) => set( { zoom: 1, cropCenter: null } )}
-          />
-        </View>
+        <Heading4 className="mb-2">{t( "CROP" )}</Heading4>
+        <Button
+          text={t( "RESET-ZOOM" )}
+          disabled={disabled || ( zoom === 1 && !cropCenter )}
+          onPress={( ) => set( { zoom: 1, cropCenter: null } )}
+        />
         <Body3 className="mt-2">
           {t( "Drag-two-fingers-on-the-stabilized-preview-to-set-opposite-corners" )}
         </Body3>
@@ -515,23 +477,8 @@ const VideoStabilizer = ( ) => {
         {plan?.edgesVisible && avoidEdges && (
           <Body3 className="mt-2">{t( "Some-frames-still-show-empty-edges" )}</Body3>
         )}
-        {source && (
-          <Body3 className="mt-2">
-            {t( "Output-x-by-y-from-source-x-by-y", {
-              width: exportSize.width,
-              height: exportSize.height,
-              sourceWidth: source.width,
-              sourceHeight: source.height,
-            } )}
-          </Body3>
-        )}
 
         {!exporting && busyBar}
-        {currentAnalysis && !busy && (
-          <Body3 className="mt-2">
-            {t( "Motion-analyzed-across-x-frames", { count: currentAnalysis.frames.length } )}
-          </Body3>
-        )}
         <Button
           className="mt-6"
           level="primary"

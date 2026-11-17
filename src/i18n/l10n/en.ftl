@@ -455,8 +455,6 @@ CROP-PHOTO = Crop Photo
 # Accessibility label for the button that crops a photo to a square of the
 # upload size, e.g. "Crop to 2048 × 2048"; size is in pixels
 Crop-to-size-by-size = Crop to { $size } × { $size }
-# Label for how far the video stabilizer crops in, e.g. "Zoom 2.0×"
-Crop-zoom-x = Zoom { $zoom }×
 # Label for current device location in Wildlife Hotspots tool
 Current-location = Current location
 DATA-QUALITY = DATA QUALITY
@@ -1239,12 +1237,6 @@ Most-faved = Most faved
 Most-Observed-Default = Most Observed (Default)
 # Accessibility label for the thumbnail of the last photo taken in the camera
 Most-recent-photo = Most recent photo
-# Shown once a video's motion has been measured
-Motion-analyzed-across-x-frames =
-    { $count ->
-        [one] Motion analyzed across 1 frame
-       *[other] Motion analyzed across { $count } frames
-    }
 must-be-captive-cultivated = must be captive / cultivated
 must-be-georeferenced = must be georeferenced
 must-be-identified = must be identified
@@ -1549,8 +1541,6 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 # Tab on notifications showing notifications about content created by others.
 # Should be 16 characters or fewer or it will be ellipsized.
 OTHERS--notifications = OTHERS
-# Size of the stabilized video and of the part of the original it's cropped from, in pixels
-Output-x-by-y-from-source-x-by-y = Output { $width } × { $height }, from about { $sourceWidth } × { $sourceHeight } pixels of the original.
 Overwrite-saved-filter = Overwrite saved filter
 # Letter on the map marker where a route to a wildlife hotspot parks
 Parking-map-marker = P
@@ -2042,11 +2032,7 @@ START-LISTENING = START LISTENING
 # Placeholder text for the start location input in the Wildlife Hotspots tool
 Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
-# Accessibility label for the slider that chooses where the stabilized video starts
-Start-time = Start time
 Start-upload = Start upload
-# Where the stabilized video starts, e.g. "Start 0:03.2"
-Starts-at-x = Start { $time }
 # Accessibility hint for button that starts recording a sound
 Starts-recording-sound = Starts recording sound
 Stay-on-this-screen = Stay on this screen while your location loads.
