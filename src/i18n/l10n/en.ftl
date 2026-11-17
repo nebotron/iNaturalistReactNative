@@ -645,8 +645,6 @@ DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
 # Maximum total driving time chosen for planning a route through wildlife hotspots
-# Note under the video stabilizer's crop settings explaining how to zoom in
-Drag-a-rectangle-over-the-stabilized-preview-to-zoom-in = Drag a rectangle over the stabilized preview to zoom in.
 Drive-time-limit =
     Max drive: { $hours ->
         [0] { $minutes } min
@@ -2165,6 +2163,8 @@ Total-drive-time =
     }
 # Header above the total storage used by the app on the storage usage screen
 TOTAL-STORAGE-USED = TOTAL STORAGE USED
+# Note under the video stabilizer's crop settings explaining how to zoom in
+Touch-and-hold-the-stabilized-preview-then-drag-a-rectangle-to-zoom-in = Touch and hold the stabilized preview, then drag a rectangle to zoom in.
 # Explore filter option for an observation's evidence of presence annotation
 Track--evidence = Track
 # Switch label for enabling continuous background location tracking
@@ -2887,5 +2887,5 @@ Zoom-to-current-location = Zoom to current location
 zoom-x = { $zoom }×
 # Note that the video stabilizer zoomed in further than asked, to hide black edges
 Zoomed-to-x-to-hide-empty-edges = Zoomed to { $zoom }× to hide black edges.
-# Accessibility hint for the stabilized video preview, which zooms to a rectangle dragged over it
-Zooms-to-the-rectangle-dragged-over-the-video = Zooms to the rectangle dragged over the video.
+# Accessibility hint for the stabilized video preview, which zooms to a rectangle drawn over it after touching and holding
+Zooms-to-the-rectangle-drawn-after-touching-and-holding = Zooms to the rectangle dragged out after touching and holding the video.

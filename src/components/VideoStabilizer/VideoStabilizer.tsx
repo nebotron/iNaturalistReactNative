@@ -638,7 +638,7 @@ const VideoStabilizer = ( ) => {
           />
         </View>
         <Body3 className="mt-2">
-          {t( "Drag-a-rectangle-over-the-stabilized-preview-to-zoom-in" )}
+          {t( "Touch-and-hold-the-stabilized-preview-then-drag-a-rectangle-to-zoom-in" )}
         </Body3>
         <SwitchRow
           classNames="mt-3"

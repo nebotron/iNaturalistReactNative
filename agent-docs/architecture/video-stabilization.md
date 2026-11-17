@@ -62,7 +62,10 @@ at which every frame's crop window stays inside its source frame.
 
 **Picking the crop.** There's no zoom slider: the user drags a rectangle
 (kept to the video's aspect) over the stabilized (lower) video of the
-comparison (`ZoomRectangle`); the page stops scrolling while it's drawn. When a preview finishes, the store keeps its
+comparison (`ZoomRectangle`). The preview is the full screen width, so a
+plain swipe over it still scrolls the page: a rectangle starts only once the
+finger has rested for `HOLD_MS` without moving, and only then does the page
+stop scrolling. When a preview finishes, the store keeps its
 `previewCrop`: the corners of the window it shows, on the start frame, and
 the zoom it was rendered at (after "hide black edges"). The rectangle's
 center is mapped through those corners to a new crop center on the start

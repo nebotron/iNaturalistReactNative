@@ -1,11 +1,12 @@
 import {
-  fireEvent, screen, userEvent, waitFor,
+  act, fireEvent, screen, userEvent, waitFor,
 } from "@testing-library/react-native";
 import VideoStabilizer from "components/VideoStabilizer/VideoStabilizer";
+import { HOLD_MS } from "components/VideoStabilizer/ZoomRectangle";
 import initI18next from "i18n/initI18next";
 import i18next from "i18next";
 import React from "react";
-import { StyleSheet } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 import useVideoStabilizer from "stores/videoStabilizer";
 import { renderComponent } from "tests/helpers/render";
 
@@ -137,7 +138,7 @@ describe( "VideoStabilizer", ( ) => {
     expect( screen.getByText( i18next.t( "Tap-the-subject-to-follow-it" ) ) ).toBeVisible( );
   } );
 
-  it( "zooms to a rectangle dragged over the stabilized preview", async ( ) => {
+  it( "zooms to a rectangle drawn after touching and holding the stabilized preview", async ( ) => {
     const user = userEvent.setup( );
     renderComponent( <VideoStabilizer /> );
     await importVideo( user );
@@ -147,19 +148,34 @@ describe( "VideoStabilizer", ( ) => {
     expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
 
     const overlay = screen.getByAccessibilityHint(
-      i18next.t( "Zooms-to-the-rectangle-dragged-over-the-video" ),
+      i18next.t( "Zooms-to-the-rectangle-drawn-after-touching-and-holding" ),
     );
     const { width, height } = StyleSheet.flatten( overlay.props.style );
     const at = ( x: number, y: number ) => ( {
       nativeEvent: { locationX: x, locationY: y },
       touchHistory: { touchBank: [] },
     } );
+    const scrollEnabled = ( ) => screen.UNSAFE_getByType( ScrollView ).props.scrollEnabled;
+
+    // A swipe that moves before the hold elapses is a scroll, not a rectangle.
+    fireEvent( overlay, "responderGrant", at( width / 2, height / 4 ) );
+    expect( overlay.props.onResponderTerminationRequest( ) ).toBe( true );
+    fireEvent( overlay, "responderMove", at( width / 2, height ) );
+    await act( ( ) => new Promise( resolve => { setTimeout( resolve, HOLD_MS + 50 ); } ) );
+    fireEvent( overlay, "responderMove", at( width, height ) );
+    fireEvent( overlay, "responderRelease", at( width, height ) );
+    expect( scrollEnabled( ) ).toBe( true );
+    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
+
     // Half the width, so 2×, centered three quarters of the way across.
     // The drag runs past the bottom; the box keeps the video's aspect.
     fireEvent( overlay, "responderGrant", at( width / 2, height / 4 ) );
+    await act( ( ) => new Promise( resolve => { setTimeout( resolve, HOLD_MS + 50 ); } ) );
+    expect( scrollEnabled( ) ).toBe( false );
     fireEvent( overlay, "responderMove", at( width, height ) );
     fireEvent( overlay, "responderRelease", at( width, height ) );
 
+    expect( scrollEnabled( ) ).toBe( true );
     expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "2.0" } ) ) ).toBeVisible( );
     const { cropCenter } = useVideoStabilizer.getState( );
     expect( cropCenter?.x ).toBeCloseTo( 0.75, 1 );

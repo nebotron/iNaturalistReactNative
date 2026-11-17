@@ -1,5 +1,5 @@
 import { View } from "components/styledComponents";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { GestureResponderEvent } from "react-native";
 import { StyleSheet } from "react-native";
 import Svg, { Rect } from "react-native-svg";
@@ -7,9 +7,12 @@ import type { Point } from "sharedHelpers/videoStabilization";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
-// A transparent layer over the stabilized preview. Dragging draws a rectangle
-// with the video's aspect ratio from where the finger went down; letting go
-// reports it, normalized to the preview, as the window to zoom to.
+// A transparent layer over the stabilized preview. Touching and holding, then
+// dragging, draws a rectangle with the video's aspect ratio from where the
+// finger went down; letting go reports it, normalized to the preview, as the
+// window to zoom to. The preview is the full screen width, so a plain swipe
+// has to stay a scroll: only a finger held still for HOLD_MS starts a
+// rectangle, and the page stops scrolling only from then on.
 
 export interface ZoomWindow {
   center: Point;
@@ -29,6 +32,10 @@ interface Props {
 
 // A shorter drag is taken as a stray touch rather than a rectangle.
 const MIN_SIDE_PX = 12;
+// How long the finger has to rest, within SLOP_PX of where it went down,
+// before a drag draws a rectangle instead of scrolling the page.
+export const HOLD_MS = 250;
+const SLOP_PX = 10;
 
 const styles = StyleSheet.create( {
   overlay: { left: 0, position: "absolute", top: 0 },
@@ -53,7 +60,16 @@ const ZoomRectangle = ( {
   const { t } = useTranslation( );
   const [anchor, setAnchor] = useState<Point | null>( null );
   const [box, setBox] = useState<Box | null>( null );
+  // Set once the hold has elapsed; until then the touch may become a scroll.
+  const [drawing, setDrawing] = useState( false );
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>( null );
   const aspect = width / height;
+
+  const cancelHold = ( ) => {
+    if ( holdTimer.current ) clearTimeout( holdTimer.current );
+    holdTimer.current = null;
+  };
+  useEffect( ( ) => cancelHold, [] );
 
   const pointOf = ( event: GestureResponderEvent ): Point => ( {
     x: clamp( event.nativeEvent.locationX, width ),
@@ -88,13 +104,17 @@ const ZoomRectangle = ( {
   };
 
   const clear = ( ) => {
+    cancelHold( );
     setAnchor( null );
     setBox( null );
-    onDrawingChange?.( false );
+    if ( drawing ) {
+      setDrawing( false );
+      onDrawingChange?.( false );
+    }
   };
 
   const finish = ( ) => {
-    if ( box && box.width >= MIN_SIDE_PX ) {
+    if ( drawing && box && box.width >= MIN_SIDE_PX ) {
       onWindowPicked( {
         center: {
           x: ( box.x + box.width / 2 ) / width,
@@ -110,19 +130,33 @@ const ZoomRectangle = ( {
     <View
       accessible
       accessibilityLabel={t( "Stabilized--video-stabilizer" )}
-      accessibilityHint={t( "Zooms-to-the-rectangle-dragged-over-the-video" )}
+      accessibilityHint={t( "Zooms-to-the-rectangle-drawn-after-touching-and-holding" )}
       style={[styles.overlay, { width, height }]}
       onStartShouldSetResponder={( ) => !disabled}
-      onMoveShouldSetResponder={( ) => !disabled}
-      onResponderTerminationRequest={( ) => false}
+      // Before the hold has elapsed the touch is the scroll view's to take.
+      onResponderTerminationRequest={( ) => !drawing}
       onResponderGrant={event => {
         const point = pointOf( event );
         setAnchor( point );
         setBox( null );
-        onDrawingChange?.( true );
+        cancelHold( );
+        holdTimer.current = setTimeout( ( ) => {
+          holdTimer.current = null;
+          setDrawing( true );
+          onDrawingChange?.( true );
+        }, HOLD_MS );
       }}
       onResponderMove={event => {
-        if ( anchor ) setBox( boxTo( anchor, pointOf( event ) ) );
+        if ( !anchor ) return;
+        const point = pointOf( event );
+        if ( drawing ) {
+          setBox( boxTo( anchor, point ) );
+        } else if (
+          Math.hypot( point.x - anchor.x, point.y - anchor.y ) > SLOP_PX
+        ) {
+          // Moved before the hold elapsed: a swipe, which scrolls the page.
+          clear( );
+        }
       }}
       onResponderRelease={finish}
       onResponderTerminate={clear}
