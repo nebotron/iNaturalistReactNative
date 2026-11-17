@@ -43,6 +43,11 @@ export interface VideoStabilizerState {
   // The start time the preview was rendered from, so the original plays
   // beside it from the same frame even while a newer preview is on its way.
   previewStart: number;
+  // The window the preview shows: its corners (top-left, top-right,
+  // bottom-right, bottom-left), normalized, on the first source frame, and
+  // the zoom it was rendered at. A rectangle dragged over the preview is
+  // mapped through this to a new crop center and zoom.
+  previewCrop: { corners: { x: number; y: number }[]; zoom: number } | null;
   exportUri: string | null;
   exportKey: string | null;
   set: ( partial: Partial<VideoStabilizerState> ) => void;
@@ -67,6 +72,7 @@ const initialSession = {
   previewUri: null,
   previewKey: null,
   previewStart: 0,
+  previewCrop: null,
   exportUri: null,
   exportKey: null,
 };

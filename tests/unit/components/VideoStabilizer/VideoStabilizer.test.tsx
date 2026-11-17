@@ -1,8 +1,11 @@
-import { screen, userEvent, waitFor } from "@testing-library/react-native";
+import {
+  fireEvent, screen, userEvent, waitFor,
+} from "@testing-library/react-native";
 import VideoStabilizer from "components/VideoStabilizer/VideoStabilizer";
 import initI18next from "i18n/initI18next";
 import i18next from "i18next";
 import React from "react";
+import { StyleSheet } from "react-native";
 import useVideoStabilizer from "stores/videoStabilizer";
 import { renderComponent } from "tests/helpers/render";
 
@@ -27,7 +30,7 @@ jest.mock( "sharedHelpers/videoStabilizerNative", ( ) => ( {
   renderStabilizedVideo: ( ...args: unknown[] ) => mockRender( ...args ),
   playVideo: ( ...args: unknown[] ) => mockPlay( ...args ),
   saveStabilizedVideo: ( ...args: unknown[] ) => mockSave( ...args ),
-  VideoStabilizerComparison: null,
+  VideoStabilizerComparison: jest.requireActual( "react-native" ).View,
 } ) );
 
 jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
@@ -131,5 +134,38 @@ describe( "VideoStabilizer", ( ) => {
       expect.objectContaining( { reference: true } ),
     ) );
     expect( mockAnalyze ).toHaveBeenCalledTimes( 2 );
+  } );
+
+  it( "zooms to a rectangle dragged over the stabilized preview", async ( ) => {
+    const user = userEvent.setup( );
+    renderComponent( <VideoStabilizer /> );
+    await importVideo( user );
+    expect( await screen.findByText(
+      i18next.t( "Motion-analyzed-across-x-frames", { count: 3 } ),
+    ) ).toBeVisible( );
+    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
+
+    const overlay = screen.getByAccessibilityHint(
+      i18next.t( "Zooms-to-the-rectangle-dragged-over-the-video" ),
+    );
+    const { width, height } = StyleSheet.flatten( overlay.props.style );
+    const at = ( x: number, y: number ) => ( {
+      nativeEvent: { locationX: x, locationY: y },
+      touchHistory: { touchBank: [] },
+    } );
+    // Half the width, so 2×, centered three quarters of the way across.
+    // The drag runs past the bottom; the box keeps the video's aspect.
+    fireEvent( overlay, "responderGrant", at( width / 2, height / 4 ) );
+    fireEvent( overlay, "responderMove", at( width, height ) );
+    fireEvent( overlay, "responderRelease", at( width, height ) );
+
+    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "2.0" } ) ) ).toBeVisible( );
+    const { cropCenter } = useVideoStabilizer.getState( );
+    expect( cropCenter?.x ).toBeCloseTo( 0.75, 1 );
+    expect( cropCenter?.y ).toBeCloseTo( 0.5, 1 );
+
+    await user.press( screen.getByText( i18next.t( "RESET-ZOOM" ) ) );
+    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
+    expect( useVideoStabilizer.getState( ).cropCenter ).toBeNull( );
   } );
 } );

@@ -239,7 +239,6 @@
   "CROP-LOG": "CROP LOG",
   "CROP-PHOTO": "Crop Photo",
   "Crop-to-size-by-size": "Crop to { $size } × { $size }",
-  "Crop-zoom": "Crop zoom",
   "Crop-zoom-x": "Zoom { $zoom }×",
   "Current-location": "Current location",
   "DATA-QUALITY": "DATA QUALITY",
@@ -344,6 +343,7 @@
   "Download-for-offline-use": "Download for offline use",
   "DOWNLOAD-RESULTS": "DOWNLOAD RESULTS",
   "Downloading-X-observations": "Downloading { $count }…",
+  "Drag-a-rectangle-over-the-stabilized-preview-to-zoom-in": "Drag a rectangle over the stabilized preview to zoom in.",
   "Drive-time-limit": "Max drive: { $hours ->\n  [0] { $minutes } min\n *[other] { $hours } h { $minutes } min\n}",
   "Drive-time-limit-short": "{ $hours ->\n  [0] { $minutes } min\n *[other] { $hours } h { $minutes } min\n}",
   "Duplicate-photo-indicator": "Previously uploaded photo",
@@ -1049,6 +1049,7 @@
   "RESET-SEARCH": "RESET SEARCH",
   "RESET-SOUND-header": "RESET SOUND?",
   "Reset-verb": "Reset",
+  "RESET-ZOOM": "RESET ZOOM",
   "RESTART-APP": "RESTART APP",
   "Restore": "Restore",
   "Reveal": "Reveal",
@@ -1620,5 +1621,6 @@
   "Zoom-in-to-hide-empty-edges": "Zoom in to hide black edges",
   "Zoom-to-current-location": "Zoom to current location",
   "zoom-x": "{ $zoom }×",
-  "Zoomed-to-x-to-hide-empty-edges": "Zoomed to { $zoom }× to hide black edges."
+  "Zoomed-to-x-to-hide-empty-edges": "Zoomed to { $zoom }× to hide black edges.",
+  "Zooms-to-the-rectangle-dragged-over-the-video": "Zooms to the rectangle dragged over the video."
 }
