@@ -132,12 +132,4 @@ describe( "VideoStabilizer", ( ) => {
     ) );
     expect( mockAnalyze ).toHaveBeenCalledTimes( 2 );
   } );
-
-  it( "plays the original video", async ( ) => {
-    const user = userEvent.setup( );
-    renderComponent( <VideoStabilizer /> );
-    await importVideo( user );
-    await user.press( screen.getByText( i18next.t( "PLAY-ORIGINAL" ) ) );
-    expect( mockPlay ).toHaveBeenCalledWith( INPUT );
-  } );
 } );

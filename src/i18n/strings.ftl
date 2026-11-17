@@ -1572,8 +1572,6 @@ Plants = Plants
 PLAY = PLAY
 # Accessibility label for a button that plays audio
 Play--audio = Play
-# Button that plays the video as it was imported, before stabilizing
-PLAY-ORIGINAL = PLAY ORIGINAL
 Play-species-identification-game = Play species identification game
 Plays-the-clip = Plays the clip.
 Plays-the-sound = Plays the sound.

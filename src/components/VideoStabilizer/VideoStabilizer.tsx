@@ -571,12 +571,6 @@ const VideoStabilizer = ( ) => {
           </Body3>
         )}
         <Button
-          className="mt-4"
-          text={t( "PLAY-ORIGINAL" )}
-          onPress={( ) => playVideo( videoPath )}
-        />
-
-        <Button
           className="mt-6"
           level="primary"
           text={t( "EXPORT" )}
