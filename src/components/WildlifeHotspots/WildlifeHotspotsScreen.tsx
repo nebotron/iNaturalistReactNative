@@ -866,7 +866,14 @@ const WildlifeHotspotsScreen = ( {
   const handleOpenRouteInGoogleMaps = useCallback( () => {
     const routeStops = stops.filter( s => s.point );
     if ( routeStops.length < 2 ) return;
-    const toParam = ( s: Stop ) => `${s.point?.latitude},${s.point?.longitude}`;
+    // Searched stops go as their address so Google Maps shows the named place
+    // rather than a dropped pin; hotspots and current location have no address
+    // and keep their coordinates.
+    const toParam = ( s: Stop ) => encodeURIComponent(
+      s.text && !s.fromHotspot && s.text !== t( "Current-location" )
+        ? s.text
+        : `${s.point?.latitude},${s.point?.longitude}`,
+    );
     // Omitting the origin makes Google Maps start from the device's live location
     const origin = routeStops[0].text === t( "Current-location" )
       ? ""
