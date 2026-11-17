@@ -431,6 +431,32 @@ const WildlifeHotspotsScreen = ( {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, routeCoords, hotspots] );
 
+  // When a newly selected hotspot's route arrives and part of it is off
+  // screen, the viewport moves to show the whole route; otherwise it stays put.
+  useEffect( () => {
+    if ( hotspotRouteCoords.length < 2 || !mapRef.current ) return;
+    const map = mapRef.current;
+    const coords = hotspotRouteCoords.map( toMapCoord );
+    map.getMapBoundaries( ).then( ( { northEast, southWest } ) => {
+      // The visible region crosses the antimeridian when west is east of east
+      const wraps = southWest.longitude > northEast.longitude;
+      const isVisible = ( { latitude, longitude }: LatLng ) => latitude <= northEast.latitude
+        && latitude >= southWest.latitude
+        && ( wraps
+          ? longitude >= southWest.longitude || longitude <= northEast.longitude
+          : longitude >= southWest.longitude && longitude <= northEast.longitude );
+      if ( coords.every( isVisible ) ) return;
+      map.fitToCoordinates( coords, {
+        edgePadding: {
+          top: 60, right: 40, bottom: 60, left: 40,
+        },
+        animated: true,
+      } );
+    } ).catch( ( ) => {
+      // Without the current bounds, leave the viewport alone
+    } );
+  }, [hotspotRouteCoords] );
+
   const handleStopTextChange = useCallback( ( id: string, text: string ) => {
     editedStopIdsRef.current.add( id );
     setStops( prev => prev.map( s => ( s.id === id
