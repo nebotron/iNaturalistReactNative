@@ -60,19 +60,19 @@ pixel is drawn at `L_i · R_i · x − center`, then cropped by the zoom and cro
 center. "Hide black edges" (off by default) binary-searches the smallest zoom
 at which every frame's crop window stays inside its source frame.
 
-**Picking the crop.** There's no zoom slider: the user drags a rectangle
-(kept to the video's aspect) over the stabilized (lower) video of the
-comparison (`ZoomRectangle`). The preview is the full screen width, so a
-plain swipe over it still scrolls the page: a rectangle starts only once the
-finger has rested for `HOLD_MS` without moving, and only then does the page
-stop scrolling. When a preview finishes, the store keeps its
-`previewCrop`: the corners of the window it shows, on the start frame, and
-the zoom it was rendered at (after "hide black edges"). The rectangle's
-center is mapped through those corners to a new crop center on the start
-frame, and the new zoom is the preview's zoom divided by the rectangle's
-share of the width, so each drag zooms further into what's on screen. Drags
-are ignored while the preview is stale. Reset Zoom returns to 1× centered;
-tapping the start frame still moves the crop center.
+**Picking the crop.** There's no zoom slider: two fingers on the stabilized
+(lower) video of the comparison zoom and move the crop like a photo
+(`PinchCrop`), with a dashed outline of the window that will fill the frame.
+One finger scrolls the page: the overlay reads raw touches rather than taking
+the responder, and the page stops scrolling only while two fingers are down.
+When a preview finishes, the store keeps its `previewCrop`: the corners of
+the window it shows, on the start frame, and the zoom it was rendered at
+(after "hide black edges"). The window's center is mapped through those
+corners to a new crop center on the start frame, and the new zoom is the
+preview's zoom divided by the window's share of the width, so each pinch
+zooms relative to what's on screen. Pinches are ignored while the preview is
+stale. Reset Zoom returns to 1× centered; tapping the start frame still moves
+the crop center.
 
 **Stabilize the background.** Chaining frame-to-frame registrations drifts, so
 the analysis also shifts each frame onto the first by the chained estimate and

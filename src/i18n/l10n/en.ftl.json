@@ -887,6 +887,8 @@
   "Photos-stopped-responding-restart-the-app": "Photos stopped responding on this device, so nothing was deleted. Close and reopen the app, then try again.",
   "Photos-you-take-will-appear-here": "Photos you take will appear here",
   "Pick-photos": "Pick photos",
+  "Pinch-the-stabilized-preview-to-zoom-drag-with-two-fingers-to-move": "Pinch the stabilized preview to zoom. Drag it with two fingers to move the crop.",
+  "Pinch-with-two-fingers-to-zoom-and-move-the-crop": "Pinch with two fingers to zoom and move the crop.",
   "Plan-route": "Plan route",
   "Planned-hotspots-summary": "Added { $count ->\n  [one] 1 hotspot\n *[other] { $count } hotspots\n} with { $observations ->\n  [one] 1 observation\n *[other] { $observations } observations\n}",
   "Plants": "Plants",
@@ -1290,7 +1292,6 @@
   "TOP-ID-SUGGESTION": "TOP ID SUGGESTION",
   "Total-drive-time": "Total drive: { $hours ->\n  [0] { $minutes } min\n *[other] { $hours } h { $minutes } min\n}",
   "TOTAL-STORAGE-USED": "TOTAL STORAGE USED",
-  "Touch-and-hold-the-stabilized-preview-then-drag-a-rectangle-to-zoom-in": "Touch and hold the stabilized preview, then drag a rectangle to zoom in.",
   "Track--evidence": "Track",
   "Track-location-in-the-background": "Track location in the background",
   "Tracked-location": "Tracked location",
@@ -1622,6 +1623,5 @@
   "Zoom-in-to-hide-empty-edges": "Zoom in to hide black edges",
   "Zoom-to-current-location": "Zoom to current location",
   "zoom-x": "{ $zoom }×",
-  "Zoomed-to-x-to-hide-empty-edges": "Zoomed to { $zoom }× to hide black edges.",
-  "Zooms-to-the-rectangle-drawn-after-touching-and-holding": "Zooms to the rectangle dragged out after touching and holding the video."
+  "Zoomed-to-x-to-hide-empty-edges": "Zoomed to { $zoom }× to hide black edges."
 }

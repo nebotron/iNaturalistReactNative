@@ -46,8 +46,8 @@ import type { BusyPhase } from "stores/videoStabilizer";
 import useVideoStabilizer from "stores/videoStabilizer";
 
 import FramePreview from "./FramePreview";
-import type { ZoomWindow } from "./ZoomRectangle";
-import ZoomRectangle from "./ZoomRectangle";
+import type { ZoomWindow } from "./PinchCrop";
+import PinchCrop from "./PinchCrop";
 
 const logger = log.extend( "VideoStabilizer" );
 
@@ -112,7 +112,7 @@ const VideoStabilizer = ( ) => {
   // Slider positions while dragging; settings are only committed on release.
   const [startDraft, setStartDraft] = useState<number | null>( null );
   // Set while a zoom rectangle is being dragged, so the page doesn't scroll.
-  const [drawingZoom, setDrawingZoom] = useState( false );
+  const [pinchingCrop, setPinchingCrop] = useState( false );
 
   useEffect( ( ) => onVideoStabilizerProgress( ( { progress, job } ) => {
     const current = useVideoStabilizer.getState( ).busy;
@@ -534,11 +534,14 @@ const VideoStabilizer = ( ) => {
               className="absolute left-0"
               style={{ top: videoHeight, width: windowWidth, height: videoHeight }}
             >
-              <ZoomRectangle
+              <PinchCrop
                 width={windowWidth}
                 height={videoHeight}
                 disabled={disabled || !previewIsCurrent || !previewCrop}
-                onDrawingChange={setDrawingZoom}
+                // The crop's zoom stays between 1× and MAX_ZOOM.
+                minSize={( previewCrop?.zoom ?? 1 ) / MAX_ZOOM}
+                maxSize={previewCrop?.zoom ?? 1}
+                onPinchingChange={setPinchingCrop}
                 onWindowPicked={zoomToWindow}
               />
             </View>
@@ -562,7 +565,7 @@ const VideoStabilizer = ( ) => {
       <ScrollView
         className="flex-1"
         contentContainerClassName="p-4 pb-6"
-        scrollEnabled={!drawingZoom}
+        scrollEnabled={!pinchingCrop}
       >
         <FramePreview
           uri={frame.uri}
@@ -638,7 +641,7 @@ const VideoStabilizer = ( ) => {
           />
         </View>
         <Body3 className="mt-2">
-          {t( "Touch-and-hold-the-stabilized-preview-then-drag-a-rectangle-to-zoom-in" )}
+          {t( "Pinch-the-stabilized-preview-to-zoom-drag-with-two-fingers-to-move" )}
         </Body3>
         <SwitchRow
           classNames="mt-3"
