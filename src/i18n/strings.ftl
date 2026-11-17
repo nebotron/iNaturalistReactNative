@@ -868,8 +868,8 @@ Hide-gear = Hide gear
 Hide-saved-photos = Hide saved photos
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
-# Toggle in the video stabilizer that locks the view to the first frame instead of smoothing the camera's motion
-Hold-the-background-completely-still = Hold the background completely still
+# Explains the video stabilizer's "Stabilize the background" option
+Holds-the-background-where-it-is-at-the-start = Holds the background where it is at the start, like a tripod. Pans and walks will show black edges.
 # Label used for a stop added to a route from a wildlife hotspot
 Hotspot = Hotspot
 # Label for the bbox padding setting in the hotspot finder filter
@@ -1067,6 +1067,8 @@ KEEP-EDITING = KEEP EDITING
 Keep-in-mind-that-project-curators = Keep in mind that project curators will still be able to add your observations to their project unless you change your account settings.
 # Settings option to keep imported photos on the USB drive or SD card
 Keep-on-drive = Keep on Drive
+# Explains the video stabilizer's "Stabilize the subject" option
+Keeps-the-subject-you-tap-where-it-is-at-the-start = Keeps the subject you tap where it is at the start, so the background moves around it.
 # Display name for the iconic taxa category chromista
 Kelp-and-Diatoms = Kelp & Diatoms
 # Unit after the nearby search radius input
@@ -1549,8 +1551,6 @@ Photos-stopped-responding-restart-the-app = Photos stopped responding on this de
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Settings option: the green observation button opens the photo picker
 Pick-photos = Pick photos
-# Explains the video stabilizer's "Hold the background completely still" toggle
-Pins-the-background-where-it-is-at-the-start = Pins the background where it is at the start, perspective and all. Pans and walks will show black edges.
 # Button that adds the hotspots with the most observations that fit within the time limit to the route
 Plan-route = Plan route
 # Result of planning a hotspot route within a time limit
@@ -1943,8 +1943,6 @@ Skip-for-now = Skip for now
 SKIP-LEAVE-UNKNOWN = SKIP (LEAVE UNKNOWN)
 # Accessibility hint for SKIP-LEAVE-UNKNOWN
 Skips-this-observation-and-leaves-it-unknown = Skips this observation and leaves it unknown.
-# Section header in the video stabilizer for how smooth the camera's motion is made
-SMOOTHING = SMOOTHING
 # Warning that parts of the stabilized video will show black edges
 Some-frames-still-show-empty-edges = Some frames still show black edges at this zoom.
 # Accessibility label for an icon marking an identification that another
@@ -2012,10 +2010,12 @@ Specific-identification--project-rule = Specific identification
 # Header for a project rule requiring an observation to be in a place chosen
 # by the project
 Specific-location--project-rule = Specific location
-# Smoothing setting: how many seconds of camera motion are averaged
-Stabilization-smooths-over-x-seconds = Smooth over { $seconds } s
-# Accessibility label for the slider that sets how strongly a video is stabilized
-Stabilization-strength = Stabilization strength
+# Section header in the video stabilizer for choosing what to hold still
+STABILIZE--video-stabilizer = STABILIZE
+# Video stabilizer option that holds the background still
+Stabilize-the-background = Stabilize the background
+# Video stabilizer option that keeps the tapped subject still in the frame
+Stabilize-the-subject = Stabilize the subject
 # Accessibility label for the looping preview of the stabilized video
 Stabilized-preview = Stabilized preview
 # Label for the standard map type
@@ -2075,8 +2075,10 @@ Take-photo = Take photo
 # Label for the button that opens the AI camera to take photos for a new observation
 Take-photos = Take photos
 Tap-here-to-switch-to-Advanced-Mode = Tap here to switch to Advanced Mode
-# Instruction under the video frame when stabilizing on the background
+# Instruction under the video frame when stabilizing the background
 Tap-the-frame-to-choose-where-to-crop = Tap the frame to choose where to crop.
+# Instruction under the video frame when stabilizing the subject
+Tap-the-subject-to-follow-it = Tap the subject to follow it.
 # Shown in place of a group of observations that failed to load, prompting the user to
 # request them again
 Tap-to-try-loading-again = Tap to try loading again

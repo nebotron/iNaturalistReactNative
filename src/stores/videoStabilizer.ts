@@ -1,4 +1,4 @@
-import type { VideoAnalysis } from "sharedHelpers/videoStabilization";
+import type { StabilizationMode, VideoAnalysis } from "sharedHelpers/videoStabilization";
 import type { VideoFrame, VideoInfo } from "sharedHelpers/videoStabilizerNative";
 import { create } from "zustand";
 
@@ -23,11 +23,11 @@ export interface VideoStabilizerState {
   // Where the output starts, in seconds; the crop is drawn on the frame at
   // this time.
   start: number;
-  // Crop center, normalized, on the start frame.
+  // Crop center, normalized, on the start frame. In subject mode it's also
+  // the subject to follow.
   cropCenter: { x: number; y: number } | null;
-  strength: number;
-  // Hold the background completely still instead of smoothing its motion.
-  still: boolean;
+  // Hold the background still, or follow the subject.
+  mode: StabilizationMode;
   // Rolling-shutter readout, as a fraction of the frame interval; 0 is off.
   rollingShutter: number;
   zoom: number;
@@ -53,8 +53,7 @@ const initialSession = {
   frame: null,
   start: 0,
   cropCenter: null,
-  strength: 0.5,
-  still: false,
+  mode: "background" as StabilizationMode,
   rollingShutter: 0,
   zoom: 1,
   avoidEdges: false,

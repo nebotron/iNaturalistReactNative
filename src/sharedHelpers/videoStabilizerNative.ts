@@ -3,7 +3,7 @@ import type { ViewProps } from "react-native";
 import {
   NativeEventEmitter, NativeModules, Platform, requireNativeComponent,
 } from "react-native";
-import type { VideoAnalysis } from "sharedHelpers/videoStabilization";
+import type { Point, StabilizationMode, VideoAnalysis } from "sharedHelpers/videoStabilization";
 
 // JS side of the VideoStabilizer native module (iOS only). The native side
 // reads and writes video; the camera-path math is in videoStabilization.ts.
@@ -26,14 +26,19 @@ export interface VideoFrame {
 // on progress events, so a superseded job's progress can be told apart.
 export interface AnalyzeOptions {
   start: number;
-  // Also measure every frame against the first, for a complete lock.
-  reference: boolean;
+  // Background: also measure every frame against the first. Subject: track
+  // the subject around `subject` instead.
+  mode: StabilizationMode;
+  // Subject mode: the subject's center on the first frame, normalized.
+  subject?: Point;
   job: number;
 }
 
 export interface NativeAnalysis extends VideoAnalysis {
   // Frames the lock against the first frame could refine.
   refinedFrames: number;
+  // Frames the subject tracker was sure of.
+  trackedFrames?: number;
 }
 
 export interface RenderOptions {

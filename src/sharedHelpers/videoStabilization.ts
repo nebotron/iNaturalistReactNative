@@ -1,10 +1,11 @@
 // The math behind the video stabilizer (components/VideoStabilizer). The native
 // module (ios/.../VideoStabilizer.m) only measures and renders: one pass reads
-// the video and reports, per frame, how the camera moved since the last frame
-// (and, for a full lock, where the frame sits on the start frame), and a second
-// pass warps every frame by the transform this file computes for it. Keeping
-// the camera-path math here means changing how smooth or how tight the result
-// is never re-reads the video, and the math can be unit tested.
+// the video and reports, per frame, how the picture moved since the last frame
+// plus either where the frame sits on the start frame (background mode) or
+// where the subject is (subject mode), and a second pass warps every frame by
+// the transform this file computes for it. Keeping that math here means
+// changing the crop, zoom or rolling shutter never re-reads the video, and the
+// math can be unit tested.
 //
 // Coordinates: pixels of the upright (display-oriented) source frame, origin
 // top-left, y down. Affines are x' = a·x + c·y + e and y' = b·x + d·y + f, the
@@ -12,17 +13,15 @@
 // for column vectors (x, y, 1).
 //
 // The model, for frame i:
-//   P_i  the measured path: maps frame i (centered on the frame center) into a
-//        stable space, the camera motion accumulated back to the first frame.
-//   S_i  the virtual camera's path: P smoothed over time, or the identity when
-//        the background is held completely still (a tripod).
+//   L_i  the lock: the shift that maps frame i onto the first frame. In
+//        background mode it lines the background up with the first frame's (a
+//        tripod); in subject mode it puts the subject where it was in the first
+//        frame (a camera that follows it exactly).
 //   R_i  the rolling-shutter correction: undoes the lean and squash a moving
 //        camera puts into a frame whose rows were read one after another.
-// A pixel x of frame i is drawn at  S_i⁻¹ · P_i · (R_i · x − center)  in
-// stable space: straightened, placed where the camera was pointing, and viewed
-// through the virtual camera. The crop window (center k, zoom z) maps that to
-// the output. Only shifts are measured and corrected: rotation and zoom are
-// left as they were shot.
+// A pixel x of frame i is drawn at  L_i · R_i · x − center  in stable space,
+// and the crop window (center k, zoom z) maps that to the output. Only shifts
+// are measured and corrected: rotation and zoom are left as they were shot.
 
 export interface Affine {
   a: number;
@@ -49,11 +48,16 @@ export interface AnalysisFrame {
   // Homography mapping this frame's pixels onto the previous frame's
   // (identity for the first frame).
   m?: number[];
-  // Analyses for a full lock: transform mapping this frame's pixels onto the
-  // first frame's, measured against the first frame itself so that errors
-  // don't add up over the clip.
+  // Background mode: transform mapping this frame's pixels onto the first
+  // frame's, measured against the first frame itself so that errors don't add
+  // up over the clip.
   r?: number[];
+  // Subject mode: where the tracked subject's center is in this frame, as
+  // [x, y], or null where the tracker lost it.
+  s?: number[] | null;
 }
+
+export type StabilizationMode = "background" | "subject";
 
 export interface VideoAnalysis {
   width: number;
@@ -190,28 +194,55 @@ export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
   return path;
 };
 
-// Whether the analysis measured every frame against the first one, which a
-// complete lock needs to hold the background without drifting.
+// Whether the analysis measured every frame against the first one, which
+// holding the background needs to keep it from drifting.
 export const hasReferencePath = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
   && analysis.frames.every( frame => frame.r?.length === 9 );
 
-// Strength 0–1 from the slider: the virtual camera follows a Gaussian-smoothed
-// path, from 0.2 s (keeps the operator's intent, removes only jitter) to 8 s
-// (nearly a tripod). Holding the background completely still is a separate
-// setting.
-export const strengthToSigmaSeconds = ( strength: number ): number => (
-  0.2 * 40 ** Math.min( 1, Math.max( 0, strength ) )
+const trackedPoint = ( frame: AnalysisFrame ): Point | null => (
+  frame.s?.length === 2 && Number.isFinite( frame.s[0] ) && Number.isFinite( frame.s[1] )
+    ? { x: frame.s[0], y: frame.s[1] }
+    : null
 );
 
-export const virtualCameraPath = (
-  path: Affine[],
-  { strength, fps, still = false }: { strength: number; fps: number; still?: boolean },
-): Affine[] => {
-  if ( still ) return path.map( ( ) => IDENTITY );
-  const sigma = strengthToSigmaSeconds( strength ) * Math.max( 1, fps );
-  const xs = gaussianSmooth( path.map( p => p.e ), sigma );
-  const ys = gaussianSmooth( path.map( p => p.f ), sigma );
-  return path.map( ( _p, i ) => translation( xs[i], ys[i] ) );
+// Where the subject is in every frame. Frames where the tracker lost it are
+// filled in along a straight line between the frames either side (or held at
+// the nearest one at the ends). Not smoothed: a smooth would also blur the
+// camera's frame-to-frame shake, which is what has to come out. Null when the
+// subject wasn't found in any frame.
+export const subjectPath = ( analysis: VideoAnalysis ): Point[] | null => {
+  const points = analysis.frames.map( trackedPoint );
+  const known = points
+    .map( ( p, i ) => ( p ? i : -1 ) )
+    .filter( i => i >= 0 );
+  if ( known.length === 0 ) return null;
+  return points.map( ( p, i ) => {
+    if ( p ) return p;
+    const after = known.find( k => k > i );
+    const before = [...known].reverse( ).find( k => k < i );
+    if ( before === undefined ) return points[after as number] as Point;
+    if ( after === undefined ) return points[before] as Point;
+    const a = points[before] as Point;
+    const b = points[after] as Point;
+    const w = ( i - before ) / ( after - before );
+    return { x: a.x + ( b.x - a.x ) * w, y: a.y + ( b.y - a.y ) * w };
+  } );
+};
+
+// L for every frame: the shift from the frame onto the first frame.
+export const lockPath = ( analysis: VideoAnalysis, mode: StabilizationMode ): Affine[] => {
+  const center = { x: analysis.width / 2, y: analysis.height / 2 };
+  if ( mode === "subject" ) {
+    const path = subjectPath( analysis );
+    if ( path ) {
+      return path.map( p => translation( path[0].x - p.x, path[0].y - p.y ) );
+    }
+  }
+  if ( mode === "background" && hasReferencePath( analysis ) ) {
+    return analysis.frames.map( frame => shiftOf( frame.r as number[], center ) );
+  }
+  // Without a direct measurement, chain the frame-to-frame steps.
+  return measuredPath( analysis );
 };
 
 // How fast the picture moves across the frame at each frame, in pixels per
@@ -268,9 +299,8 @@ export const rollingShutterCorrection = (
 };
 
 export interface StabilizationSettings {
-  strength: number;
-  // Hold the background exactly where it was in the first frame.
-  still?: boolean;
+  // Hold the background, or the subject, where it was in the first frame.
+  mode: StabilizationMode;
   // Rolling-shutter readout as a fraction of the frame interval; 0 is off.
   rollingShutter?: number;
   // Requested zoom, ≥ 1.
@@ -303,31 +333,15 @@ export const planStabilization = (
   analysis: VideoAnalysis,
   settings: StabilizationSettings,
 ): StabilizationPlan => {
-  const { width, height, fps } = analysis;
+  const { width, height } = analysis;
   const center = { x: width / 2, y: height / 2 };
   const fromCentered = homographyFromAffine( translation( center.x, center.y ) );
-  const toCentered = homographyFromAffine( translation( -center.x, -center.y ) );
   const maxZoom = settings.maxZoom ?? DEFAULT_MAX_ZOOM;
-  const still = !!settings.still;
 
   // Stable space → source pixels, per frame.
-  let toSource: Homography[];
-  if ( still && hasReferencePath( analysis ) ) {
-    // The shift onto the first frame, measured against it directly.
-    toSource = analysis.frames.map( frame => invertHomography(
-      multiplyHomographies(
-        toCentered,
-        homographyFromAffine( shiftOf( frame.r as number[], center ) ),
-      ),
-    ) );
-  } else {
-    const path = measuredPath( analysis );
-    const camera = virtualCameraPath( path, { strength: settings.strength, fps, still } );
-    toSource = path.map( ( p, i ) => multiplyHomographies(
-      fromCentered,
-      homographyFromAffine( compose( invert( p ), camera[i] ) ),
-    ) );
-  }
+  let toSource: Homography[] = lockPath( analysis, settings.mode ).map(
+    lock => multiplyHomographies( homographyFromAffine( invert( lock ) ), fromCentered ),
+  );
   const readout = settings.rollingShutter ?? 0;
   if ( readout > 0 ) {
     const velocity = contentVelocity( analysis );

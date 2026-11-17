@@ -4,6 +4,7 @@ import {
   Body3,
   Button,
   Heading4,
+  RadioButtonRow,
   SwitchRow,
 } from "components/SharedComponents";
 import { ScrollView, View } from "components/styledComponents";
@@ -14,6 +15,7 @@ import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import type {
   Point,
+  StabilizationMode,
   StabilizationSettings,
   VideoAnalysis,
 } from "sharedHelpers/videoStabilization";
@@ -21,7 +23,6 @@ import {
   flattenTransforms,
   outputSize,
   planStabilization,
-  strengthToSigmaSeconds,
 } from "sharedHelpers/videoStabilization";
 import {
   analyzeVideo,
@@ -66,8 +67,7 @@ const formatTime = ( seconds: number ) => {
 const percent = ( progress: number ) => Math.round( progress * 100 );
 
 interface Choices {
-  strength: number;
-  still: boolean;
+  mode: StabilizationMode;
   rollingShutter: number;
   zoom: number;
   avoidEdges: boolean;
@@ -81,8 +81,7 @@ const settingsFor = (
 ): StabilizationSettings => {
   const size = outputSize( analysis.width, analysis.height, maxDimension );
   return {
-    strength: choices.strength,
-    still: choices.still,
+    mode: choices.mode,
     rollingShutter: choices.rollingShutter,
     zoom: choices.zoom,
     avoidEdges: choices.avoidEdges,
@@ -99,13 +98,12 @@ const VideoStabilizer = ( ) => {
   const { t } = useTranslation( );
   const { width: windowWidth, height: windowHeight } = useWindowDimensions( );
   const {
-    videoPath, info, frame, start, cropCenter, strength, still, rollingShutter,
+    videoPath, info, frame, start, cropCenter, mode, rollingShutter,
     zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, exportUri,
     exportKey, set, setStart,
   } = useVideoStabilizer( );
   // Slider positions while dragging; settings are only committed on release.
   const [startDraft, setStartDraft] = useState<number | null>( null );
-  const [strengthDraft, setStrengthDraft] = useState<number | null>( null );
   const [rollingShutterDraft, setRollingShutterDraft] = useState<number | null>( null );
   const [zoomDraft, setZoomDraft] = useState<number | null>( null );
 
@@ -133,14 +131,18 @@ const VideoStabilizer = ( ) => {
 
   // What each result has to have been made with to be current. A result made
   // with anything else is stale, and the effect below reruns it.
+  // Subject mode tracks the subject picked on the frame, so picking another
+  // one means tracking again.
   const wantedAnalysisKey = videoPath
-    ? JSON.stringify( [videoPath, start, still] )
+    ? JSON.stringify( [videoPath, start, mode, mode === "subject"
+      ? cropCenter
+      : null] )
     : null;
   const currentAnalysis = analysis && analysisKey === wantedAnalysisKey
     ? analysis
     : null;
   const choices: Choices = {
-    strength, still, rollingShutter, zoom, avoidEdges, cropCenter,
+    mode, rollingShutter, zoom, avoidEdges, cropCenter,
   };
   const wantedPreviewKey = currentAnalysis
     ? JSON.stringify( [wantedAnalysisKey, choices] )
@@ -154,10 +156,10 @@ const VideoStabilizer = ( ) => {
   const plan = useMemo( ( ) => (
     currentAnalysis
       ? planStabilization( currentAnalysis, settingsFor( currentAnalysis, EXPORT_MAX_DIMENSION, {
-        strength, still, rollingShutter, zoom, avoidEdges, cropCenter,
+        mode, rollingShutter, zoom, avoidEdges, cropCenter,
       } ) )
       : null
-  ), [currentAnalysis, strength, still, rollingShutter, zoom, avoidEdges, cropCenter] );
+  ), [currentAnalysis, mode, rollingShutter, zoom, avoidEdges, cropCenter] );
 
   // Runs one native job. Starting a job cancels the one before (natively,
   // too), and only the latest job's result, error and progress count.
@@ -187,20 +189,27 @@ const VideoStabilizer = ( ) => {
 
   const runAnalysis = ( key: string ) => {
     const {
-      videoPath: path, start: from, still: reference,
+      videoPath: path, start: from, mode: analysisMode, cropCenter: subject,
     } = useVideoStabilizer.getState( );
     if ( !path ) return;
     runJob(
       key,
       "analyzing",
-      job => analyzeVideo( path, { start: from, reference, job } ),
+      job => analyzeVideo( path, {
+        start: from,
+        mode: analysisMode,
+        subject: analysisMode === "subject"
+          ? subject ?? { x: 0.5, y: 0.5 }
+          : undefined,
+        job,
+      } ),
       result => {
         const lost = result.frames.filter( f => !f.ok ).length;
         logger.info(
-          `analyzed ${result.frames.length} frames, ${lost} unusable`
-          + `${reference
-            ? `, ${result.refinedFrames} locked to the first frame`
-            : ""}`,
+          `analyzed ${result.frames.length} frames, ${lost} unusable, `
+          + `${analysisMode === "subject"
+            ? `subject tracked in ${result.trackedFrames ?? 0}`
+            : `${result.refinedFrames} locked to the first frame`}`,
         );
         set( { analysis: result, analysisKey: key } );
       },
@@ -293,8 +302,7 @@ const VideoStabilizer = ( ) => {
         videoPath: path,
         info: probed,
         frame: firstFrame,
-        strength: kept.strength,
-        still: kept.still,
+        mode: kept.mode,
         rollingShutter: kept.rollingShutter,
         busy: { phase: "importing", progress: 0 },
       } );
@@ -412,7 +420,6 @@ const VideoStabilizer = ( ) => {
       { x: roughCenter.x - half, y: roughCenter.y + half },
     ];
 
-  const sigma = strengthToSigmaSeconds( strengthDraft ?? strength );
   const shownReadout = rollingShutterDraft ?? rollingShutter;
   const readoutLabel = shownReadout > 0.005
     ? t( "Rolling-shutter-readout-x-percent", { percent: percent( shownReadout ) } )
@@ -439,7 +446,9 @@ const VideoStabilizer = ( ) => {
         onPointPicked={point => set( { cropCenter: point } )}
       />
       <Body3 className="mt-2 text-center">
-        {t( "Tap-the-frame-to-choose-where-to-crop" )}
+        {mode === "subject"
+          ? t( "Tap-the-subject-to-follow-it" )
+          : t( "Tap-the-frame-to-choose-where-to-crop" )}
       </Body3>
 
       <View className="flex-row items-center mt-4">
@@ -457,38 +466,26 @@ const VideoStabilizer = ( ) => {
         />
       </View>
 
-      <Heading4 className="mt-6 mb-2">{t( "SMOOTHING" )}</Heading4>
-      <SwitchRow
-        label={t( "Hold-the-background-completely-still" )}
-        value={still}
-        disabled={disabled}
-        onValueChange={value => set( { still: value } )}
+      <Heading4 className="mt-6 mb-2">{t( "STABILIZE--video-stabilizer" )}</Heading4>
+      <RadioButtonRow
+        testID="VideoStabilizer.mode.background"
+        value="background"
+        checked={mode === "background"}
+        label={t( "Stabilize-the-background" )}
+        description={t( "Holds-the-background-where-it-is-at-the-start" )}
+        smallLabel
+        onPress={( ) => !disabled && set( { mode: "background" } )}
       />
-      {still
-        ? (
-          <Body3 className="mt-2">
-            {t( "Pins-the-background-where-it-is-at-the-start" )}
-          </Body3>
-        )
-        : (
-          <View className="flex-row items-center mt-3">
-            <Body2 className="w-[110px]">
-              {t( "Stabilization-smooths-over-x-seconds", { seconds: sigma.toFixed( 1 ) } )}
-            </Body2>
-            <FineSlider
-              accessibilityLabel={t( "Stabilization-strength" )}
-              disabled={disabled}
-              minimumValue={0}
-              maximumValue={1}
-              value={strengthDraft ?? strength}
-              onChange={setStrengthDraft}
-              onComplete={value => {
-                setStrengthDraft( null );
-                set( { strength: value } );
-              }}
-            />
-          </View>
-        )}
+      <RadioButtonRow
+        classNames="mt-3"
+        testID="VideoStabilizer.mode.subject"
+        value="subject"
+        checked={mode === "subject"}
+        label={t( "Stabilize-the-subject" )}
+        description={t( "Keeps-the-subject-you-tap-where-it-is-at-the-start" )}
+        smallLabel
+        onPress={( ) => !disabled && set( { mode: "subject" } )}
+      />
 
       <Heading4 className="mt-6 mb-2">{t( "ROLLING-SHUTTER" )}</Heading4>
       <View className="flex-row items-center">

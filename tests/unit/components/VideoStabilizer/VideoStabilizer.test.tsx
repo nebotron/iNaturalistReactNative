@@ -85,7 +85,7 @@ describe( "VideoStabilizer", ( ) => {
     expect( mockPickVideo ).toHaveBeenCalledWith( );
     expect( mockAnalyze ).toHaveBeenCalledWith(
       INPUT,
-      expect.objectContaining( { start: 0, reference: false } ),
+      expect.objectContaining( { start: 0, mode: "background" } ),
     );
     await waitFor( ( ) => expect( mockRender ).toHaveBeenCalledWith(
       INPUT,
@@ -120,17 +120,18 @@ describe( "VideoStabilizer", ( ) => {
     } ) ).not.toBeChecked( );
   } );
 
-  it( "analyzes again when holding the background completely still", async ( ) => {
+  it( "tracks the subject when stabilizing the subject", async ( ) => {
     const user = userEvent.setup( );
     renderComponent( <VideoStabilizer /> );
     await importVideo( user );
     await waitFor( ( ) => expect( mockRender ).toHaveBeenCalled( ) );
-    await user.press( screen.getByText( i18next.t( "Hold-the-background-completely-still" ) ) );
+    await user.press( screen.getByTestId( "VideoStabilizer.mode.subject" ) );
     await waitFor( ( ) => expect( mockAnalyze ).toHaveBeenLastCalledWith(
       INPUT,
-      expect.objectContaining( { reference: true } ),
+      expect.objectContaining( { mode: "subject", subject: { x: 0.5, y: 0.5 } } ),
     ) );
     expect( mockAnalyze ).toHaveBeenCalledTimes( 2 );
+    expect( screen.getByText( i18next.t( "Tap-the-subject-to-follow-it" ) ) ).toBeVisible( );
   } );
 
   it( "plays the original video", async ( ) => {
