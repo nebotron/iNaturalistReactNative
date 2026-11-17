@@ -122,7 +122,7 @@ describe( "VideoStabilizer", ( ) => {
     } ) ).not.toBeChecked( );
   } );
 
-  it( "zooms and moves the crop with a two-finger pinch on the stabilized preview", async ( ) => {
+  it( "sets the crop from two fingers at opposite corners of the stabilized preview", async ( ) => {
     const user = userEvent.setup( );
     renderComponent( <VideoStabilizer /> );
     await importVideo( user );
@@ -132,7 +132,7 @@ describe( "VideoStabilizer", ( ) => {
     expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
 
     const overlay = screen.getByAccessibilityHint(
-      i18next.t( "Pinch-with-two-fingers-to-zoom-and-move-the-crop" ),
+      i18next.t( "Drag-two-fingers-to-set-opposite-corners-of-the-crop" ),
     );
     const { width, height } = StyleSheet.flatten( overlay.props.style );
     // The overlay sits 100 pt down the page.
@@ -151,14 +151,21 @@ describe( "VideoStabilizer", ( ) => {
     fireEvent( overlay, "touchEnd", touches( ) );
     expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
 
-    // Fingers around three quarters across spread to twice as far apart
-    // while moving to the middle: 2×, with that point brought to the middle.
-    const y = height / 2;
-    const at = width * 0.75;
-    fireEvent( overlay, "touchStart", touches( [at - 20, y], [at + 20, y] ) );
+    // The fingers start close together and drag apart to the corners of the
+    // right half's middle: a window half the preview across, centered three
+    // quarters of the way over, so 2×.
+    fireEvent(
+      overlay,
+      "touchStart",
+      touches( [width * 0.7, height / 2], [width * 0.8, height / 2] ),
+    );
     expect( scrollEnabled( ) ).toBe( false );
-    fireEvent( overlay, "touchMove", touches( [width / 2 - 40, y], [width / 2 + 40, y] ) );
-    fireEvent( overlay, "touchEnd", touches( [width / 2 - 40, y] ) );
+    fireEvent(
+      overlay,
+      "touchMove",
+      touches( [width, height * 0.75], [width / 2, height * 0.25] ),
+    );
+    fireEvent( overlay, "touchEnd", touches( [width, height * 0.75] ) );
 
     expect( scrollEnabled( ) ).toBe( true );
     expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "2.0" } ) ) ).toBeVisible( );

@@ -58,15 +58,17 @@ center. "Hide black edges" (off by default) binary-searches the smallest zoom
 at which every frame's crop window stays inside its source frame.
 
 **Picking the crop.** There's no zoom slider: two fingers on the stabilized
-(lower) video of the comparison zoom and move the crop like a photo
-(`PinchCrop`), with a dashed outline of the window that will fill the frame.
+(lower) video of the comparison mark opposite corners of the crop
+(`PinchCrop`). The window is centered between them and keeps the frame's
+aspect, spanning the larger of the fingers' horizontal and vertical spread,
+with a dashed outline of the window that will fill the frame.
 One finger scrolls the page: the overlay reads raw touches rather than taking
 the responder, and the page stops scrolling only while two fingers are down.
 When a preview finishes, the store keeps its `previewCrop`: the corners of
 the window it shows, on the start frame, and the zoom it was rendered at
 (after "hide black edges"). The window's center is mapped through those
 corners to a new crop center on the start frame, and the new zoom is the
-preview's zoom divided by the window's share of the width, so each pinch
+preview's zoom divided by the window's share of the width, so each drag
 zooms relative to what's on screen. Pinches are ignored while the preview is
 stale. Reset Zoom returns to 1× centered. There is no still of the start
 frame on the screen; the crop is only picked on the preview.

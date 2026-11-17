@@ -642,6 +642,10 @@ Download-for-offline-use = Download for offline use
 DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
+# Note under the video stabilizer's crop settings explaining how to pick the crop
+Drag-two-fingers-on-the-stabilized-preview-to-set-opposite-corners = Drag two fingers on the stabilized preview to set opposite corners of the crop.
+# Accessibility hint for the stabilized video preview, where two fingers mark opposite corners of the crop
+Drag-two-fingers-to-set-opposite-corners-of-the-crop = Drag two fingers to set opposite corners of the crop.
 # Maximum total driving time chosen for planning a route through wildlife hotspots
 Drive-time-limit =
     Max drive: { $hours ->
@@ -1571,10 +1575,6 @@ Photos-stopped-responding-restart-the-app = Photos stopped responding on this de
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Settings option: the green observation button opens the photo picker
 Pick-photos = Pick photos
-# Note under the video stabilizer's crop settings explaining how to zoom in
-Pinch-the-stabilized-preview-to-zoom-drag-with-two-fingers-to-move = Pinch the stabilized preview to zoom. Drag it with two fingers to move the crop.
-# Accessibility hint for the stabilized video preview, where a two-finger pinch zooms and moves the crop
-Pinch-with-two-fingers-to-zoom-and-move-the-crop = Pinch with two fingers to zoom and move the crop.
 # Button that adds the hotspots with the most observations that fit within the time limit to the route
 Plan-route = Plan route
 # Result of planning a hotspot route within a time limit

@@ -7,11 +7,12 @@ import type { Point } from "sharedHelpers/videoStabilization";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
-// A transparent layer over the stabilized preview. Two fingers zoom and move
-// the crop, the way they would zoom and move a photo: spreading them zooms
-// in on the point between them and dragging them moves what's in view. A
-// dashed outline shows the window that will fill the frame, and letting go
-// reports it, normalized to the preview, as the window to zoom to.
+// A transparent layer over the stabilized preview. Two fingers mark two
+// opposite corners of the crop: the window is centered between them and
+// sized to span them, keeping the frame's aspect, so it covers the larger of
+// the two spans. A dashed outline shows the window that will fill the
+// frame, and letting go reports it, normalized to the preview, as the window
+// to zoom to.
 //
 // One finger is left alone so it scrolls the page: the layer reads raw
 // touches instead of taking the responder, and asks the page to stop
@@ -31,15 +32,14 @@ interface Props {
   // The range of window sizes the crop can take from the preview's zoom.
   minSize: number;
   maxSize: number;
-  // Told when a pinch starts and ends, so a scroll view around the preview
-  // can stop scrolling meanwhile.
+  // Told when a two-finger drag starts and ends, so a scroll view around the
+  // preview can stop scrolling meanwhile.
   onPinchingChange?: ( pinching: boolean ) => void;
   onWindowPicked: ( window: ZoomWindow ) => void;
 }
 
-// A pinch that barely changes anything is taken as a stray touch.
-const MIN_SCALE_CHANGE = 0.03;
-const MIN_PAN_PX = 6;
+// Fingers that barely move are taken as a stray touch.
+const MIN_MOVE_PX = 6;
 
 const styles = StyleSheet.create( {
   overlay: {
@@ -47,21 +47,16 @@ const styles = StyleSheet.create( {
   },
 } );
 
-interface Pinch {
+interface Drag {
   // Page coordinates minus the overlay's own.
   offset: Point;
-  startFocal: Point;
-  startDistance: number;
+  start: [Point, Point];
 }
 
-const focalOf = ( [a, b]: NativeTouchEvent[] ): Point => ( {
-  x: ( a.pageX + b.pageX ) / 2,
-  y: ( a.pageY + b.pageY ) / 2,
-} );
-const distanceOf = ( [a, b]: NativeTouchEvent[] ) => Math.max(
-  1,
-  Math.hypot( a.pageX - b.pageX, a.pageY - b.pageY ),
-);
+const cornersOf = ( [a, b]: NativeTouchEvent[] ): [Point, Point] => [
+  { x: a.pageX, y: a.pageY },
+  { x: b.pageX, y: b.pageY },
+];
 
 const PinchCrop = ( {
   width,
@@ -73,61 +68,55 @@ const PinchCrop = ( {
   onWindowPicked,
 }: Props ) => {
   const { t } = useTranslation( );
-  const pinch = useRef<Pinch | null>( null );
+  const drag = useRef<Drag | null>( null );
   const [picked, setPicked] = useState<ZoomWindow | null>( null );
   const latest = useRef<ZoomWindow | null>( null );
   const moved = useRef( false );
 
-  const begin = ( touches: NativeTouchEvent[] ) => {
-    const [first] = touches;
-    pinch.current = {
-      offset: { x: first.pageX - first.locationX, y: first.pageY - first.locationY },
-      startFocal: focalOf( touches ),
-      startDistance: distanceOf( touches ),
-    };
-    latest.current = null;
-    moved.current = false;
-    onPinchingChange?.( true );
-  };
-
   const end = ( report: boolean ) => {
-    if ( !pinch.current ) return;
-    pinch.current = null;
+    if ( !drag.current ) return;
+    drag.current = null;
     setPicked( null );
     onPinchingChange?.( false );
     if ( report && moved.current && latest.current ) onWindowPicked( latest.current );
   };
 
-  // The content point under the starting focal point stays under the
-  // fingers, scaled by how far they've spread: screen x shows content
-  // startFocal + ( x - focal ) / scale, so the window around the screen's
-  // middle is centered there.
+  // The fingers are two opposite corners, in either order: the window is
+  // centered between them, and as wide as their horizontal span or as tall
+  // as their vertical one, whichever needs the larger window.
   const update = ( touches: NativeTouchEvent[] ) => {
-    const { current } = pinch;
+    const { current } = drag;
     if ( !current ) return;
-    const rawScale = distanceOf( touches ) / current.startDistance;
-    const size = Math.min( maxSize, Math.max( minSize, 1 / rawScale ) );
-    const focal = focalOf( touches );
-    const start = {
-      x: current.startFocal.x - current.offset.x,
-      y: current.startFocal.y - current.offset.y,
-    };
-    const now = { x: focal.x - current.offset.x, y: focal.y - current.offset.y };
-    if (
-      Math.abs( rawScale - 1 ) > MIN_SCALE_CHANGE
-      || Math.hypot( now.x - start.x, now.y - start.y ) > MIN_PAN_PX
-    ) {
+    const corners = cornersOf( touches );
+    if ( corners.some( ( corner, i ) => Math.hypot(
+      corner.x - current.start[i].x,
+      corner.y - current.start[i].y,
+    ) > MIN_MOVE_PX ) ) {
       moved.current = true;
     }
+    const [a, b] = corners.map( corner => ( {
+      x: corner.x - current.offset.x,
+      y: corner.y - current.offset.y,
+    } ) );
+    const span = Math.max( Math.abs( a.x - b.x ) / width, Math.abs( a.y - b.y ) / height );
     const window = {
-      center: {
-        x: ( start.x + ( width / 2 - now.x ) * size ) / width,
-        y: ( start.y + ( height / 2 - now.y ) * size ) / height,
-      },
-      size,
+      center: { x: ( a.x + b.x ) / 2 / width, y: ( a.y + b.y ) / 2 / height },
+      size: Math.min( maxSize, Math.max( minSize, span ) ),
     };
     latest.current = window;
     if ( moved.current ) setPicked( window );
+  };
+
+  const begin = ( touches: NativeTouchEvent[] ) => {
+    const [first] = touches;
+    drag.current = {
+      offset: { x: first.pageX - first.locationX, y: first.pageY - first.locationY },
+      start: cornersOf( touches ),
+    };
+    latest.current = null;
+    moved.current = false;
+    onPinchingChange?.( true );
+    update( touches );
   };
 
   const onTouches = ( event: GestureResponderEvent ) => {
@@ -137,7 +126,7 @@ const PinchCrop = ( {
     }
     const { touches } = event.nativeEvent;
     if ( touches.length >= 2 ) {
-      if ( !pinch.current ) begin( touches );
+      if ( !drag.current ) begin( touches );
       else update( touches );
     } else {
       end( true );
@@ -155,7 +144,7 @@ const PinchCrop = ( {
     <View
       accessible
       accessibilityLabel={t( "Stabilized--video-stabilizer" )}
-      accessibilityHint={t( "Pinch-with-two-fingers-to-zoom-and-move-the-crop" )}
+      accessibilityHint={t( "Drag-two-fingers-to-set-opposite-corners-of-the-crop" )}
       style={[styles.overlay, { width, height }]}
       onTouchStart={onTouches}
       onTouchMove={onTouches}
