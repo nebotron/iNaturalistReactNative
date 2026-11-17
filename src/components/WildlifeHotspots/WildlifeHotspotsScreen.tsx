@@ -97,8 +97,8 @@ function toMapCoord( pt: RoutePoint ): LatLng {
 type Stop = HotspotStop;
 
 function isAtPoint( hotspot: Hotspot, point: LatLng ): boolean {
-  return hotspot.centerLatitude === point.latitude
-    && hotspot.centerLongitude === point.longitude;
+  return hotspot.routeLatitude === point.latitude
+    && hotspot.routeLongitude === point.longitude;
 }
 
 let stopIdCounter = 0;
@@ -576,7 +576,7 @@ const WildlifeHotspotsScreen = ( {
     setHotspotRouteDurationSec( null );
     setHotspotRouteLoading( true );
     try {
-      const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
+      const via = { latitude: hotspot.routeLatitude, longitude: hotspot.routeLongitude };
       const insertIdx = findBestInsertion( confirmedStopPoints, via );
       const withVia = [
         ...confirmedStopPoints.slice( 0, insertIdx ),
@@ -596,7 +596,7 @@ const WildlifeHotspotsScreen = ( {
 
   const handleAddHotspotToRoute = useCallback( ( hotspot: Hotspot ) => {
     if ( confirmedStopPoints.length < 2 ) return;
-    const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
+    const via = { latitude: hotspot.routeLatitude, longitude: hotspot.routeLongitude };
     const insertIdx = findBestInsertion( confirmedStopPoints, via );
     const newStop: Stop = {
       id: makeStopId(), text: t( "Hotspot" ), point: via, fromHotspot: true,
@@ -630,7 +630,7 @@ const WildlifeHotspotsScreen = ( {
       .slice( 0, maxPlanCandidates );
     const points: LatLng[] = [
       ...fixedStops.map( s => s.point as LatLng ),
-      ...pool.map( h => ( { latitude: h.centerLatitude, longitude: h.centerLongitude } ) ),
+      ...pool.map( h => ( { latitude: h.routeLatitude, longitude: h.routeLongitude } ) ),
     ];
     setPlanning( true );
     try {
@@ -1136,6 +1136,26 @@ const WildlifeHotspotsScreen = ( {
                   </View>
                 </Marker>
               ) )}
+              {hotspots
+                .filter( h => h.id === selectedHotspotId
+                  && ( h.routeLatitude !== h.centerLatitude
+                    || h.routeLongitude !== h.centerLongitude ) )
+                .map( h => (
+                  // Where the selected hotspot's route parks
+                  <Marker
+                    key={`parking-${h.id}`}
+                    coordinate={{ latitude: h.routeLatitude, longitude: h.routeLongitude }}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                    zIndex={2}
+                  >
+                    <View
+                      className="w-5 h-5 rounded items-center justify-center border border-white"
+                      style={{ backgroundColor: colors.blue }}
+                    >
+                      <Body4 className="text-white font-bold">{t( "Parking-map-marker" )}</Body4>
+                    </View>
+                  </Marker>
+                ) )}
               {hotspots
                 .find( h => h.id === selectedHotspotId )
                 ?.observations.map( obs => (

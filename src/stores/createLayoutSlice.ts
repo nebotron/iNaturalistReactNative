@@ -28,6 +28,9 @@ export interface HotspotSettings {
   hotspotRecentAddresses: number;
   hotspotTimeStepMinutes: number;
   hotspotMaxPlanCandidates: number;
+  // Route to the nearest public parking near each hotspot instead of the
+  // point on a road nearest its center
+  hotspotRouteToParking: boolean;
 }
 
 // Configured only from the gear button on the Wildlife Hotspots map
@@ -40,6 +43,7 @@ export const DEFAULT_HOTSPOT_SETTINGS: HotspotSettings = {
   hotspotRecentAddresses: 10,
   hotspotTimeStepMinutes: 15,
   hotspotMaxPlanCandidates: 40,
+  hotspotRouteToParking: false,
 };
 
 export interface ExploreGridOverlays {
@@ -115,7 +119,10 @@ export interface LayoutSlice {
     gearNicknames: GearNicknames;
     setGearNickname: ( kind: GearKind, name: string, nickname: string ) => void;
     hotspotSettings: HotspotSettings;
-    setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
+    setHotspotSetting: <K extends keyof HotspotSettings>(
+      key: K,
+      value: HotspotSettings[K],
+    ) => void;
     exploreGridOverlays: ExploreGridOverlays;
     setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
     myObsGridOverlays: ExploreGridOverlays;

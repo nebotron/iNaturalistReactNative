@@ -1,4 +1,6 @@
-import { Body2, Heading4, INatIconButton } from "components/SharedComponents";
+import {
+  Body2, Heading4, INatIconButton, SwitchRow,
+} from "components/SharedComponents";
 import {
   KeyboardAvoidingView, Modal, ScrollView, TextInput, View,
 } from "components/styledComponents";
@@ -11,8 +13,14 @@ import useKeyboardInfo from "sharedHooks/useKeyboardInfo";
 import type { HotspotSettings } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 
+type NumericSettingKey = {
+  [K in keyof HotspotSettings]: HotspotSettings[K] extends number
+    ? K
+    : never;
+}[keyof HotspotSettings];
+
 const FIELDS: {
-  key: keyof HotspotSettings;
+  key: NumericSettingKey;
   // Literal t( ) calls, so the i18n unused-key check sees each key
   label: ( t: TFunction ) => string;
   min: number;
@@ -90,13 +98,14 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
   const setHotspotSetting = useStore( state => state.layout.setHotspotSetting );
   // Edits stay here until the sheet closes, so the hotspot search, which
   // reruns whenever the saved settings change, runs once with all of them.
-  const [drafts, setDrafts] = useState<Record<keyof HotspotSettings, string>>(
+  const [drafts, setDrafts] = useState<Record<NumericSettingKey, string>>(
     ( ) => Object.fromEntries(
       FIELDS.map( field => [field.key, String( saved[field.key] )] ),
-    ) as Record<keyof HotspotSettings, string>,
+    ) as Record<NumericSettingKey, string>,
   );
+  const [routeToParking, setRouteToParking] = useState( saved.hotspotRouteToParking );
 
-  const setDraft = ( key: keyof HotspotSettings, text: string ) => {
+  const setDraft = ( key: NumericSettingKey, text: string ) => {
     setDrafts( prev => ( { ...prev, [key]: text } ) );
   };
 
@@ -105,6 +114,9 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
       const next = parseField( field, drafts[field.key], saved[field.key] );
       if ( next !== saved[field.key] ) setHotspotSetting( field.key, next );
     } );
+    if ( routeToParking !== saved.hotspotRouteToParking ) {
+      setHotspotSetting( "hotspotRouteToParking", routeToParking );
+    }
     onPressClose( );
   };
 
@@ -155,6 +167,12 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
             keyboardShouldPersistTaps="handled"
           >
             <View className="px-7 pt-2 pb-2">
+              <SwitchRow
+                classNames="mb-5"
+                label={t( "Hotspot-route-to-parking" )}
+                onValueChange={setRouteToParking}
+                value={routeToParking}
+              />
               {FIELDS.map( field => (
                 <HotspotSettingField
                   key={field.key}

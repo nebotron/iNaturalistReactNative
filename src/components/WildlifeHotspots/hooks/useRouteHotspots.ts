@@ -6,6 +6,7 @@ import {
   resolveEbirdTaxonFilter,
 } from "api/ebird";
 import { searchObservations } from "api/observations";
+import { findNearestParking } from "components/WildlifeHotspots/nearestParking";
 import { cachedRequest } from "components/WildlifeHotspots/requestCache";
 import i18n from "i18next";
 import { useCallback, useRef, useState } from "react";
@@ -41,6 +42,10 @@ export interface Hotspot {
   id: string;
   centerLatitude: number;
   centerLongitude: number;
+  // Where routes to the hotspot go: the nearest parking when the setting asks
+  // for it and some is mapped nearby, otherwise the center
+  routeLatitude: number;
+  routeLongitude: number;
   // Smallest circle containing every observation in the cluster
   area: Circle;
   observationCount: number;
@@ -557,8 +562,8 @@ export function useRouteHotspots() {
         setRouteDurationSec( directDurationSec );
 
         // Hotspot settings from filterParams, or their defaults
-        const setting = ( key: keyof HotspotSettings ) => (
-          filterParams[key] as number | undefined
+        const setting = <K extends keyof HotspotSettings>( key: K ) => (
+          filterParams[key] as HotspotSettings[K] | undefined
         ) ?? DEFAULT_HOTSPOT_SETTINGS[key];
         const clusterRadiusKm = setting( "hotspotClusterRadiusKm" );
         const maxDetourCandidates = setting( "hotspotMaxDetourCandidates" );
@@ -651,13 +656,32 @@ export function useRouteHotspots() {
         candidates.sort( ( a, b ) => b.count - a.count );
         const topCandidates = candidates.slice( 0, maxDetourCandidates );
 
+        // Each candidate is routed to its nearest parking when asked, falling
+        // back to its center (OSRM snaps that to the nearest road) where none
+        // is mapped or the parking search fails
+        const centers = topCandidates.map( c => ( {
+          latitude: c.centerLat,
+          longitude: c.centerLng,
+        } ) );
+        let routeTargets: RoutePoint[] = centers;
+        if ( setting( "hotspotRouteToParking" ) ) {
+          try {
+            const parking = await findNearestParking( topCandidates.map( c => ( {
+              latitude: c.centerLat,
+              longitude: c.centerLng,
+              radiusKm: c.area.radiusKm,
+            } ) ) );
+            routeTargets = centers.map( ( center, i ) => parking[i] ?? center );
+          } catch {
+            // Route to the centers instead
+          }
+          if ( isStale() ) return;
+        }
+
         // 5. Driving time added by visiting each candidate between the two stops it's
         // inserted between: d(A,P) + d(P,B) - d(A,B). OSRM table requests cover every
         // candidate in a few calls instead of one route request each.
-        const detoursSec = await fetchDetoursSec(
-          stops,
-          topCandidates.map( c => ( { latitude: c.centerLat, longitude: c.centerLng } ) ),
-        );
+        const detoursSec = await fetchDetoursSec( stops, routeTargets );
         if ( isStale() ) return;
         const withDetours: Hotspot[] = [];
         topCandidates.forEach( ( candidate, i ) => {
@@ -666,6 +690,8 @@ export function useRouteHotspots() {
             id: candidate.id,
             centerLatitude: candidate.centerLat,
             centerLongitude: candidate.centerLng,
+            routeLatitude: routeTargets[i].latitude,
+            routeLongitude: routeTargets[i].longitude,
             area: candidate.area,
             observationCount: candidate.count,
             detourMinutes: Math.max( 0, Math.round( detoursSec[i] / 60 ) ),
