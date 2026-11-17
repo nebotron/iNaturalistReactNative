@@ -58,6 +58,17 @@ background is held completely still. A pixel is drawn at
 "Hide black edges" (off by default) binary-searches the smallest zoom at which
 every frame's crop window stays inside its source frame.
 
+**Picking the crop.** There's no zoom slider: the user drags a rectangle
+(kept to the video's aspect) over the stabilized half of the comparison
+player (`ZoomRectangle`). When a preview finishes, the store keeps its
+`previewCrop`: the corners of the window it shows, on the start frame, and
+the zoom it was rendered at (after "hide black edges"). The rectangle's
+center is mapped through those corners to a new crop center on the start
+frame, and the new zoom is the preview's zoom divided by the rectangle's
+share of the width, so each drag zooms further into what's on screen. Drags
+are ignored while the preview is stale. Reset Zoom returns to 1× centered;
+tapping the start frame still moves the crop center.
+
 **Completely still.** Chaining frame-to-frame registrations drifts. With the
 lock on, the analysis also shifts each frame onto the first by the chained
 estimate and registers what's left against the first frame itself, so `P_i`

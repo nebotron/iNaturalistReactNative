@@ -455,8 +455,6 @@ CROP-PHOTO = Crop Photo
 # Accessibility label for the button that crops a photo to a square of the
 # upload size, e.g. "Crop to 2048 × 2048"; size is in pixels
 Crop-to-size-by-size = Crop to { $size } × { $size }
-# Accessibility label for the slider that sets how far the video stabilizer crops in
-Crop-zoom = Crop zoom
 # Label for how far the video stabilizer crops in, e.g. "Zoom 2.0×"
 Crop-zoom-x = Zoom { $zoom }×
 # Label for current device location in Wildlife Hotspots tool
@@ -645,6 +643,8 @@ DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
 # Maximum total driving time chosen for planning a route through wildlife hotspots
+# Note under the video stabilizer's crop settings explaining how to zoom in
+Drag-a-rectangle-over-the-stabilized-preview-to-zoom-in = Drag a rectangle over the stabilized preview to zoom in.
 Drive-time-limit =
     Max drive: { $hours ->
         [0] { $minutes } min
@@ -1775,6 +1775,8 @@ RESET-SEARCH = RESET SEARCH
 # recording
 RESET-SOUND-header = RESET SOUND?
 Reset-verb = Reset
+# Button that undoes the video stabilizer's zoom and crop position
+RESET-ZOOM = RESET ZOOM
 RESTART-APP = RESTART APP
 # Label for button that restores a withdrawn identification
 Restore = Restore
@@ -2885,3 +2887,5 @@ Zoom-to-current-location = Zoom to current location
 zoom-x = { $zoom }×
 # Note that the video stabilizer zoomed in further than asked, to hide black edges
 Zoomed-to-x-to-hide-empty-edges = Zoomed to { $zoom }× to hide black edges.
+# Accessibility hint for the stabilized video preview, which zooms to a rectangle dragged over it
+Zooms-to-the-rectangle-dragged-over-the-video = Zooms to the rectangle dragged over the video.

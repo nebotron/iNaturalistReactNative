@@ -43,6 +43,8 @@ import type { BusyPhase } from "stores/videoStabilizer";
 import useVideoStabilizer from "stores/videoStabilizer";
 
 import FramePreview from "./FramePreview";
+import type { ZoomWindow } from "./ZoomRectangle";
+import ZoomRectangle from "./ZoomRectangle";
 
 const logger = log.extend( "VideoStabilizer" );
 
@@ -101,13 +103,12 @@ const VideoStabilizer = ( ) => {
   const {
     videoPath, info, frame, start, cropCenter, strength, still, rollingShutter,
     zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, previewStart,
-    exportUri, exportKey, set, setStart,
+    previewCrop, exportUri, exportKey, set, setStart,
   } = useVideoStabilizer( );
   // Slider positions while dragging; settings are only committed on release.
   const [startDraft, setStartDraft] = useState<number | null>( null );
   const [strengthDraft, setStrengthDraft] = useState<number | null>( null );
   const [rollingShutterDraft, setRollingShutterDraft] = useState<number | null>( null );
-  const [zoomDraft, setZoomDraft] = useState<number | null>( null );
 
   useEffect( ( ) => onVideoStabilizerProgress( ( { progress, job } ) => {
     const current = useVideoStabilizer.getState( ).busy;
@@ -236,7 +237,18 @@ const VideoStabilizer = ( ) => {
       } ),
       result => {
         if ( preview ) {
-          set( { previewUri: result.uri, previewKey: key, previewStart: state.start } );
+          set( {
+            previewUri: result.uri,
+            previewKey: key,
+            previewStart: state.start,
+            previewCrop: {
+              corners: rendered.firstFrameCrop.map( p => ( {
+                x: p.x / currentAnalysis.width,
+                y: p.y / currentAnalysis.height,
+              } ) ),
+              zoom: rendered.zoom,
+            },
+          } );
           return;
         }
         logger.info(
@@ -304,6 +316,22 @@ const VideoStabilizer = ( ) => {
       releaseKeepAwake( KEEP_AWAKE_HOLDER );
       set( { busy: null } );
     }
+  };
+
+  // A rectangle dragged over the stabilized preview becomes the new crop: its
+  // center, mapped back onto the start frame through the window the preview
+  // shows, and the zoom that makes it fill the output.
+  const zoomToWindow = ( window: ZoomWindow ) => {
+    if ( !previewCrop || previewCrop.corners.length !== 4 ) return;
+    const [topLeft, topRight, , bottomLeft] = previewCrop.corners;
+    const { x: u, y: v } = window.center;
+    set( {
+      cropCenter: {
+        x: topLeft.x + u * ( topRight.x - topLeft.x ) + v * ( bottomLeft.x - topLeft.x ),
+        y: topLeft.y + u * ( topRight.y - topLeft.y ) + v * ( bottomLeft.y - topLeft.y ),
+      },
+      zoom: Math.min( MAX_ZOOM, Math.max( 1, previewCrop.zoom / window.size ) ),
+    } );
   };
 
   const commitStart = async ( seconds: number ) => {
@@ -397,10 +425,9 @@ const VideoStabilizer = ( ) => {
   const previewWidth = Math.min( maxPreviewWidth, maxPreviewHeight * aspect );
   const previewHeight = previewWidth / aspect;
 
-  const shownZoom = zoomDraft ?? zoom;
   const roughCenter: Point = cropCenter ?? { x: 0.5, y: 0.5 };
-  const half = 0.5 / shownZoom;
-  const cropOutline: Point[] = plan && currentAnalysis && zoomDraft === null
+  const half = 0.5 / zoom;
+  const cropOutline: Point[] = plan && currentAnalysis
     ? plan.firstFrameCrop.map( p => ( {
       x: p.x / currentAnalysis.width,
       y: p.y / currentAnalysis.height,
@@ -520,24 +547,18 @@ const VideoStabilizer = ( ) => {
 
         <Heading4 className="mt-6 mb-2">{t( "CROP" )}</Heading4>
         <View className="flex-row items-center">
-          <Body2 className="w-[110px]">
-            {t( "Crop-zoom-x", { zoom: shownZoom.toFixed( 1 ) } )}
+          <Body2 className="flex-1">
+            {t( "Crop-zoom-x", { zoom: zoom.toFixed( 1 ) } )}
           </Body2>
-          <FineSlider
-            accessibilityLabel={t( "Crop-zoom" )}
-            disabled={disabled}
-            minimumValue={1}
-            maximumValue={MAX_ZOOM}
-            value={shownZoom}
-            snapValue={1}
-            snapThreshold={0.1}
-            onChange={setZoomDraft}
-            onComplete={value => {
-              setZoomDraft( null );
-              set( { zoom: value } );
-            }}
+          <Button
+            text={t( "RESET-ZOOM" )}
+            disabled={disabled || ( zoom === 1 && !cropCenter )}
+            onPress={( ) => set( { zoom: 1, cropCenter: null } )}
           />
         </View>
+        <Body3 className="mt-2">
+          {t( "Drag-a-rectangle-over-the-stabilized-preview-to-zoom-in" )}
+        </Body3>
         <SwitchRow
           classNames="mt-3"
           label={t( "Zoom-in-to-hide-empty-edges" )}
@@ -623,6 +644,21 @@ const VideoStabilizer = ( ) => {
                 start={previewStart}
                 style={{ width: comparisonHalfWidth * 2, height: comparisonHeight }}
               />
+              <View
+                className="absolute top-0"
+                style={{
+                  left: comparisonHalfWidth,
+                  width: comparisonHalfWidth,
+                  height: comparisonHeight,
+                }}
+              >
+                <ZoomRectangle
+                  width={comparisonHalfWidth}
+                  height={comparisonHeight}
+                  disabled={disabled || !previewIsCurrent || !previewCrop}
+                  onWindowPicked={zoomToWindow}
+                />
+              </View>
             </View>
           )
           : (
