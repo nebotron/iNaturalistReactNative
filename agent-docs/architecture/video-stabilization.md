@@ -13,9 +13,9 @@ metadata.
 | --- | --- | --- |
 | Screen | `src/components/VideoStabilizer/` | Import, start time, crop, side-by-side preview, export/save |
 | Session state | `src/stores/videoStabilizer.ts` | Zustand, not persisted, so a tab switch doesn't drop a finished analysis |
-| Math | `src/sharedHelpers/videoStabilization.ts` | Lock path, crop/zoom planning; unit tested |
+| Math | `src/sharedHelpers/videoStabilization.ts` | Robust fit of the lock path to the tile shifts, crop/zoom planning; unit tested |
 | Bridge | `src/sharedHelpers/videoStabilizerNative.ts` | Typed wrapper, progress events, the comparison player view |
-| Native | `ios/iNaturalistReactNative/VideoStabilizer.m` | Picking, frame reading, Vision registration, Core Image warping, AVAssetWriter, saving, player |
+| Native | `ios/iNaturalistReactNative/VideoStabilizer.m` | Picking, frame reading, tile phase correlation (Accelerate FFT), Core Image warping, AVAssetWriter, saving, player |
 
 The native module runs two passes over the same upright, constant-frame-rate
 `AVAssetReaderVideoCompositionOutput`. Frame *i* of the analysis is therefore
@@ -71,10 +71,29 @@ zooms relative to what's on screen. Pinches are ignored while the preview is
 stale. Reset Zoom returns to 1× centered. There is no still of the start
 frame on the screen; the crop is only picked on the preview.
 
-**Stabilize the background.** Chaining frame-to-frame registrations drifts, so
-the analysis also shifts each frame onto the first by the chained estimate and
-registers what's left against the first frame itself, giving a drift-free
-shift (`r` per frame). Pans and walks show black edges by design.
+**Stabilize the background.** Each frame is read as grayscale at 960 px on
+its long side and cut into a 4×4 grid of tiles. Every tile is registered by
+phase correlation (Hann window, normalized cross-power spectrum, a 5×5
+centroid around the peak for the fraction), with vDSP's DFT over the middle of
+the tile at the longest length it takes (f·2^k, f ∈ {1, 3, 5, 15}, so a
+240×132 tile correlates 240×128). Each tile is measured twice: onto the same
+tile of the previous frame (`ts`), moved first by the last step, and onto the
+first frame (`tr`), moved first by the running estimate of the frame's shift
+onto it. Tiles with no texture (Laplacian standard deviation under 1 gray
+level) or that the move pushes more than 5% out of the frame report null. The
+running estimate, chained medians corrected by the median reading, only
+places the tiles; it's also sent as `m`/`r`.
+
+JS (`fittedTilePath`) then fits the whole path to every tile at once:
+iteratively reweighted least squares, where each tile's step says how far the
+path moved since the previous frame and each reading (weighted 0.1) says where
+it is. Tukey weights, 48 px wide on the first pass and narrowing to 3 px (in
+960-px terms), drop the tiles that disagree with the path: tiles on a moving
+subject, on something at another depth, or simply mismeasured. The steps
+carry the frame-to-frame detail and the readings stop the drift. The normal
+equations are tridiagonal, so each pass is O(n). A frame with no tile
+measured falls back to its own step. Pans and walks show black edges by
+design.
 
 **Metadata.** The render copies QuickTime metadata and user data as is and
 maps other formats' common keys (creation date, ISO 6709 location, make,
@@ -83,12 +102,17 @@ model, software) to QuickTime keys. Saving goes through the native
 start time) and location from the original, rather than leaving Photos to
 date it when it was saved.
 
-### Registration convention
+### Measuring the approaches
 
-Vision's registration transforms map the targeted image onto the reference,
-in Core Image's bottom-left pixel space. This was measured with a per-video
-vote over four readings until device logs consistently showed "as-is"; it's
-now a constant.
+`stabilization-eval/` on the `claude/stoic-curie-sovvo9` branch holds the
+comparison that picked this method: a macOS tool that runs the analysis with
+the app's own code on test clips, and a Python harness that scores each
+approach with dense optical flow on the stabilized frames (hold against the
+first frame, frame-to-frame shake, and drift over a second) and renders them
+side by side. On its three clips the Vision whole-frame method left 44–85 px
+of hold error and 10–24 px of drift a second; tiles with the robust fit left
+2–4 px on the two with textured backgrounds and about 20 px on one dominated
+by a large bird against a featureless wall.
 
 ## Approaches considered
 
@@ -96,7 +120,9 @@ now a constant.
 
 | Approach | Pros | Cons |
 | --- | --- | --- |
-| **Vision translational registration** *(implemented, the only method)* | Built in, fast at 480 px, very robust on low-texture scenes such as water or sky | Can't remove roll or zoom wobble. A large moving subject drags the estimate |
+| **Phase correlation of 16 tiles, robust fit over all of them** *(implemented)* | Sub-pixel. Tiles on a moving subject or at another depth drop out of the fit. Accelerate only, no dependency | Can't remove roll or zoom wobble. A subject that fills most of the frame can still pull the fit |
+| Vision translational registration of the whole frame *(replaced)* | Built in | Reports whole pixels at 480 px, so chained steps drift. The frame was one registration, so a big subject or two depths made it jump between matches. Registering the warped frame against the first frame matched the black border and reset the lock on the first frames |
+| Vision registration of the same 16 tiles, same fit | As good as the FFT tiles on the test clips | Whole-pixel per tile; 32 Vision requests a frame |
 | Vision homographic registration → similarity *(removed)* | Removes roll and breathing as well as shift | Rotation and zoom correction was taken out; only shift is corrected |
 | Feature tracking + RANSAC (OpenCV `videostab`-style, or Vision optical flow with outlier rejection) | Rejects a moving subject as outliers, so it handles an animal walking through the frame best. Can mask out the subject box | Needs OpenCV (~10 MB+) or a hand-written robust estimator. Most code to maintain |
 | Dense optical flow (`VNGenerateOpticalFlowRequest`) with a median over the background | Robust and separates subject from background naturally | Slow at useful resolutions. More conventions to verify |
@@ -126,6 +152,10 @@ removed: the background now locks to the first frame.
 
 - iOS only. Android has no native module, and the menu item is hidden there.
 - Only shift is corrected; camera roll and zoom wobble stay in the output.
+  (Vision's homographic registration was too noisy to correct roll: it
+  added up 14–17° of roll that the test clips didn't have.)
+- A subject that covers most of the frame against a featureless background
+  leaves few background tiles, and the fit can follow the subject.
 - HDR (HLG/Dolby Vision) clips are read as 8-bit BGRA and written SDR.
 - Frame rate is capped at 60 fps, so slow-motion clips lose frames.
 - The export is capped at 1920 px on the long side. A deep crop is upscaled,

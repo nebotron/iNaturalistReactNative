@@ -1,15 +1,15 @@
 import type {
   AnalysisFrame,
-  Homography,
+  Point,
   VideoAnalysis,
 } from "sharedHelpers/videoStabilization";
 import {
   applyAffine,
   applyHomography,
   compose,
+  fittedTilePath,
   flattenTransforms,
   invert,
-  invertHomography,
   outputSize,
   planStabilization,
 } from "sharedHelpers/videoStabilization";
@@ -137,35 +137,94 @@ describe( "background stabilization", ( ) => {
 } );
 
 describe( "holding the background against the first frame", ( ) => {
-  // The chained frame-to-frame steps drift; the shifts measured against the
-  // first frame don't.
-  const n = 30;
+  // The camera's offset in frame i; a world point W appears at W − offset.
+  const n = 40;
   const offset = ( i: number ) => ( { x: 3 * Math.sin( i ) * i, y: 2 * Math.cos( i ) - 2 } );
-  const toFirst = ( i: number ): Homography => [
-    1, 0, offset( i ).x, 0, 1, offset( i ).y, 0, 0, 1,
-  ];
-  const analysis: VideoAnalysis = {
+  const TILES = 16;
+  // Each tile's step onto the previous frame and reading onto the first, as
+  // the native analysis reports them; `tile` can distort any of them.
+  const tiledAnalysis = (
+    tile: ( k: number, i: number, step: Point, reading: Point ) => {
+      step: Point | null;
+      reading: Point | null;
+    } = ( _k, _i, step, reading ) => ( { step, reading } ),
+  ): VideoAnalysis => ( {
     width: WIDTH,
     height: HEIGHT,
     fps: 30,
-    frames: Array.from( { length: n }, ( _v, i ) => ( {
-      t: i / 30,
-      ok: true,
-      m: [1, 0, 0.5, 0, 1, -0.5, 0, 0, 1],
-      r: toFirst( i ),
-    } ) ),
-  };
+    frames: Array.from( { length: n }, ( _v, i ) => {
+      const o = offset( i );
+      const prev = offset( Math.max( 0, i - 1 ) );
+      const measured = Array.from( { length: TILES }, ( _t, k ) => tile(
+        k,
+        i,
+        { x: o.x - prev.x, y: o.y - prev.y },
+        o,
+      ) );
+      return {
+        t: i / 30,
+        ok: true,
+        m: [1, 0, o.x - prev.x, 0, 1, o.y - prev.y, 0, 0, 1],
+        r: [1, 0, o.x, 0, 1, o.y, 0, 0, 1],
+        rok: true,
+        ts: measured.map( ( { step } ) => ( i > 0 && step
+          ? [step.x, step.y]
+          : null ) ),
+        tr: measured.map( ( { reading } ) => ( reading
+          ? [reading.x, reading.y]
+          : null ) ),
+      };
+    } ),
+  } );
+  const worstError = ( analysis: VideoAnalysis ) => Math.max( ...fittedTilePath( analysis ).map(
+    ( p, i ) => Math.hypot( p.x - offset( i ).x, p.y - offset( i ).y ),
+  ) );
 
   it( "pins every background point to the first frame", ( ) => {
-    const plan = planStabilization( analysis, { ...baseSettings, zoom: 1.5 } );
+    const plan = planStabilization( tiledAnalysis( ), { ...baseSettings, zoom: 1.5 } );
     [{ x: 100, y: 80 }, { x: 900, y: 520 }, { x: 500, y: 300 }].forEach( point => {
-      const out = plan.transforms.map( ( m, i ) => applyHomography(
-        m,
-        applyHomography( invertHomography( toFirst( i ) ), point ),
-      ) );
-      expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
-      expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
+      const out = plan.transforms.map( ( m, i ) => applyHomography( m, {
+        x: point.x - offset( i ).x,
+        y: point.y - offset( i ).y,
+      } ) );
+      expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-3 );
+      expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-3 );
     } );
+  } );
+
+  it( "ignores tiles that follow a moving subject", ( ) => {
+    // Five tiles sit on an animal walking 4 px a frame across the scene.
+    const walking = tiledAnalysis( ( k, i, step, reading ) => ( k < 5
+      ? {
+        step: { x: step.x + 4, y: step.y },
+        reading: { x: reading.x + 4 * i, y: reading.y },
+      }
+      : { step, reading } ) );
+    expect( worstError( walking ) ).toBeLessThan( 0.01 );
+  } );
+
+  it( "ignores readings that jump to the wrong match", ( ) => {
+    // Every few frames, half the readings latch onto something 60 px away.
+    const jumpy = tiledAnalysis( ( k, i, step, reading ) => ( i % 4 === 3 && k % 2 === 0
+      ? { step, reading: { x: reading.x + 60, y: reading.y - 20 } }
+      : { step, reading } ) );
+    expect( worstError( jumpy ) ).toBeLessThan( 0.01 );
+  } );
+
+  it( "stops frame-to-frame steps from drifting", ( ) => {
+    // Every step is a little long, which would add up to 12 px by the end.
+    const biased = tiledAnalysis( ( _k, _i, step, reading ) => ( {
+      step: { x: step.x + 0.3, y: step.y },
+      reading,
+    } ) );
+    expect( worstError( biased ) ).toBeLessThan( 1 );
+  } );
+
+  it( "keeps going through frames with no tile measured", ( ) => {
+    const gappy = tiledAnalysis( ( _k, i, step, reading ) => ( i >= 10 && i < 14
+      ? { step: null, reading: null }
+      : { step, reading } ) );
+    expect( worstError( gappy ) ).toBeLessThan( 0.01 );
   } );
 } );
 
