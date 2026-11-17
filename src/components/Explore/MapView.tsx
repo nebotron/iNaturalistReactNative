@@ -68,21 +68,17 @@ interface Props {
     orderBy?: string;
   };
   isLoading: boolean;
-  hasLocationPermissions?: boolean;
   renderLocationPermissionsGate: RenderLocationPermissionsGateFunction;
-  requestLocationPermissions: ( ) => void;
 }
 
 const MapView = ( {
   observationBounds,
   queryParams,
   isLoading,
-  hasLocationPermissions,
   renderLocationPermissionsGate,
-  requestLocationPermissions,
 }: Props ) => {
   const { t } = useTranslation( );
-  const { state: exploreState, dispatch, defaultExploreLocation } = useExplore( );
+  const { state: exploreState, dispatch } = useExplore( );
   const [showRedoSearchButton, setShowRedoSearchButton] = useState( false );
   const [regionToAnimate, setRegionToAnimate] = useState<Region | null>( null );
   const isFirstRender = useRef( true );
@@ -217,18 +213,6 @@ const MapView = ( {
 
   const handlePanDrag = ( ) => setShowRedoSearchButton( true );
 
-  const handleCurrentLocationPress = async ( ) => {
-    if ( hasLocationPermissions ) {
-      const exploreLocation = await defaultExploreLocation( );
-      dispatch( {
-        type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
-        exploreLocation,
-      } );
-    } else {
-      requestLocationPermissions( );
-    }
-  };
-
   return (
     <View className="flex-1 overflow-hidden h-full">
       <Map
@@ -246,7 +230,6 @@ const MapView = ( {
         showsUserLocation
         tileMapParams={tileMapParams}
         withPressableObsTiles={tileMapParams !== null && !ebirdOnly}
-        onCurrentLocationPress={handleCurrentLocationPress}
       />
       {showRedoSearchButton && (
         <View
@@ -267,7 +250,7 @@ const MapView = ( {
           <ActivityIndicator size={activityIndicatorSize} />
         </View>
       )}
-      {renderLocationPermissionsGate( { onPermissionGranted: handleCurrentLocationPress } )}
+      {renderLocationPermissionsGate( {} )}
     </View>
   );
 };

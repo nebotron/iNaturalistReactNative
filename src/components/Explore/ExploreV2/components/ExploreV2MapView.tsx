@@ -62,7 +62,6 @@ interface Props {
   nearbyCoords?: NearbyCoords;
   // Shown above the map, e.g. why eBird sightings are missing
   notice?: React.ReactNode;
-  onCurrentLocationPress?: ( ) => void;
   onRedoSearchPress?: ( _bounds: ApiTotalBounds ) => void;
   placeMode: EXPLORE_V2_PLACE_MODE;
   queryParams: ExploreV2QueryParams;
@@ -75,7 +74,6 @@ const ExploreV2MapView = ( {
   mapAreaBounds,
   nearbyCoords,
   notice,
-  onCurrentLocationPress,
   onRedoSearchPress,
   placeMode,
   queryParams,
@@ -197,7 +195,6 @@ const ExploreV2MapView = ( {
         initialRegion={initialRegion}
         isLoading={isLoading}
         mapChildren={<EbirdMapMarkers params={queryParams} />}
-        onCurrentLocationPress={onCurrentLocationPress}
         onPanDrag={handlePanDrag}
         regionToAnimate={targetRegion}
         showCurrentLocationButton

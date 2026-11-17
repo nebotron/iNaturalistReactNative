@@ -213,11 +213,6 @@ const ExploreResults = ( ) => {
     isNearby, hasPermissions, hasBlockedPermissions, nearbyCoords, appliedSearchCount, dispatch,
   ] ) );
 
-  const handleCurrentLocationPress = useCallback(
-    ( ) => dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY } ),
-    [dispatch],
-  );
-
   const handleRedoSearchPress = useCallback(
     ( bounds: ApiTotalBounds ) => dispatch( {
       type: EXPLORE_V2_ACTION.SET_LOCATION_MAP_AREA,
@@ -534,7 +529,6 @@ const ExploreResults = ( ) => {
                     : undefined}
                   nearbyCoords={nearbyCoords}
                   notice={<EbirdNotice ebird={ebird} />}
-                  onCurrentLocationPress={handleCurrentLocationPress}
                   onRedoSearchPress={handleRedoSearchPress}
                   placeMode={state.location.placeMode}
                   queryParams={queryParams}

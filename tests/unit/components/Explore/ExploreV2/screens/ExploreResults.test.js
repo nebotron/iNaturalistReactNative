@@ -451,13 +451,13 @@ describe( "ExploreResults observations view", ( ) => {
     ).toBeTruthy( );
   } );
 
-  it( "makes the search nearby when the current location button is pressed", async ( ) => {
+  it( "leaves the location filter alone when the current location button is pressed", async ( ) => {
     const actor = userEvent.setup( );
     renderComponent( <ExploreResults /> );
 
     await actor.press( await screen.findByTestId( "Map.CurrentLocationButton" ) );
 
-    expect( mockDispatch ).toHaveBeenCalledWith( {
+    expect( mockDispatch ).not.toHaveBeenCalledWith( {
       type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY,
     } );
   } );
