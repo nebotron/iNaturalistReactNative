@@ -1,5 +1,5 @@
 import type { VideoAnalysis } from "sharedHelpers/videoStabilization";
-import type { VideoFrame, VideoInfo } from "sharedHelpers/videoStabilizerNative";
+import type { VideoInfo } from "sharedHelpers/videoStabilizerNative";
 import { create } from "zustand";
 
 // The video stabilizer's session. Held here rather than in the screen so that
@@ -19,14 +19,10 @@ interface Busy {
 export interface VideoStabilizerState {
   videoPath: string | null;
   info: VideoInfo | null;
-  frame: VideoFrame | null;
-  // Where the output starts, in seconds; the crop is drawn on the frame at
-  // this time.
+  // Where the output starts, in seconds.
   start: number;
   // Crop center, normalized, on the start frame.
   cropCenter: { x: number; y: number } | null;
-  // Correct rolling shutter, with the readout time measured from the video.
-  rollingShutter: boolean;
   zoom: number;
   avoidEdges: boolean;
   // Each result remembers the settings it was made with (see the screen's
@@ -55,10 +51,8 @@ export interface VideoStabilizerState {
 const initialSession = {
   videoPath: null,
   info: null,
-  frame: null,
   start: 0,
   cropCenter: null,
-  rollingShutter: false,
   zoom: 1,
   avoidEdges: false,
   analysis: null,

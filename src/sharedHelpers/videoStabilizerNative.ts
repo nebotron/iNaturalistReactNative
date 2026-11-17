@@ -16,19 +16,10 @@ export interface VideoInfo {
   hasAudio: boolean;
 }
 
-export interface VideoFrame {
-  uri: string;
-  width: number;
-  height: number;
-}
-
 // Starting an analysis or a render cancels the one before. `job` comes back
 // on progress events, so a superseded job's progress can be told apart.
 export interface AnalyzeOptions {
   start: number;
-  // Also measure the top and bottom of each frame on their own, to work out
-  // the rolling shutter's readout time.
-  strips: boolean;
   job: number;
 }
 
@@ -60,7 +51,6 @@ export type ProgressPhase = "analyze" | "render";
 interface VideoStabilizerModule {
   pickVideo: ( ) => Promise<string | null>;
   probe: ( path: string ) => Promise<VideoInfo>;
-  frameAt: ( path: string, seconds: number, maxDimension: number ) => Promise<VideoFrame>;
   analyze: ( path: string, options: AnalyzeOptions ) => Promise<NativeAnalysis>;
   render: ( path: string, options: RenderOptions ) => Promise<RenderResult>;
   cancel: ( ) => void;
@@ -79,10 +69,6 @@ const unavailable = ( ) => Promise.reject( new Error( "Video stabilization is un
 export const pickVideo = ( ) => nativeModule?.pickVideo( ) ?? Promise.resolve( null );
 
 export const probeVideo = ( path: string ) => nativeModule?.probe( path ) ?? unavailable( );
-
-export const videoFrameAt = ( path: string, seconds: number, maxDimension = 1080 ) => (
-  nativeModule?.frameAt( path, seconds, maxDimension ) ?? unavailable( )
-);
 
 export const analyzeVideo = ( path: string, options: AnalyzeOptions ) => (
   nativeModule?.analyze( path, options ) ?? unavailable( )

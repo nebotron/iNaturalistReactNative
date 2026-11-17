@@ -25,7 +25,6 @@ jest.mock( "sharedHelpers/videoStabilizerNative", ( ) => ( {
   probeVideo: ( ) => Promise.resolve( {
     width: 1920, height: 1080, duration: 4, fps: 30, hasAudio: true,
   } ),
-  videoFrameAt: ( ) => Promise.resolve( { uri: "file:///frame.jpg", width: 1080, height: 608 } ),
   analyzeVideo: ( ...args: unknown[] ) => mockAnalyze( ...args ),
   renderStabilizedVideo: ( ...args: unknown[] ) => mockRender( ...args ),
   playVideo: ( ...args: unknown[] ) => mockPlay( ...args ),
