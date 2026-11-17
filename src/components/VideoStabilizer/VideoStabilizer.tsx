@@ -426,11 +426,58 @@ const VideoStabilizer = ( ) => {
   const exportSize = outputSize( info.width, info.height, EXPORT_MAX_DIMENSION );
   const previewIsCurrent = !!previewUri && previewKey === wantedPreviewKey;
 
-  // The original and the stabilized preview side by side, pinned below the
-  // settings, each half the width at most and no taller than a third of
-  // the screen.
-  const comparisonHeight = Math.min( maxPreviewWidth / 2 / aspect, windowHeight * 0.3 );
-  const comparisonHalfWidth = comparisonHeight * aspect;
+  // The original above the stabilized preview, each the full screen width.
+  // Pinned below the settings when the pair fits in half the screen (wide
+  // videos); otherwise (tall videos) at the end of the settings, so it
+  // doesn't cover them.
+  const videoHeight = windowWidth / aspect;
+  const comparisonPinned = videoHeight * 2 <= windowHeight * 0.5;
+  const videoLabel = ( text: string, top: number ) => (
+    <View
+      className="absolute left-2 px-2 py-0.5 rounded bg-black/50"
+      style={{ top: top + 8 }}
+      pointerEvents="none"
+    >
+      <Body3 className="text-white">{text}</Body3>
+    </View>
+  );
+  const comparison = (
+    <View
+      className={`pt-2 bg-white ${comparisonPinned
+        ? "pb-6 border-t border-lightGray"
+        // Out to the screen edges, past the settings' padding.
+        : "mt-6 -mx-4"}`}
+    >
+      <Heading4 className="px-4 mb-2">{t( "PREVIEW--video-stabilizer" )}</Heading4>
+      {previewUri && VideoStabilizerComparison
+        ? (
+          <View className={previewIsCurrent
+            ? ""
+            : "opacity-50"}
+          >
+            <VideoStabilizerComparison
+              accessibilityLabel={t( "Original-and-stabilized-videos" )}
+              original={videoPath}
+              stabilized={previewUri}
+              start={previewStart}
+              style={{ width: windowWidth, height: videoHeight * 2 }}
+            />
+            {videoLabel( t( "Original--video-stabilizer" ), 0 )}
+            {videoLabel( t( "Stabilized--video-stabilizer" ), videoHeight )}
+          </View>
+        )
+        : (
+          <View
+            className="items-center justify-center bg-lightGray p-4"
+            style={{ width: windowWidth, height: videoHeight * 2 }}
+          >
+            <Body3 className="text-center">
+              {t( "The-preview-appears-here-once-the-motion-is-analyzed" )}
+            </Body3>
+          </View>
+        )}
+    </View>
+  );
 
   return (
     <View className="flex-1">
@@ -592,44 +639,9 @@ const VideoStabilizer = ( ) => {
           disabled={disabled}
           onPress={importVideo}
         />
+        {!comparisonPinned && comparison}
       </ScrollView>
-      <View className="px-4 pt-2 pb-6 border-t border-lightGray bg-white">
-        <Heading4 className="mb-2">{t( "PREVIEW--video-stabilizer" )}</Heading4>
-        <View className="self-center flex-row">
-          <Body3 className="text-center" style={{ width: comparisonHalfWidth }}>
-            {t( "Original--video-stabilizer" )}
-          </Body3>
-          <Body3 className="text-center" style={{ width: comparisonHalfWidth }}>
-            {t( "Stabilized--video-stabilizer" )}
-          </Body3>
-        </View>
-        {previewUri && VideoStabilizerComparison
-          ? (
-            <View
-              className={`self-center mt-1 ${previewIsCurrent
-                ? ""
-                : "opacity-50"}`}
-            >
-              <VideoStabilizerComparison
-                accessibilityLabel={t( "Original-and-stabilized-videos" )}
-                original={videoPath}
-                stabilized={previewUri}
-                start={previewStart}
-                style={{ width: comparisonHalfWidth * 2, height: comparisonHeight }}
-              />
-            </View>
-          )
-          : (
-            <View
-              className="self-center items-center justify-center bg-lightGray p-4 mt-1"
-              style={{ width: comparisonHalfWidth * 2, height: comparisonHeight }}
-            >
-              <Body3 className="text-center">
-                {t( "The-preview-appears-here-once-the-motion-is-analyzed" )}
-              </Body3>
-            </View>
-          )}
-      </View>
+      {comparisonPinned && comparison}
     </View>
   );
 };

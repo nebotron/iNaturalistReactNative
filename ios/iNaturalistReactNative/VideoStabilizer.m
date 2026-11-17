@@ -960,8 +960,8 @@ RCT_EXPORT_METHOD( saveToPhotos
 
 // ─── Comparison player ───────────────────────────────────────────────────────
 
-// The original (from the start time) beside the stabilized preview, as one
-// composition with both tracks laid side by side. One player clock drives
+// The original (from the start time) above the stabilized preview, as one
+// composition with both tracks stacked. One player clock drives
 // both, so they stay frame for frame in step, including across the loop.
 static AVPlayerItem *comparisonItem( NSString *originalPath, NSString *stabilizedPath, double start )
 {
@@ -981,13 +981,13 @@ static AVPlayerItem *comparisonItem( NSString *originalPath, NSString *stabilize
   if ( CMTimeCompare( duration, kCMTimeZero ) <= 0 ) return nil;
 
   AVMutableComposition *composition = [AVMutableComposition composition];
-  AVMutableCompositionTrack *left = [composition addMutableTrackWithMediaType:AVMediaTypeVideo
+  AVMutableCompositionTrack *top = [composition addMutableTrackWithMediaType:AVMediaTypeVideo
                                                              preferredTrackID:kCMPersistentTrackID_Invalid];
-  AVMutableCompositionTrack *right = [composition addMutableTrackWithMediaType:AVMediaTypeVideo
+  AVMutableCompositionTrack *bottom = [composition addMutableTrackWithMediaType:AVMediaTypeVideo
                                                               preferredTrackID:kCMPersistentTrackID_Invalid];
-  if ( ![left insertTimeRange:CMTimeRangeMake( originalStart, duration ) ofTrack:originalTrack
+  if ( ![top insertTimeRange:CMTimeRangeMake( originalStart, duration ) ofTrack:originalTrack
                        atTime:kCMTimeZero error:nil]
-    || ![right insertTimeRange:CMTimeRangeMake( stabilizedRange.start, duration ) ofTrack:stabilizedTrack
+    || ![bottom insertTimeRange:CMTimeRangeMake( stabilizedRange.start, duration ) ofTrack:stabilizedTrack
                         atTime:kCMTimeZero error:nil] ) {
     return nil;
   }
@@ -1011,22 +1011,22 @@ static AVPlayerItem *comparisonItem( NSString *originalPath, NSString *stabilize
     ( cell.height - originalRect.size.height * scale ) / 2 ) );
   CGAffineTransform stabilizedTransform = stabilizedTrack.preferredTransform;
   stabilizedTransform = CGAffineTransformConcat( stabilizedTransform,
-    CGAffineTransformMakeTranslation( cell.width - stabilizedRect.origin.x, -stabilizedRect.origin.y ) );
+    CGAffineTransformMakeTranslation( -stabilizedRect.origin.x, cell.height - stabilizedRect.origin.y ) );
 
-  AVMutableVideoCompositionLayerInstruction *leftLayer =
-    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:left];
-  [leftLayer setTransform:originalTransform atTime:kCMTimeZero];
-  AVMutableVideoCompositionLayerInstruction *rightLayer =
-    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:right];
-  [rightLayer setTransform:stabilizedTransform atTime:kCMTimeZero];
+  AVMutableVideoCompositionLayerInstruction *topLayer =
+    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:top];
+  [topLayer setTransform:originalTransform atTime:kCMTimeZero];
+  AVMutableVideoCompositionLayerInstruction *bottomLayer =
+    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:bottom];
+  [bottomLayer setTransform:stabilizedTransform atTime:kCMTimeZero];
   AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
   instruction.timeRange = CMTimeRangeMake( kCMTimeZero, duration );
-  instruction.layerInstructions = @[leftLayer, rightLayer];
+  instruction.layerInstructions = @[topLayer, bottomLayer];
   instruction.backgroundColor = [UIColor blackColor].CGColor;
 
   AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
   videoComposition.instructions = @[instruction];
-  videoComposition.renderSize = CGSizeMake( cell.width * 2, cell.height );
+  videoComposition.renderSize = CGSizeMake( cell.width, cell.height * 2 );
   videoComposition.frameDuration = CMTimeMake( 1000, (int32_t)round( frameRateOf( stabilizedTrack ) * 1000 ) );
 
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:composition];

@@ -36,10 +36,11 @@ frame *i* of the render.
 The screen keys each result by the settings it was made with
 (`analysisKey`, `previewKey`, `exportKey` in the store). An effect reruns the
 analysis whenever its key is stale and, once it's current, re-renders the
-preview, which loops in a panel pinned below the settings beside the
-original (`VideoStabilizerComparison`: the original first, from the start
-time the preview was rendered with, then the stabilized preview). Both are
-tracks of one `AVMutableComposition` laid side by side by an
+preview, which loops below the original, each the full screen width
+(`VideoStabilizerComparison`: the original from the start time the preview
+was rendered with, then the stabilized preview). The pair is pinned below the
+settings when it fits in half the screen, and otherwise ends the scrolling
+settings. Both are tracks of one `AVMutableComposition` stacked by an
 `AVVideoComposition`, so a single player clock keeps them frame for frame in
 step, across the loop too. Native analyses and renders are numbered;
 starting one cancels the one before, and progress events carry the JS job
