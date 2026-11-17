@@ -4,7 +4,6 @@ import {
   Body3,
   Button,
   Heading4,
-  RadioButtonRow,
   SwitchRow,
 } from "components/SharedComponents";
 import { ScrollView, View } from "components/styledComponents";
@@ -16,7 +15,6 @@ import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevi
 import type {
   Point,
   ReadoutEstimate,
-  StabilizationMode,
   StabilizationSettings,
   VideoAnalysis,
 } from "sharedHelpers/videoStabilization";
@@ -71,7 +69,6 @@ const formatTime = ( seconds: number ) => {
 const percent = ( progress: number ) => Math.round( progress * 100 );
 
 interface Choices {
-  mode: StabilizationMode;
   rollingShutter: boolean;
   zoom: number;
   avoidEdges: boolean;
@@ -86,7 +83,6 @@ const settingsFor = (
 ): StabilizationSettings => {
   const size = outputSize( analysis.width, analysis.height, maxDimension );
   return {
-    mode: choices.mode,
     rollingShutter: choices.rollingShutter
       ? readout?.readout ?? 0
       : 0,
@@ -105,7 +101,7 @@ const VideoStabilizer = ( ) => {
   const { t } = useTranslation( );
   const { width: windowWidth, height: windowHeight } = useWindowDimensions( );
   const {
-    videoPath, info, frame, start, cropCenter, subject, mode, rollingShutter,
+    videoPath, info, frame, start, cropCenter, rollingShutter,
     zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, previewStart,
     previewCrop, exportUri, exportKey, set, setStart,
   } = useVideoStabilizer( );
@@ -139,13 +135,10 @@ const VideoStabilizer = ( ) => {
   // What each result has to have been made with to be current. A result made
   // with anything else is stale, and the effect below reruns it.
   // Rolling-shutter correction needs the strips measured; an analysis that
-  // has them serves just as well with the correction off. Subject mode tracks
-  // the subject picked on the frame, so picking another means tracking again.
+  // has them serves just as well with the correction off.
   const analysisKeyFor = ( strips: boolean ) => (
     videoPath
-      ? JSON.stringify( [videoPath, start, mode, mode === "subject"
-        ? subject
-        : null, strips] )
+      ? JSON.stringify( [videoPath, start, strips] )
       : null
   );
   const wantedAnalysisKey = analysisKeyFor( rollingShutter );
@@ -162,7 +155,7 @@ const VideoStabilizer = ( ) => {
     [currentAnalysis],
   );
   const choices: Choices = {
-    mode, rollingShutter, zoom, avoidEdges, cropCenter,
+    rollingShutter, zoom, avoidEdges, cropCenter,
   };
   const wantedPreviewKey = currentAnalysis
     ? JSON.stringify( [wantedAnalysisKey, choices] )
@@ -176,10 +169,10 @@ const VideoStabilizer = ( ) => {
   const plan = useMemo( ( ) => (
     currentAnalysis
       ? planStabilization( currentAnalysis, settingsFor( currentAnalysis, EXPORT_MAX_DIMENSION, {
-        mode, rollingShutter, zoom, avoidEdges, cropCenter,
+        rollingShutter, zoom, avoidEdges, cropCenter,
       }, readout ) )
       : null
-  ), [currentAnalysis, mode, rollingShutter, zoom, avoidEdges, cropCenter, readout] );
+  ), [currentAnalysis, rollingShutter, zoom, avoidEdges, cropCenter, readout] );
 
   // Runs one native job. Starting a job cancels the one before (natively,
   // too), and only the latest job's result, error and progress count.
@@ -209,8 +202,7 @@ const VideoStabilizer = ( ) => {
 
   const runAnalysis = ( key: string ) => {
     const {
-      videoPath: path, start: from, mode: analysisMode, subject: subjectPoint,
-      rollingShutter: strips,
+      videoPath: path, start: from, rollingShutter: strips,
     } = useVideoStabilizer.getState( );
     if ( !path ) return;
     runJob(
@@ -218,10 +210,6 @@ const VideoStabilizer = ( ) => {
       "analyzing",
       job => analyzeVideo( path, {
         start: from,
-        mode: analysisMode,
-        subject: analysisMode === "subject"
-          ? subjectPoint ?? { x: 0.5, y: 0.5 }
-          : undefined,
         strips,
         job,
       } ),
@@ -239,9 +227,7 @@ const VideoStabilizer = ( ) => {
         }
         logger.info(
           `analyzed ${result.frames.length} frames, ${lost} unusable, `
-          + `${analysisMode === "subject"
-            ? `subject tracked in ${result.trackedFrames ?? 0}`
-            : `${result.refinedFrames} locked to the first frame`}${readoutNote}`,
+          + `${result.refinedFrames} locked to the first frame${readoutNote}`,
         );
         set( { analysis: result, analysisKey: key } );
       },
@@ -346,7 +332,6 @@ const VideoStabilizer = ( ) => {
         videoPath: path,
         info: probed,
         frame: firstFrame,
-        mode: kept.mode,
         rollingShutter: kept.rollingShutter,
         busy: { phase: "importing", progress: 0 },
       } );
@@ -573,12 +558,10 @@ const VideoStabilizer = ( ) => {
           height={previewHeight}
           crop={cropOutline}
           cropCenter={cropCenter ?? { x: 0.5, y: 0.5 }}
-          onPointPicked={point => set( { cropCenter: point, subject: point } )}
+          onPointPicked={point => set( { cropCenter: point } )}
         />
         <Body3 className="mt-2 text-center">
-          {mode === "subject"
-            ? t( "Tap-the-subject-to-follow-it" )
-            : t( "Tap-the-frame-to-choose-where-to-crop" )}
+          {t( "Tap-the-frame-to-choose-where-to-crop" )}
         </Body3>
 
         <View className="flex-row items-center mt-4">
@@ -595,27 +578,6 @@ const VideoStabilizer = ( ) => {
             onComplete={commitStart}
           />
         </View>
-
-        <Heading4 className="mt-6 mb-2">{t( "STABILIZE--video-stabilizer" )}</Heading4>
-        <RadioButtonRow
-          testID="VideoStabilizer.mode.background"
-          value="background"
-          checked={mode === "background"}
-          label={t( "Stabilize-the-background" )}
-          description={t( "Holds-the-background-where-it-is-at-the-start" )}
-          smallLabel
-          onPress={( ) => !disabled && set( { mode: "background" } )}
-        />
-        <RadioButtonRow
-          classNames="mt-3"
-          testID="VideoStabilizer.mode.subject"
-          value="subject"
-          checked={mode === "subject"}
-          label={t( "Stabilize-the-subject" )}
-          description={t( "Keeps-the-subject-you-tap-where-it-is-at-the-start" )}
-          smallLabel
-          onPress={( ) => !disabled && set( { mode: "subject" } )}
-        />
 
         <Heading4 className="mt-6 mb-2">{t( "ROLLING-SHUTTER" )}</Heading4>
         <SwitchRow

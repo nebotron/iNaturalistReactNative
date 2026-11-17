@@ -14,7 +14,6 @@ import {
   invertHomography,
   outputSize,
   planStabilization,
-  subjectPath,
 } from "sharedHelpers/videoStabilization";
 
 const WIDTH = 1000;
@@ -45,7 +44,6 @@ const jitter = ( n: number, amplitude: number ) => Array.from( { length: n }, ( 
 } ) );
 
 const baseSettings = {
-  mode: "background" as const,
   zoom: 1,
   avoidEdges: false,
   outputWidth: WIDTH,
@@ -170,65 +168,6 @@ describe( "holding the background against the first frame", ( ) => {
       expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
       expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
     } );
-  } );
-} );
-
-describe( "subject stabilization", ( ) => {
-  // The camera shakes while the subject walks steadily right, 10 px a frame.
-  const n = 40;
-  const offsets = jitter( n, 15 );
-  const subjectInWorld = ( i: number ) => ( { x: 300 + 10 * i, y: 250 } );
-  const subjectInFrame = ( i: number ) => ( {
-    x: subjectInWorld( i ).x - offsets[i].x,
-    y: subjectInWorld( i ).y - offsets[i].y,
-  } );
-  const analysis = ( lost: number[] = [] ): VideoAnalysis => {
-    const background = shakyBackground( offsets );
-    return {
-      ...background,
-      frames: background.frames.map( ( frame, i ) => ( {
-        ...frame,
-        s: lost.includes( i )
-          ? null
-          : [subjectInFrame( i ).x, subjectInFrame( i ).y],
-      } ) ),
-    };
-  };
-
-  it( "keeps the subject where it was in the first frame", ( ) => {
-    const plan = planStabilization( analysis( ), { ...baseSettings, mode: "subject" } );
-    const out = plan.transforms.map( ( m, i ) => applyHomography( m, subjectInFrame( i ) ) );
-    expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
-    expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
-  } );
-
-  it( "lets the background move past the subject", ( ) => {
-    const plan = planStabilization( analysis( ), { ...baseSettings, mode: "subject" } );
-    const world = { x: 500, y: 300 };
-    const out = plan.transforms.map( ( m, i ) => applyHomography( m, {
-      x: world.x - offsets[i].x,
-      y: world.y - offsets[i].y,
-    } ) );
-    expect( out[0].x - out[n - 1].x ).toBeGreaterThan( 10 * ( n - 2 ) );
-  } );
-
-  it( "fills in frames where the tracker lost the subject", ( ) => {
-    const path = subjectPath( analysis( [0, 10, 11, n - 1] ) ) as Point[];
-    expect( path ).toHaveLength( n );
-    path.forEach( p => {
-      expect( Number.isFinite( p.x ) && Number.isFinite( p.y ) ).toBe( true );
-    } );
-    // On the line from frame 9 to frame 12, and held at the ends.
-    expect( path[10].x ).toBeCloseTo( path[9].x + ( path[12].x - path[9].x ) / 3 );
-    expect( path[0] ).toEqual( path[1] );
-    expect( path[n - 1] ).toEqual( path[n - 2] );
-  } );
-
-  it( "falls back to the background when the subject was never found", ( ) => {
-    const lostEverywhere = analysis( Array.from( { length: n }, ( _v, i ) => i ) );
-    expect( subjectPath( lostEverywhere ) ).toBeNull( );
-    expect( planStabilization( lostEverywhere, { ...baseSettings, mode: "subject" } ).transforms )
-      .toEqual( planStabilization( lostEverywhere, baseSettings ).transforms );
   } );
 } );
 

@@ -868,8 +868,6 @@ Hide-gear = Hide gear
 Hide-saved-photos = Hide saved photos
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
-# Explains the video stabilizer's "Stabilize the background" option
-Holds-the-background-where-it-is-at-the-start = Holds the background where it is at the start, like a tripod. Pans and walks will show black edges.
 # Label used for a stop added to a route from a wildlife hotspot
 Hotspot = Hotspot
 # Label for the bbox padding setting in the hotspot finder filter
@@ -1067,8 +1065,6 @@ KEEP-EDITING = KEEP EDITING
 Keep-in-mind-that-project-curators = Keep in mind that project curators will still be able to add your observations to their project unless you change your account settings.
 # Settings option to keep imported photos on the USB drive or SD card
 Keep-on-drive = Keep on Drive
-# Explains the video stabilizer's "Stabilize the subject" option
-Keeps-the-subject-you-tap-where-it-is-at-the-start = Keeps the subject you tap where it is at the start, so the background moves around it.
 # Display name for the iconic taxa category chromista
 Kelp-and-Diatoms = Kelp & Diatoms
 # Unit after the nearby search radius input
@@ -1228,7 +1224,7 @@ Motion-analyzed-across-x-frames =
         [one] Motion analyzed across 1 frame
        *[other] Motion analyzed across { $count } frames
     }
-# Accessibility hint for the video frame when stabilizing on the background
+# Accessibility hint for the video stabilizer's frame
 Moves-the-crop-to-the-tapped-point = Moves the crop to the tapped point.
 must-be-captive-cultivated = must be captive / cultivated
 must-be-georeferenced = must be georeferenced
@@ -2016,12 +2012,6 @@ Specific-identification--project-rule = Specific identification
 # Header for a project rule requiring an observation to be in a place chosen
 # by the project
 Specific-location--project-rule = Specific location
-# Section header in the video stabilizer for choosing what to hold still
-STABILIZE--video-stabilizer = STABILIZE
-# Video stabilizer option that holds the background still
-Stabilize-the-background = Stabilize the background
-# Video stabilizer option that keeps the tapped subject still in the frame
-Stabilize-the-subject = Stabilize the subject
 # Label above the stabilized video, playing beside the original
 Stabilized--video-stabilizer = Stabilized
 # Label for the standard map type
@@ -2081,10 +2071,8 @@ Take-photo = Take photo
 # Label for the button that opens the AI camera to take photos for a new observation
 Take-photos = Take photos
 Tap-here-to-switch-to-Advanced-Mode = Tap here to switch to Advanced Mode
-# Instruction under the video frame when stabilizing the background
+# Instruction under the video stabilizer's frame
 Tap-the-frame-to-choose-where-to-crop = Tap the frame to choose where to crop.
-# Instruction under the video frame when stabilizing the subject
-Tap-the-subject-to-follow-it = Tap the subject to follow it.
 # Shown in place of a group of observations that failed to load, prompting the user to
 # request them again
 Tap-to-try-loading-again = Tap to try loading again

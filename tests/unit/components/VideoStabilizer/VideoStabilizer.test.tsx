@@ -88,7 +88,7 @@ describe( "VideoStabilizer", ( ) => {
     expect( mockPickVideo ).toHaveBeenCalledWith( );
     expect( mockAnalyze ).toHaveBeenCalledWith(
       INPUT,
-      expect.objectContaining( { start: 0, mode: "background" } ),
+      expect.objectContaining( { start: 0 } ),
     );
     await waitFor( ( ) => expect( mockRender ).toHaveBeenCalledWith(
       INPUT,
@@ -121,20 +121,6 @@ describe( "VideoStabilizer", ( ) => {
     expect( screen.getByRole( "switch", {
       name: i18next.t( "Zoom-in-to-hide-empty-edges" ),
     } ) ).not.toBeChecked( );
-  } );
-
-  it( "tracks the subject when stabilizing the subject", async ( ) => {
-    const user = userEvent.setup( );
-    renderComponent( <VideoStabilizer /> );
-    await importVideo( user );
-    await waitFor( ( ) => expect( mockRender ).toHaveBeenCalled( ) );
-    await user.press( screen.getByTestId( "VideoStabilizer.mode.subject" ) );
-    await waitFor( ( ) => expect( mockAnalyze ).toHaveBeenLastCalledWith(
-      INPUT,
-      expect.objectContaining( { mode: "subject", subject: { x: 0.5, y: 0.5 } } ),
-    ) );
-    expect( mockAnalyze ).toHaveBeenCalledTimes( 2 );
-    expect( screen.getByText( i18next.t( "Tap-the-subject-to-follow-it" ) ) ).toBeVisible( );
   } );
 
   it( "zooms and moves the crop with a two-finger pinch on the stabilized preview", async ( ) => {

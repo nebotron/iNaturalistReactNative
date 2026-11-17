@@ -1,8 +1,7 @@
 // The math behind the video stabilizer (components/VideoStabilizer). The native
 // module (ios/.../VideoStabilizer.m) only measures and renders: one pass reads
 // the video and reports, per frame, how the picture moved since the last frame
-// plus either where the frame sits on the start frame (background mode) or
-// where the subject is (subject mode), and a second pass warps every frame by
+// plus where the frame sits on the start frame, and a second pass warps every frame by
 // the transform this file computes for it. Keeping that math here means
 // changing the crop, zoom or rolling shutter never re-reads the video, and the
 // math can be unit tested.
@@ -13,10 +12,8 @@
 // for column vectors (x, y, 1).
 //
 // The model, for frame i:
-//   L_i  the lock: the shift that maps frame i onto the first frame. In
-//        background mode it lines the background up with the first frame's (a
-//        tripod); in subject mode it puts the subject where it was in the first
-//        frame (a camera that follows it exactly).
+//   L_i  the lock: the shift that maps frame i onto the first frame, lining
+//        the background up with the first frame's (a tripod).
 //   R_i  the rolling-shutter correction: undoes the lean and squash a moving
 //        camera puts into a frame whose rows were read one after another.
 // A pixel x of frame i is drawn at  L_i · R_i · x − center  in stable space,
@@ -48,7 +45,7 @@ export interface AnalysisFrame {
   // Homography mapping this frame's pixels onto the previous frame's
   // (identity for the first frame).
   m?: number[];
-  // Background mode: transform mapping this frame's pixels onto the first
+  // Transform mapping this frame's pixels onto the first
   // frame's, measured against the first frame itself so that errors don't add
   // up over the clip.
   r?: number[];
@@ -56,12 +53,7 @@ export interface AnalysisFrame {
   // bottom strips of the frame registered on their own.
   mt?: number[];
   mb?: number[];
-  // Subject mode: where the tracked subject's center is in this frame, as
-  // [x, y], or null where the tracker lost it.
-  s?: number[] | null;
 }
-
-export type StabilizationMode = "background" | "subject";
 
 export interface VideoAnalysis {
   width: number;
@@ -206,48 +198,10 @@ export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
 export const hasReferencePath = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
   && analysis.frames.every( frame => frame.r?.length === 9 );
 
-const trackedPoint = ( frame: AnalysisFrame ): Point | null => (
-  frame.s?.length === 2 && Number.isFinite( frame.s[0] ) && Number.isFinite( frame.s[1] )
-    ? { x: frame.s[0], y: frame.s[1] }
-    : null
-);
-
-// Where the subject is in every frame. Frames where the tracker lost it are
-// filled in along a straight line between the frames either side (or held at
-// the nearest one at the ends). Not smoothed: a smooth would also blur the
-// camera's frame-to-frame shake, which is what has to come out. Null when the
-// subject wasn't found in any frame.
-export const subjectPath = ( analysis: VideoAnalysis ): Point[] | null => {
-  const points = analysis.frames.map( trackedPoint );
-  const known = points
-    .map( ( p, i ) => ( p
-      ? i
-      : -1 ) )
-    .filter( i => i >= 0 );
-  if ( known.length === 0 ) return null;
-  return points.map( ( p, i ) => {
-    if ( p ) return p;
-    const after = known.find( k => k > i );
-    const before = [...known].reverse( ).find( k => k < i );
-    if ( before === undefined ) return points[after as number] as Point;
-    if ( after === undefined ) return points[before] as Point;
-    const a = points[before] as Point;
-    const b = points[after] as Point;
-    const w = ( i - before ) / ( after - before );
-    return { x: a.x + ( b.x - a.x ) * w, y: a.y + ( b.y - a.y ) * w };
-  } );
-};
-
 // L for every frame: the shift from the frame onto the first frame.
-export const lockPath = ( analysis: VideoAnalysis, mode: StabilizationMode ): Affine[] => {
+export const lockPath = ( analysis: VideoAnalysis ): Affine[] => {
   const center = { x: analysis.width / 2, y: analysis.height / 2 };
-  if ( mode === "subject" ) {
-    const path = subjectPath( analysis );
-    if ( path ) {
-      return path.map( p => translation( path[0].x - p.x, path[0].y - p.y ) );
-    }
-  }
-  if ( mode === "background" && hasReferencePath( analysis ) ) {
+  if ( hasReferencePath( analysis ) ) {
     return analysis.frames.map( frame => shiftOf( frame.r as number[], center ) );
   }
   // Without a direct measurement, chain the frame-to-frame steps.
@@ -412,8 +366,6 @@ export const estimateReadout = ( analysis: VideoAnalysis ): ReadoutEstimate | nu
 };
 
 export interface StabilizationSettings {
-  // Hold the background, or the subject, where it was in the first frame.
-  mode: StabilizationMode;
   // Rolling-shutter readout as a fraction of the frame interval; 0 is off.
   rollingShutter?: number;
   // Requested zoom, ≥ 1.
@@ -452,7 +404,7 @@ export const planStabilization = (
   const maxZoom = settings.maxZoom ?? DEFAULT_MAX_ZOOM;
 
   // Stable space → source pixels, per frame.
-  let toSource: Homography[] = lockPath( analysis, settings.mode ).map(
+  let toSource: Homography[] = lockPath( analysis ).map(
     lock => multiplyHomographies( homographyFromAffine( invert( lock ) ), fromCentered ),
   );
   const readout = settings.rollingShutter ?? 0;
