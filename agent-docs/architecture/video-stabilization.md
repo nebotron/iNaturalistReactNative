@@ -2,9 +2,8 @@
 
 Menu → **Video Stabilizer** (iOS only). Import a video from Photos, hold
 either its background or a subject you tap exactly where it was in the first
-frame by correcting shift only (rotation and zoom are left as shot),
-optionally correct rolling shutter with a readout time measured from the
-video, and crop in closer. There is no smoothed "follow the camera" mode: both
+frame by correcting shift only (rotation and zoom are left as shot), and
+crop in closer. There is no smoothed "follow the camera" mode: both
 modes lock to the first frame. The copy keeps the original's sound and
 metadata.
 
@@ -12,9 +11,9 @@ metadata.
 
 | Layer | File | Job |
 | --- | --- | --- |
-| Screen | `src/components/VideoStabilizer/` | Import, start time, mode (background or subject), rolling-shutter switch and measured readout, crop, side-by-side preview, export/save |
+| Screen | `src/components/VideoStabilizer/` | Import, start time, mode (background or subject), crop, side-by-side preview, export/save |
 | Session state | `src/stores/videoStabilizer.ts` | Zustand, not persisted, so a tab switch doesn't drop a finished analysis |
-| Math | `src/sharedHelpers/videoStabilization.ts` | Lock path per mode, readout estimate, rolling shutter, crop/zoom planning; unit tested |
+| Math | `src/sharedHelpers/videoStabilization.ts` | Lock path per mode, crop/zoom planning; unit tested |
 | Bridge | `src/sharedHelpers/videoStabilizerNative.ts` | Typed wrapper, progress events, the comparison player view |
 | Native | `ios/iNaturalistReactNative/VideoStabilizer.m` | Picking, frame reading, Vision registration and object tracking, Core Image warping, AVAssetWriter, saving, player |
 
@@ -23,11 +22,10 @@ The native module runs two passes over the same upright, constant-frame-rate
 frame *i* of the render.
 
 1. **Analyze**: the native pass measures per-frame motion. It's slow, so it
-   runs once per video, start time, mode (and, in subject mode, subject
-   picked) and rolling-shutter switch (an analysis made with the switch on
-   also serves with it off).
+   runs once per video, start time and mode (and, in subject mode, subject
+   picked).
 2. **Plan**: JS turns the measurements into one homography per frame. This is
-   instant, so rolling shutter, zoom, crop position (in background mode) and
+   instant, so zoom, crop position (in background mode) and
    "hide edges" can change without re-reading the video.
 3. **Render**: the native pass warps each frame by its homography
    (`CIPerspectiveTransform`, or a plain affine when there's no perspective),
@@ -56,7 +54,7 @@ finished, so the player never loses the file it's playing.
 
 For each frame the lock `L_i` is the shift that maps the frame onto the first
 frame. Only shifts are measured, so rotation and zoom are never corrected. A
-pixel is drawn at `L_i · R_i · x − center`, then cropped by the zoom and crop
+pixel is drawn at `L_i · x − center`, then cropped by the zoom and crop
 center. "Hide black edges" (off by default) binary-searches the smallest zoom
 at which every frame's crop window stays inside its source frame.
 
@@ -68,17 +66,19 @@ the zoom it was rendered at (after "hide black edges"). The rectangle's
 center is mapped through those corners to a new crop center on the start
 frame, and the new zoom is the preview's zoom divided by the rectangle's
 share of the width, so each drag zooms further into what's on screen. Drags
-are ignored while the preview is stale. Reset Zoom returns to 1× centered;
-tapping the start frame still moves the crop center.
+are ignored while the preview is stale. Reset Zoom returns to 1× centered.
+A tap (a drag under 12 px) on the stabilized video is mapped through the same
+corners to the start frame and moves the crop center and the subject there.
+There is no still of the start frame on the screen.
 
 **Stabilize the background.** Chaining frame-to-frame registrations drifts, so
 the analysis also shifts each frame onto the first by the chained estimate and
 registers what's left against the first frame itself, giving a drift-free
 shift (`r` per frame). Pans and walks show black edges by design.
 
-**Stabilize the subject.** The point last tapped on the start frame (the
-store's `subject`, which defaults to the middle of the frame) is the subject;
-a tap also moves the crop center there, but zooming with the rectangle
+**Stabilize the subject.** The point last tapped on the stabilized preview,
+mapped onto the start frame (the store's `subject`, which defaults to the
+middle of the frame), is the subject; a tap also moves the crop center there, but zooming with the rectangle
 doesn't move the subject. The analysis tracks a square a
 quarter of the frame's short side around it with `VNTrackObjectRequest`
 (accurate level) and reports the box center per frame (`s`, null where the
@@ -88,34 +88,6 @@ the subject stays where it was on the start frame while the background moves aro
 The track isn't smoothed: a smooth would also blur the camera's frame-to-frame
 shake. If the subject is never found, it falls back to chained background
 registration. Changing the subject reruns the analysis.
-
-**Rolling shutter** (`R_i`). Rows are read top to bottom over a readout time
-`r` (a fraction of the frame interval). With the picture moving
-at `v` px/frame (from the registration steps either side of the frame), a row
-`y` is captured `r·(y − H/2)/H` frames after the middle row, so
-`R_i` = shift each row back by `v` times that: a shear for sideways motion and
-a stretch for vertical motion. Rotation wobble isn't modeled.
-
-**Measuring the readout.** The correction is a switch; `r` comes from the
-video. With it on, the analysis also registers the top and bottom 40% of each
-frame against the previous frame's, at 960 px (finer than the 480 px
-whole-frame pass, since the signal is a pixel or two), and reports them as
-`mt`/`mb` with the strips' offsets from the middle (`strips`, ±0.3 frame
-heights). A strip at offset `s` moves by `X(i + r·s) − X(i − 1 + r·s)`, which
-to first order is the frame's step plus `r·s·(step(i+1) − step(i−1))/2`. So
-the bottom-minus-top difference is proportional to the camera's change in
-speed, and `estimateReadout` fits `r` as the least-squares slope over both
-axes of every frame, twice dropping residuals beyond three robust standard
-deviations (or half a pixel). Steady pans and still cameras carry no signal:
-under 10 usable frames or a standard error over 0.1 gives no estimate, and the
-screen says so and corrects nothing. Otherwise it shows the readout in ms
-(`r / fps`) and as a share of the frame. Footage iOS already corrected
-(Camera's video stabilization) measures near zero. The strip pass roughly
-doubles analysis time, which is why it only runs with the switch on.
-
-No metadata gives `r`: readout time isn't stored in the file, and a
-make/model lookup would need every sensor mode measured and would be wrong for
-clips iOS already corrected.
 
 **Metadata.** The render copies QuickTime metadata and user data as is and
 maps other formats' common keys (creation date, ISO 6709 location, make,
@@ -166,10 +138,6 @@ removed: both modes now lock to the first frame.
   leaves the frame, and the tracker's pixel-level noise isn't filtered.
 - HDR (HLG/Dolby Vision) clips are read as 8-bit BGRA and written SDR.
 - Frame rate is capped at 60 fps, so slow-motion clips lose frames.
-- Rolling-shutter correction models shear and stretch from shift only, with a
-  readout measured from the clip's own changes in speed; rotation wobble and
-  sub-frame jello aren't corrected. A large subject moving through one strip
-  can bias the measurement where the outlier rejection doesn't catch it.
 - The export is capped at 1920 px on the long side. A deep crop is upscaled,
   and the screen shows how many source pixels the output comes from.
 - Work stops if the app is backgrounded: the screen is kept awake, but there

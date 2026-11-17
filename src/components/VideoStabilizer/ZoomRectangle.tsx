@@ -9,7 +9,8 @@ import colors from "styles/tailwindColors";
 
 // A transparent layer over the stabilized preview. Dragging draws a rectangle
 // with the video's aspect ratio from where the finger went down; letting go
-// reports it, normalized to the preview, as the window to zoom to.
+// reports it, normalized to the preview, as the window to zoom to. A tap
+// reports the point tapped, likewise normalized.
 
 export interface ZoomWindow {
   center: Point;
@@ -25,9 +26,10 @@ interface Props {
   // can stop scrolling meanwhile.
   onDrawingChange?: ( drawing: boolean ) => void;
   onWindowPicked: ( window: ZoomWindow ) => void;
+  onPointTapped: ( point: Point ) => void;
 }
 
-// A shorter drag is taken as a stray touch rather than a rectangle.
+// A shorter drag is taken as a tap rather than a rectangle.
 const MIN_SIDE_PX = 12;
 
 const styles = StyleSheet.create( {
@@ -49,6 +51,7 @@ const ZoomRectangle = ( {
   disabled,
   onDrawingChange,
   onWindowPicked,
+  onPointTapped,
 }: Props ) => {
   const { t } = useTranslation( );
   const [anchor, setAnchor] = useState<Point | null>( null );
@@ -102,6 +105,8 @@ const ZoomRectangle = ( {
         },
         size: box.width / width,
       } );
+    } else if ( anchor ) {
+      onPointTapped( { x: anchor.x / width, y: anchor.y / height } );
     }
     clear( );
   };

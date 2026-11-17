@@ -25,7 +25,6 @@ jest.mock( "sharedHelpers/videoStabilizerNative", ( ) => ( {
   probeVideo: ( ) => Promise.resolve( {
     width: 1920, height: 1080, duration: 4, fps: 30, hasAudio: true,
   } ),
-  videoFrameAt: ( ) => Promise.resolve( { uri: "file:///frame.jpg", width: 1080, height: 608 } ),
   analyzeVideo: ( ...args: unknown[] ) => mockAnalyze( ...args ),
   renderStabilizedVideo: ( ...args: unknown[] ) => mockRender( ...args ),
   playVideo: ( ...args: unknown[] ) => mockPlay( ...args ),
@@ -134,7 +133,26 @@ describe( "VideoStabilizer", ( ) => {
       expect.objectContaining( { mode: "subject", subject: { x: 0.5, y: 0.5 } } ),
     ) );
     expect( mockAnalyze ).toHaveBeenCalledTimes( 2 );
-    expect( screen.getByText( i18next.t( "Tap-the-subject-to-follow-it" ) ) ).toBeVisible( );
+    expect( screen.getByText(
+      i18next.t( "Tap-the-subject-on-the-stabilized-preview-to-follow-it" ),
+    ) ).toBeVisible( );
+
+    // A tap on the stabilized preview picks the subject on the start frame.
+    await waitFor( ( ) => expect( mockRender ).toHaveBeenCalledTimes( 2 ) );
+    const overlay = await screen.findByAccessibilityHint(
+      i18next.t( "Zooms-to-the-rectangle-dragged-over-the-video" ),
+    );
+    const { width, height } = StyleSheet.flatten( overlay.props.style );
+    const at = {
+      nativeEvent: { locationX: width / 4, locationY: height / 4 },
+      touchHistory: { touchBank: [] },
+    };
+    fireEvent( overlay, "responderGrant", at );
+    fireEvent( overlay, "responderRelease", at );
+    await waitFor( ( ) => expect( mockAnalyze ).toHaveBeenLastCalledWith(
+      INPUT,
+      expect.objectContaining( { mode: "subject", subject: { x: 0.25, y: 0.25 } } ),
+    ) );
   } );
 
   it( "zooms to a rectangle dragged over the stabilized preview", async ( ) => {

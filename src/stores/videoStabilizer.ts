@@ -1,5 +1,5 @@
 import type { StabilizationMode, VideoAnalysis } from "sharedHelpers/videoStabilization";
-import type { VideoFrame, VideoInfo } from "sharedHelpers/videoStabilizerNative";
+import type { VideoInfo } from "sharedHelpers/videoStabilizerNative";
 import { create } from "zustand";
 
 // The video stabilizer's session. Held here rather than in the screen so that
@@ -19,19 +19,16 @@ interface Busy {
 export interface VideoStabilizerState {
   videoPath: string | null;
   info: VideoInfo | null;
-  frame: VideoFrame | null;
-  // Where the output starts, in seconds; the crop is drawn on the frame at
-  // this time.
+  // Where the output starts, in seconds.
   start: number;
   // Crop center, normalized, on the start frame.
   cropCenter: { x: number; y: number } | null;
-  // The subject to follow in subject mode: the point last tapped on the start
-  // frame, normalized. Zooming moves the crop center but not this.
+  // The subject to follow in subject mode: the point last tapped on the
+  // stabilized preview, mapped onto the start frame, normalized. Zooming
+  // moves the crop center but not this.
   subject: { x: number; y: number } | null;
   // Hold the background still, or follow the subject.
   mode: StabilizationMode;
-  // Correct rolling shutter, with the readout time measured from the video.
-  rollingShutter: boolean;
   zoom: number;
   avoidEdges: boolean;
   // Each result remembers the settings it was made with (see the screen's
@@ -60,12 +57,10 @@ export interface VideoStabilizerState {
 const initialSession = {
   videoPath: null,
   info: null,
-  frame: null,
   start: 0,
   cropCenter: null,
   subject: null,
   mode: "background" as StabilizationMode,
-  rollingShutter: false,
   zoom: 1,
   avoidEdges: false,
   analysis: null,
@@ -82,7 +77,7 @@ const initialSession = {
 const useVideoStabilizer = create<VideoStabilizerState>( set => ( {
   ...initialSession,
   set: partial => set( partial ),
-  // The crop center and subject were picked on the old start frame.
+  // The crop center and subject were mapped onto the old start frame.
   setStart: start => set( { start, cropCenter: null, subject: null } ),
   reset: ( ) => set( initialSession ),
 } ) );

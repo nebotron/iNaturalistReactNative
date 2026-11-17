@@ -15,13 +15,11 @@ import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import type {
   Point,
-  ReadoutEstimate,
   StabilizationMode,
   StabilizationSettings,
   VideoAnalysis,
 } from "sharedHelpers/videoStabilization";
 import {
-  estimateReadout,
   flattenTransforms,
   outputSize,
   planStabilization,
@@ -38,21 +36,18 @@ import {
   probeVideo,
   renderStabilizedVideo,
   saveStabilizedVideo,
-  videoFrameAt,
   VideoStabilizerComparison,
 } from "sharedHelpers/videoStabilizerNative";
 import { useTranslation } from "sharedHooks";
 import type { BusyPhase } from "stores/videoStabilizer";
 import useVideoStabilizer from "stores/videoStabilizer";
 
-import FramePreview from "./FramePreview";
 import type { ZoomWindow } from "./ZoomRectangle";
 import ZoomRectangle from "./ZoomRectangle";
 
 const logger = log.extend( "VideoStabilizer" );
 
 const KEEP_AWAKE_HOLDER = "videoStabilizer";
-const FRAME_MAX_DIMENSION = 1080;
 const PREVIEW_MAX_DIMENSION = 640;
 const EXPORT_MAX_DIMENSION = 1920;
 const MAX_ZOOM = 6;
@@ -72,7 +67,6 @@ const percent = ( progress: number ) => Math.round( progress * 100 );
 
 interface Choices {
   mode: StabilizationMode;
-  rollingShutter: boolean;
   zoom: number;
   avoidEdges: boolean;
   cropCenter: Point | null;
@@ -82,14 +76,10 @@ const settingsFor = (
   analysis: VideoAnalysis,
   maxDimension: number,
   choices: Choices,
-  readout: ReadoutEstimate | null,
 ): StabilizationSettings => {
   const size = outputSize( analysis.width, analysis.height, maxDimension );
   return {
     mode: choices.mode,
-    rollingShutter: choices.rollingShutter
-      ? readout?.readout ?? 0
-      : 0,
     zoom: choices.zoom,
     avoidEdges: choices.avoidEdges,
     maxZoom: MAX_ZOOM,
@@ -103,11 +93,10 @@ const settingsFor = (
 
 const VideoStabilizer = ( ) => {
   const { t } = useTranslation( );
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions( );
+  const { width: windowWidth } = useWindowDimensions( );
   const {
-    videoPath, info, frame, start, cropCenter, subject, mode, rollingShutter,
-    zoom, avoidEdges, analysis, analysisKey, busy, previewUri, previewKey, previewStart,
-    previewCrop, exportUri, exportKey, set, setStart,
+    videoPath, info, start, cropCenter, subject, mode, zoom, avoidEdges, analysis, analysisKey,
+    busy, previewUri, previewKey, previewStart, previewCrop, exportUri, exportKey, set, setStart,
   } = useVideoStabilizer( );
   // Slider positions while dragging; settings are only committed on release.
   const [startDraft, setStartDraft] = useState<number | null>( null );
@@ -137,32 +126,18 @@ const VideoStabilizer = ( ) => {
   };
 
   // What each result has to have been made with to be current. A result made
-  // with anything else is stale, and the effect below reruns it.
-  // Rolling-shutter correction needs the strips measured; an analysis that
-  // has them serves just as well with the correction off. Subject mode tracks
-  // the subject picked on the frame, so picking another means tracking again.
-  const analysisKeyFor = ( strips: boolean ) => (
-    videoPath
-      ? JSON.stringify( [videoPath, start, mode, mode === "subject"
-        ? subject
-        : null, strips] )
-      : null
-  );
-  const wantedAnalysisKey = analysisKeyFor( rollingShutter );
-  const currentAnalysis = analysis && (
-    analysisKey === wantedAnalysisKey
-    || ( !rollingShutter && analysisKey === analysisKeyFor( true ) )
-  )
+  // with anything else is stale, and the effect below reruns it. Subject mode
+  // tracks the subject picked, so picking another means tracking again.
+  const wantedAnalysisKey = videoPath
+    ? JSON.stringify( [videoPath, start, mode, mode === "subject"
+      ? subject
+      : null] )
+    : null;
+  const currentAnalysis = analysis && analysisKey === wantedAnalysisKey
     ? analysis
     : null;
-  const readout = useMemo(
-    ( ) => ( currentAnalysis
-      ? estimateReadout( currentAnalysis )
-      : null ),
-    [currentAnalysis],
-  );
   const choices: Choices = {
-    mode, rollingShutter, zoom, avoidEdges, cropCenter,
+    mode, zoom, avoidEdges, cropCenter,
   };
   const wantedPreviewKey = currentAnalysis
     ? JSON.stringify( [wantedAnalysisKey, choices] )
@@ -176,10 +151,10 @@ const VideoStabilizer = ( ) => {
   const plan = useMemo( ( ) => (
     currentAnalysis
       ? planStabilization( currentAnalysis, settingsFor( currentAnalysis, EXPORT_MAX_DIMENSION, {
-        mode, rollingShutter, zoom, avoidEdges, cropCenter,
-      }, readout ) )
+        mode, zoom, avoidEdges, cropCenter,
+      } ) )
       : null
-  ), [currentAnalysis, mode, rollingShutter, zoom, avoidEdges, cropCenter, readout] );
+  ), [currentAnalysis, mode, zoom, avoidEdges, cropCenter] );
 
   // Runs one native job. Starting a job cancels the one before (natively,
   // too), and only the latest job's result, error and progress count.
@@ -210,7 +185,6 @@ const VideoStabilizer = ( ) => {
   const runAnalysis = ( key: string ) => {
     const {
       videoPath: path, start: from, mode: analysisMode, subject: subjectPoint,
-      rollingShutter: strips,
     } = useVideoStabilizer.getState( );
     if ( !path ) return;
     runJob(
@@ -222,26 +196,15 @@ const VideoStabilizer = ( ) => {
         subject: analysisMode === "subject"
           ? subjectPoint ?? { x: 0.5, y: 0.5 }
           : undefined,
-        strips,
         job,
       } ),
       result => {
         const lost = result.frames.filter( f => !f.ok ).length;
-        const measured = strips
-          ? estimateReadout( result )
-          : null;
-        let readoutNote = "";
-        if ( strips ) {
-          readoutNote = measured
-            ? `, readout ${measured.readout.toFixed( 3 )}±${measured.error.toFixed( 3 )}`
-              + ` of a frame from ${measured.frames} frames`
-            : ", readout not measurable";
-        }
         logger.info(
           `analyzed ${result.frames.length} frames, ${lost} unusable, `
           + `${analysisMode === "subject"
             ? `subject tracked in ${result.trackedFrames ?? 0}`
-            : `${result.refinedFrames} locked to the first frame`}${readoutNote}`,
+            : `${result.refinedFrames} locked to the first frame`}`,
         );
         set( { analysis: result, analysisKey: key } );
       },
@@ -258,7 +221,6 @@ const VideoStabilizer = ( ) => {
         ? PREVIEW_MAX_DIMENSION
         : EXPORT_MAX_DIMENSION,
       choices,
-      readout,
     );
     const rendered = planStabilization( currentAnalysis, settings );
     runJob(
@@ -334,7 +296,6 @@ const VideoStabilizer = ( ) => {
       const path = await pickVideo( );
       if ( !path ) return;
       const probed = await probeVideo( path );
-      const firstFrame = await videoFrameAt( path, 0, FRAME_MAX_DIMENSION );
       logger.info(
         `imported ${probed.width}x${probed.height} ${probed.fps}fps`
         + ` ${probed.duration.toFixed( 1 )}s`,
@@ -345,9 +306,7 @@ const VideoStabilizer = ( ) => {
       set( {
         videoPath: path,
         info: probed,
-        frame: firstFrame,
         mode: kept.mode,
-        rollingShutter: kept.rollingShutter,
         busy: { phase: "importing", progress: 0 },
       } );
     } catch ( error ) {
@@ -358,31 +317,43 @@ const VideoStabilizer = ( ) => {
     }
   };
 
-  // A rectangle dragged over the stabilized preview becomes the new crop: its
-  // center, mapped back onto the start frame through the window the preview
-  // shows, and the zoom that makes it fill the output.
-  const zoomToWindow = ( window: ZoomWindow ) => {
-    if ( !previewCrop || previewCrop.corners.length !== 4 ) return;
+  // A point on the stabilized preview, mapped back onto the start frame
+  // through the window the preview shows.
+  const onStartFrame = ( { x: u, y: v }: Point ): Point | null => {
+    if ( !previewCrop || previewCrop.corners.length !== 4 ) return null;
     const [topLeft, topRight, , bottomLeft] = previewCrop.corners;
-    const { x: u, y: v } = window.center;
+    return {
+      x: topLeft.x + u * ( topRight.x - topLeft.x ) + v * ( bottomLeft.x - topLeft.x ),
+      y: topLeft.y + u * ( topRight.y - topLeft.y ) + v * ( bottomLeft.y - topLeft.y ),
+    };
+  };
+
+  // A rectangle dragged over the stabilized preview becomes the new crop: its
+  // center, and the zoom that makes it fill the output.
+  const zoomToWindow = ( window: ZoomWindow ) => {
+    const center = onStartFrame( window.center );
+    if ( !center || !previewCrop ) return;
     set( {
-      cropCenter: {
-        x: topLeft.x + u * ( topRight.x - topLeft.x ) + v * ( bottomLeft.x - topLeft.x ),
-        y: topLeft.y + u * ( topRight.y - topLeft.y ) + v * ( bottomLeft.y - topLeft.y ),
-      },
+      cropCenter: center,
       zoom: Math.min( MAX_ZOOM, Math.max( 1, previewCrop.zoom / window.size ) ),
     } );
   };
 
-  const commitStart = async ( seconds: number ) => {
+  // A tap on the stabilized preview picks the subject to follow, and centers
+  // the crop there.
+  const pickPoint = ( point: Point ) => {
+    const picked = onStartFrame( point );
+    if ( !picked ) return;
+    const clamped = {
+      x: Math.min( 1, Math.max( 0, picked.x ) ),
+      y: Math.min( 1, Math.max( 0, picked.y ) ),
+    };
+    set( { cropCenter: clamped, subject: clamped } );
+  };
+
+  const commitStart = ( seconds: number ) => {
     setStartDraft( null );
-    if ( !videoPath ) return;
-    setStart( seconds );
-    try {
-      set( { frame: await videoFrameAt( videoPath, seconds, FRAME_MAX_DIMENSION ) } );
-    } catch ( error ) {
-      showError( error, "frame" );
-    }
+    if ( videoPath ) setStart( seconds );
   };
 
   const saveToPhotos = async ( ) => {
@@ -443,7 +414,7 @@ const VideoStabilizer = ( ) => {
     </View>
   );
 
-  if ( !videoPath || !info || !frame ) {
+  if ( !videoPath || !info ) {
     return (
       <View className="p-5">
         <Body2>{t( "Video-stabilizer-intro" )}</Body2>
@@ -459,35 +430,7 @@ const VideoStabilizer = ( ) => {
     );
   }
 
-  const maxPreviewWidth = windowWidth - 32;
-  const maxPreviewHeight = windowHeight * 0.45;
-  const aspect = frame.width / frame.height;
-  const previewWidth = Math.min( maxPreviewWidth, maxPreviewHeight * aspect );
-  const previewHeight = previewWidth / aspect;
-
-  const roughCenter: Point = cropCenter ?? { x: 0.5, y: 0.5 };
-  const half = 0.5 / zoom;
-  const cropOutline: Point[] = plan && currentAnalysis
-    ? plan.firstFrameCrop.map( p => ( {
-      x: p.x / currentAnalysis.width,
-      y: p.y / currentAnalysis.height,
-    } ) )
-    : [
-      { x: roughCenter.x - half, y: roughCenter.y - half },
-      { x: roughCenter.x + half, y: roughCenter.y - half },
-      { x: roughCenter.x + half, y: roughCenter.y + half },
-      { x: roughCenter.x - half, y: roughCenter.y + half },
-    ];
-
-  let readoutLabel: string | null = null;
-  if ( rollingShutter && currentAnalysis ) {
-    readoutLabel = readout
-      ? t( "Sensor-readout-x-ms-x-percent-of-a-frame", {
-        ms: ( ( readout.readout * 1000 ) / currentAnalysis.fps ).toFixed( 1 ),
-        percent: percent( readout.readout ),
-      } )
-      : t( "Readout-could-not-be-measured" );
-  }
+  const aspect = info.width / info.height;
 
   const disabled = exporting;
   const source = currentAnalysis && {
@@ -540,6 +483,7 @@ const VideoStabilizer = ( ) => {
                 disabled={disabled || !previewIsCurrent || !previewCrop}
                 onDrawingChange={setDrawingZoom}
                 onWindowPicked={zoomToWindow}
+                onPointTapped={pickPoint}
               />
             </View>
           </View>
@@ -564,21 +508,7 @@ const VideoStabilizer = ( ) => {
         contentContainerClassName="p-4 pb-6"
         scrollEnabled={!drawingZoom}
       >
-        <FramePreview
-          uri={frame.uri}
-          width={previewWidth}
-          height={previewHeight}
-          crop={cropOutline}
-          cropCenter={cropCenter ?? { x: 0.5, y: 0.5 }}
-          onPointPicked={point => set( { cropCenter: point, subject: point } )}
-        />
-        <Body3 className="mt-2 text-center">
-          {mode === "subject"
-            ? t( "Tap-the-subject-to-follow-it" )
-            : t( "Tap-the-frame-to-choose-where-to-crop" )}
-        </Body3>
-
-        <View className="flex-row items-center mt-4">
+        <View className="flex-row items-center">
           <Body2 className="w-[110px]">
             {t( "Starts-at-x", { time: formatTime( startDraft ?? start ) } )}
           </Body2>
@@ -614,17 +544,11 @@ const VideoStabilizer = ( ) => {
           onPress={( ) => !disabled && set( { mode: "subject" } )}
         />
 
-        <Heading4 className="mt-6 mb-2">{t( "ROLLING-SHUTTER" )}</Heading4>
-        <SwitchRow
-          label={t( "Correct-rolling-shutter" )}
-          value={rollingShutter}
-          disabled={disabled}
-          onValueChange={value => set( { rollingShutter: value } )}
-        />
-        {readoutLabel && <Body2 className="mt-2">{readoutLabel}</Body2>}
-        <Body3 className="mt-2">
-          {t( "Straightens-lines-that-lean-in-fast-moves-measured-from-the-video" )}
-        </Body3>
+        {mode === "subject" && (
+          <Body3 className="mt-2">
+            {t( "Tap-the-subject-on-the-stabilized-preview-to-follow-it" )}
+          </Body3>
+        )}
 
         <Heading4 className="mt-6 mb-2">{t( "CROP" )}</Heading4>
         <View className="flex-row items-center">
