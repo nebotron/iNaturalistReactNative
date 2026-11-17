@@ -416,15 +416,28 @@ const WildlifeHotspotsScreen = ( {
     const point: LatLng | null = result.lat && result.lon
       ? { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) }
       : null;
-    const nextStops = stops.map( s => ( s.id === id
-      ? { ...s, text: result.display_name, point }
-      : s ) );
+    const isCurrentLocation = result.place_id === CURRENT_LOCATION_PLACE_ID;
+    // A new start makes a round trip of a route that ends at current location,
+    // so the end follows the start.
+    const endStop = stops[stops.length - 1];
+    const endFollowsStart = !isCurrentLocation
+      && point
+      && stops.length > 1
+      && stops[0].id === id
+      && endStop.text === t( "Current-location" );
+    if ( endFollowsStart ) editedStopIdsRef.current.add( endStop.id );
+    const nextStops = stops.map( s => {
+      if ( s.id === id || ( endFollowsStart && s.id === endStop.id ) ) {
+        return { ...s, text: result.display_name, point };
+      }
+      return s;
+    } );
     setStops( nextStops );
     if ( !point ) return;
     if ( nextStops.every( s => s.point ) ) setStopsExpanded( false );
     // Remember searched addresses (but not the synthetic current-location row)
     // so they can be offered again before typing next time.
-    if ( result.place_id !== CURRENT_LOCATION_PLACE_ID ) {
+    if ( !isCurrentLocation ) {
       addHotspotAddress( {
         place_id: result.place_id,
         display_name: result.display_name,
@@ -432,7 +445,7 @@ const WildlifeHotspotsScreen = ( {
         lon: String( point.longitude ),
       } );
     }
-  }, [stops, addHotspotAddress] );
+  }, [stops, addHotspotAddress, t] );
 
   const handleStopSuggestionsChange = useCallback( (
     stopId: string,
