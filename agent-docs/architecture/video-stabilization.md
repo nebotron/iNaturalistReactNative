@@ -28,8 +28,7 @@ frame *i* of the render.
    "hide edges" can change without re-reading the video.
 3. **Render**: the native pass warps each frame by its homography
    (`CIPerspectiveTransform`, or a plain affine when there's no perspective),
-   crops it, optionally fuses it with its neighbours ("Sharpen blurred
-   frames", below), and writes H.264 with the audio passed through and the
+   crops it, and writes H.264 with the audio passed through and the
    original's QuickTime metadata (date, location, make/model) copied. A
    low-resolution preview (640 px) and the export (1920 px long side) are
    rendered separately.
@@ -118,26 +117,6 @@ model, software) to QuickTime keys. Saving goes through the native
 start time) and location from the original, rather than leaving Photos to
 date it when it was saved.
 
-### Sharpen blurred frames
-
-A switch on the screen (off by default; `sharpen` in the store and in
-`RenderOptions`). Even a perfect lock leaves a handheld pan looking shaky:
-some frames are sharp and some smeared, the smear pointing a new way each
-frame, and once the background is held still a stationary perch flickers
-between the two. The render's `SharpFusion` (plain C between the `BEGIN SHARP
-FUSION` / `END SHARP FUSION` markers) keeps the last 7 stabilized frames and
-writes each frame once the 3 after it are in: every pixel is a weighted mean
-of the frames within 3 of it, weighted by local sharpness (the squared
-Laplacian, averaged, then squared again so the sharpest frame dominates), by
-time, and by whether the frame's low-passed picture agrees with the output
-frame's there (within 3–8 gray levels, eroded and blurred). Where the
-subject moved, neighbours disagree and the frame's own pixel stays. The
-sharpness and agreement maps are computed about 480 px on their long side and
-interpolated up; the per-neighbour maps and the rows run in parallel. Empty
-edges are never filled. On the test clip it halves the frame-to-frame change
-on the static perch. Rendering is slower, and a subject that's itself blurred
-stays blurred.
-
 ### Measuring the approaches
 
 `stabilization-eval/` on the `claude/stoic-curie-sovvo9` branch holds the
@@ -178,6 +157,15 @@ A switch corrected rolling-shutter shear and stretch from shift, with the
 sensor's readout time measured from how differently the top and bottom 40% of
 each frame moved as the camera changed speed. It roughly doubled analysis
 time and was removed.
+
+### Sharp-frame fusion (removed)
+
+A "Sharpen blurred frames" switch drew each pixel of the still parts of a
+frame from the sharpest stabilized frames within 3 of it, weighted by local
+sharpness and by whether their low-passed picture agreed with the frame's.
+It halved the shimmer that motion blur leaves on a held background, but the
+agreement test let a moving subject through and the ghosting was bad, so it
+was removed.
 
 ### Smoothing (removed)
 

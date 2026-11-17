@@ -38,10 +38,6 @@ export interface RenderOptions {
   // Previews and exports are kept separately, so a preview doesn't replace
   // the export the user is about to save.
   preview: boolean;
-  // Sharp-frame fusion: still parts of each frame are drawn from the
-  // sharpest of the stabilized frames around it, so motion blur from a
-  // handheld pan doesn't flicker once the background is held still.
-  sharpen: boolean;
   job: number;
 }
 

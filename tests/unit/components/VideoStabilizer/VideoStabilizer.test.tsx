@@ -126,31 +126,6 @@ describe( "VideoStabilizer", ( ) => {
     } ) ).not.toBeChecked( );
   } );
 
-  it( "renders with sharp-frame fusion only once it's switched on", async ( ) => {
-    const user = userEvent.setup( );
-    renderComponent( <VideoStabilizer /> );
-    await importVideo( user );
-    await previewShown( );
-    expect( mockRender ).toHaveBeenLastCalledWith(
-      INPUT,
-      expect.objectContaining( { preview: true, sharpen: false } ),
-    );
-    const toggle = screen.getByRole( "switch", { name: i18next.t( "Sharpen-blurred-frames" ) } );
-    expect( toggle ).not.toBeChecked( );
-
-    await user.press( toggle );
-    await waitFor( ( ) => expect( mockRender ).toHaveBeenLastCalledWith(
-      INPUT,
-      expect.objectContaining( { preview: true, sharpen: true } ),
-    ) );
-    await previewShown( );
-    await user.press( screen.getByText( i18next.t( "EXPORT" ) ) );
-    await waitFor( ( ) => expect( mockRender ).toHaveBeenLastCalledWith(
-      INPUT,
-      expect.objectContaining( { preview: false, sharpen: true } ),
-    ) );
-  } );
-
   it( "sets the crop from two fingers at opposite corners of the stabilized preview", async ( ) => {
     const user = userEvent.setup( );
     renderComponent( <VideoStabilizer /> );
