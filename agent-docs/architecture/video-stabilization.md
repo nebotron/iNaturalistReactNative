@@ -1,30 +1,34 @@
 # Video stabilization
 
-Menu → **Video Stabilizer** (iOS only). Import a video from Photos, hold its
-background steady (smoothed, or completely still) by correcting shift only
-(rotation and zoom are left as shot), optionally correct rolling
-shutter with a readout time measured from the video, and crop in closer. The copy keeps the original's sound and metadata.
+Menu → **Video Stabilizer** (iOS only). Import a video from Photos, hold
+either its background or a subject you tap exactly where it was in the first
+frame by correcting shift only (rotation and zoom are left as shot),
+optionally correct rolling shutter with a readout time measured from the
+video, and crop in closer. There is no smoothed "follow the camera" mode: both
+modes lock to the first frame. The copy keeps the original's sound and
+metadata.
 
 ## How it is split
 
 | Layer | File | Job |
 | --- | --- | --- |
-| Screen | `src/components/VideoStabilizer/` | Import, start time, still lock, smoothing, rolling-shutter switch and measured readout, crop, side-by-side preview, export/save |
+| Screen | `src/components/VideoStabilizer/` | Import, start time, mode (background or subject), rolling-shutter switch and measured readout, crop, side-by-side preview, export/save |
 | Session state | `src/stores/videoStabilizer.ts` | Zustand, not persisted, so a tab switch doesn't drop a finished analysis |
-| Math | `src/sharedHelpers/videoStabilization.ts` | Camera path, smoothing, readout estimate, rolling shutter, crop/zoom planning; unit tested |
+| Math | `src/sharedHelpers/videoStabilization.ts` | Lock path per mode, readout estimate, rolling shutter, crop/zoom planning; unit tested |
 | Bridge | `src/sharedHelpers/videoStabilizerNative.ts` | Typed wrapper, progress events, the comparison player view |
-| Native | `ios/iNaturalistReactNative/VideoStabilizer.m` | Picking, frame reading, Vision registration, Core Image warping, AVAssetWriter, saving, player |
+| Native | `ios/iNaturalistReactNative/VideoStabilizer.m` | Picking, frame reading, Vision registration and object tracking, Core Image warping, AVAssetWriter, saving, player |
 
 The native module runs two passes over the same upright, constant-frame-rate
 `AVAssetReaderVideoCompositionOutput`. Frame *i* of the analysis is therefore
 frame *i* of the render.
 
 1. **Analyze**: the native pass measures per-frame motion. It's slow, so it
-   runs once per video, start time, still lock and rolling-shutter switch
-   (an analysis made with the switch on also serves with it off).
+   runs once per video, start time, mode (and, in subject mode, subject
+   picked) and rolling-shutter switch (an analysis made with the switch on
+   also serves with it off).
 2. **Plan**: JS turns the measurements into one homography per frame. This is
-   instant, so smoothing, rolling shutter, zoom, crop position and "hide
-   edges" can change without re-reading the video.
+   instant, so rolling shutter, zoom, crop position (in background mode) and
+   "hide edges" can change without re-reading the video.
 3. **Render**: the native pass warps each frame by its homography
    (`CIPerspectiveTransform`, or a plain affine when there's no perspective),
    crops it, and writes H.264 with the audio passed through and the
@@ -51,14 +55,11 @@ finished, so the player never loses the file it's playing.
 
 ### The model
 
-For each frame the measured path `P_i` maps the frame into a stable space,
-the camera's shift accumulated back to the first frame. Registration is
-translational only, so rotation and zoom are never corrected. The virtual camera
-`S_i` is `P` smoothed with a Gaussian (σ 0.2 s–8 s), or the identity when the
-background is held completely still. A pixel is drawn at
-`S_i⁻¹ · P_i · (R_i · x − center)`, then cropped by the zoom and crop center.
-"Hide black edges" (off by default) binary-searches the smallest zoom at which
-every frame's crop window stays inside its source frame.
+For each frame the lock `L_i` is the shift that maps the frame onto the first
+frame. Only shifts are measured, so rotation and zoom are never corrected. A
+pixel is drawn at `L_i · R_i · x − center`, then cropped by the zoom and crop
+center. "Hide black edges" (off by default) binary-searches the smallest zoom
+at which every frame's crop window stays inside its source frame.
 
 **Picking the crop.** There's no zoom slider: the user drags a rectangle
 (kept to the video's aspect) over the stabilized (lower) video of the
@@ -71,11 +72,23 @@ share of the width, so each drag zooms further into what's on screen. Drags
 are ignored while the preview is stale. Reset Zoom returns to 1× centered;
 tapping the start frame still moves the crop center.
 
-**Completely still.** Chaining frame-to-frame registrations drifts. With the
-lock on, the analysis also shifts each frame onto the first by the chained
-estimate and registers what's left against the first frame itself, so `P_i`
-is a drift-free shift (`r` per frame). Pans and walks show black edges by
-design.
+**Stabilize the background.** Chaining frame-to-frame registrations drifts, so
+the analysis also shifts each frame onto the first by the chained estimate and
+registers what's left against the first frame itself, giving a drift-free
+shift (`r` per frame). Pans and walks show black edges by design.
+
+**Stabilize the subject.** The point last tapped on the start frame (the
+store's `subject`, which defaults to the middle of the frame) is the subject;
+a tap also moves the crop center there, but zooming with the rectangle
+doesn't move the subject. The analysis tracks a square a
+quarter of the frame's short side around it with `VNTrackObjectRequest`
+(accurate level) and reports the box center per frame (`s`, null where the
+tracker's confidence is under 0.3). JS fills lost frames along a straight
+line between the known ones and sets `L_i` to the shift from `s_i` to `s_0`, so
+the subject stays where it was on the start frame while the background moves around it.
+The track isn't smoothed: a smooth would also blur the camera's frame-to-frame
+shake. If the subject is never found, it falls back to chained background
+registration. Changing the subject reruns the analysis.
 
 **Rolling shutter** (`R_i`). Rows are read top to bottom over a readout time
 `r` (a fraction of the frame interval). With the picture moving
@@ -133,18 +146,25 @@ now a constant.
 | `AVCaptureConnection` stabilization | Best quality, done in hardware | Only at capture time, so it can't fix an imported clip |
 | ffmpeg `vidstab` | Mature two-pass algorithm | ffmpeg-kit is retired. Large binary and GPL/LGPL licensing questions |
 
-### Smoothing
+### Subject
 
 | Approach | Pros | Cons |
 | --- | --- | --- |
-| **Gaussian on path parameters** *(implemented)* | Simple and predictable. One slider runs from "light" to "nearly a tripod"; a full lock is a separate switch | Doesn't know about crop limits, so a strong smooth can demand a deep zoom |
-| L1-optimal camera paths (Grundmann et al.) | Produces "tripod, then constant pan" paths that look professionally shot, and respects the crop window | Needs a linear-program solver |
-| Kalman filter | Causal, so it suits live preview | Lags on purpose, and is worse than a two-sided filter offline |
+| **`VNTrackObjectRequest` on a box around the tap** *(implemented)* | Built in, handles a subject that changes shape a little, reports a confidence | Fixed box size; can slide onto the background on a small or low-contrast subject |
+| Translational registration restricted to a region | Same machinery as the background | The region has to move with the subject, and a moving background inside it drags the estimate |
+| Saliency or detection (`VNGenerateObjectnessBasedSaliencyImageRequest`, the CV model) to size the box | Box fits the subject | More passes, and detection boxes jitter more than a tracker |
+
+### Smoothing (removed)
+
+A Gaussian-smoothed "follow the camera" path (σ 0.2 s–8 s on a slider) was
+removed: both modes now lock to the first frame.
 
 ## Known limitations
 
 - iOS only. Android has no native module, and the menu item is hidden there.
 - Only shift is corrected; camera roll and zoom wobble stay in the output.
+- Subject mode tracks a fixed-size box; it doesn't follow a subject that
+  leaves the frame, and the tracker's pixel-level noise isn't filtered.
 - HDR (HLG/Dolby Vision) clips are read as 8-bit BGRA and written SDR.
 - Frame rate is capped at 60 fps, so slow-motion clips lose frames.
 - Rolling-shutter correction models shear and stretch from shift only, with a

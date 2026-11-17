@@ -20,10 +20,11 @@
 //   frameAt      a JPEG of one frame, for choosing the crop
 //   analyze      one pass over the frames, reporting per frame how the
 //                picture moved since the previous frame (Vision image
-//                registration) and, for a complete lock, where it sits on the
-//                first frame; for rolling-shutter correction, also how the
-//                top and bottom of the picture moved, each on its own, from
-//                which JS works out the sensor's readout time
+//                registration) and either where it sits on the first frame
+//                (background mode) or where the subject is (subject mode,
+//                Vision object tracking); for rolling-shutter correction, also
+//                how the top and bottom of the picture moved, each on its own,
+//                from which JS works out the sensor's readout time
 //   render       a second pass that warps each frame by the homography JS
 //                computed for it, crops to the output size and writes an
 //                H.264 .mov, passing the audio through untouched and keeping
@@ -42,6 +43,10 @@
 
 static NSString *const kProgressEvent = @"VideoStabilizerProgress";
 static const double kMaxFrameRate = 60;
+// The box tracked in subject mode, as a fraction of the frame's short side.
+static const double kSubjectBoxFraction = 0.25;
+// Tracker confidence below which a frame's subject position isn't reported.
+static const float kSubjectMinConfidence = 0.3;
 
 typedef struct { double m[9]; } Mat3;  // row-major
 
@@ -559,9 +564,15 @@ RCT_EXPORT_METHOD( analyze
 {
   NSInteger generation = ++_generation;
   dispatch_async( _queue, ^{
-    // A complete lock also measures every frame against the first, so the
-    // small errors of chaining frame to frame don't add up to a drift.
-    BOOL reference = [options[@"reference"] boolValue];
+    // Holding the background also measures every frame against the first, so
+    // the small errors of chaining frame to frame don't add up to a drift.
+    BOOL subjectMode = [options[@"mode"] isEqual:@"subject"];
+    BOOL reference = !subjectMode;
+    // Subject mode tracks a box around the point the user picked on the first
+    // frame (normalized, top-left origin).
+    NSDictionary *subjectPoint = options[@"subject"];
+    double subjectX = MIN( 1, MAX( 0, subjectPoint ? [subjectPoint[@"x"] doubleValue] : 0.5 ) );
+    double subjectY = MIN( 1, MAX( 0, subjectPoint ? [subjectPoint[@"y"] doubleValue] : 0.5 ) );
     // Rolling shutter: register the top and bottom of each frame separately.
     // Their rows are read at different times, so when the camera speeds up or
     // slows down they move by different amounts, and how different measures
@@ -594,6 +605,9 @@ RCT_EXPORT_METHOD( analyze
     CIImage *blackSmall = nil;
     Mat3 chain = mat3Identity( );
     NSInteger refined = 0;
+    VNSequenceRequestHandler *tracker = subjectMode ? [VNSequenceRequestHandler new] : nil;
+    VNDetectedObjectObservation *tracked = nil;
+    NSInteger trackedCount = 0;
     size_t fullWidth = 0;
     size_t fullHeight = 0;
     double scale = 1;
@@ -711,6 +725,43 @@ RCT_EXPORT_METHOD( analyze
           [toFirst addObject:[NSValue valueWithBytes:&chain objCType:@encode( Mat3 )]];
         }
 
+        if ( subjectMode ) {
+          // Vision's boxes are normalized with the origin bottom-left.
+          CGRect box = CGRectNull;
+          if ( !tracked ) {
+            // A square a quarter of the frame's short side, kept in the frame.
+            double side = kSubjectBoxFraction * MIN( smallWidth, smallHeight );
+            double w = side / smallWidth;
+            double h = side / smallHeight;
+            double x = MIN( 1 - w, MAX( 0, subjectX - w / 2 ) );
+            double y = MIN( 1 - h, MAX( 0, ( 1 - subjectY ) - h / 2 ) );
+            tracked = [VNDetectedObjectObservation observationWithBoundingBox:CGRectMake( x, y, w, h )];
+            box = tracked.boundingBox;
+          } else {
+            VNTrackObjectRequest *request = [[VNTrackObjectRequest alloc] initWithDetectedObjectObservation:tracked];
+            request.trackingLevel = VNRequestTrackingLevelAccurate;
+            NSError *trackError = nil;
+            if ( [tracker performRequests:@[request] onCVPixelBuffer:small error:&trackError] ) {
+              VNDetectedObjectObservation *result = request.results.firstObject;
+              if ( [result isKindOfClass:[VNDetectedObjectObservation class]] ) {
+                // Keep following from the latest box either way, but only
+                // report the frames the tracker was sure of.
+                tracked = result;
+                if ( result.confidence >= kSubjectMinConfidence ) box = result.boundingBox;
+              }
+            }
+          }
+          if ( CGRectIsNull( box ) ) {
+            frame[@"s"] = [NSNull null];
+          } else {
+            trackedCount += 1;
+            frame[@"s"] = @[
+              @( CGRectGetMidX( box ) * fullWidth ),
+              @( ( 1 - CGRectGetMidY( box ) ) * fullHeight ),
+            ];
+          }
+        }
+
         if ( previous ) CVPixelBufferRelease( previous );
         previous = small;
         [frames addObject:frame];
@@ -769,6 +820,8 @@ RCT_EXPORT_METHOD( analyze
       @"frames": frames,
       // How many frames the lock against the first frame could refine.
       @"refinedFrames": @( refined ),
+      // How many frames the subject tracker was sure of.
+      @"trackedFrames": @( trackedCount ),
     } mutableCopy];
     if ( strips && fullHeight > 0 ) {
       // Where the strips' middles sit, in frame heights from the frame's middle.

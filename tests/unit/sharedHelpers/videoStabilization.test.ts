@@ -14,7 +14,7 @@ import {
   invertHomography,
   outputSize,
   planStabilization,
-  strengthToSigmaSeconds,
+  subjectPath,
 } from "sharedHelpers/videoStabilization";
 
 const WIDTH = 1000;
@@ -45,8 +45,7 @@ const jitter = ( n: number, amplitude: number ) => Array.from( { length: n }, ( 
 } ) );
 
 const baseSettings = {
-  strength: 0.5,
-  still: true,
+  mode: "background" as const,
   zoom: 1,
   avoidEdges: false,
   outputWidth: WIDTH,
@@ -67,26 +66,18 @@ describe( "affine helpers", ( ) => {
 describe( "background stabilization", ( ) => {
   const offsets = jitter( 60, 15 );
   const world = { x: 400, y: 300 };
-  const outputOfWorldPoint = ( strength: number, still = false ) => {
-    const plan = planStabilization( shakyBackground( offsets ), {
-      ...baseSettings, strength, still,
-    } );
+  const outputOfWorldPoint = ( ) => {
+    const plan = planStabilization( shakyBackground( offsets ), baseSettings );
     return plan.transforms.map( ( m, i ) => applyHomography( m, {
       x: world.x - offsets[i].x,
       y: world.y - offsets[i].y,
     } ) );
   };
 
-  it( "holds the scene still when locked", ( ) => {
-    const out = outputOfWorldPoint( 0.5, true );
+  it( "holds the scene still", ( ) => {
+    const out = outputOfWorldPoint( );
     expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
     expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
-  } );
-
-  it( "removes most of the shake when smoothing", ( ) => {
-    const raw = spread( offsets.map( o => o.x ) );
-    const out = outputOfWorldPoint( 0.3 );
-    expect( spread( out.map( p => p.x ) ) ).toBeLessThan( raw / 3 );
   } );
 
   it( "zooms in just enough to hide the empty edges", ( ) => {
@@ -142,16 +133,14 @@ describe( "background stabilization", ( ) => {
           : step,
       } ) ),
     };
-    [false, true].forEach( still => {
-      const plan = planStabilization( analysis, { ...baseSettings, still } );
-      plan.transforms.forEach( m => {
-        expect( m ).toEqual( plan.transforms[0] );
-      } );
+    const plan = planStabilization( analysis, baseSettings );
+    plan.transforms.forEach( m => {
+      expect( m ).toEqual( plan.transforms[0] );
     } );
   } );
 } );
 
-describe( "holding the background completely still", ( ) => {
+describe( "holding the background against the first frame", ( ) => {
   // The chained frame-to-frame steps drift; the shifts measured against the
   // first frame don't.
   const n = 30;
@@ -184,6 +173,65 @@ describe( "holding the background completely still", ( ) => {
   } );
 } );
 
+describe( "subject stabilization", ( ) => {
+  // The camera shakes while the subject walks steadily right, 10 px a frame.
+  const n = 40;
+  const offsets = jitter( n, 15 );
+  const subjectInWorld = ( i: number ) => ( { x: 300 + 10 * i, y: 250 } );
+  const subjectInFrame = ( i: number ) => ( {
+    x: subjectInWorld( i ).x - offsets[i].x,
+    y: subjectInWorld( i ).y - offsets[i].y,
+  } );
+  const analysis = ( lost: number[] = [] ): VideoAnalysis => {
+    const background = shakyBackground( offsets );
+    return {
+      ...background,
+      frames: background.frames.map( ( frame, i ) => ( {
+        ...frame,
+        s: lost.includes( i )
+          ? null
+          : [subjectInFrame( i ).x, subjectInFrame( i ).y],
+      } ) ),
+    };
+  };
+
+  it( "keeps the subject where it was in the first frame", ( ) => {
+    const plan = planStabilization( analysis( ), { ...baseSettings, mode: "subject" } );
+    const out = plan.transforms.map( ( m, i ) => applyHomography( m, subjectInFrame( i ) ) );
+    expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
+    expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
+  } );
+
+  it( "lets the background move past the subject", ( ) => {
+    const plan = planStabilization( analysis( ), { ...baseSettings, mode: "subject" } );
+    const world = { x: 500, y: 300 };
+    const out = plan.transforms.map( ( m, i ) => applyHomography( m, {
+      x: world.x - offsets[i].x,
+      y: world.y - offsets[i].y,
+    } ) );
+    expect( out[0].x - out[n - 1].x ).toBeGreaterThan( 10 * ( n - 2 ) );
+  } );
+
+  it( "fills in frames where the tracker lost the subject", ( ) => {
+    const path = subjectPath( analysis( [0, 10, 11, n - 1] ) ) as Point[];
+    expect( path ).toHaveLength( n );
+    path.forEach( p => {
+      expect( Number.isFinite( p.x ) && Number.isFinite( p.y ) ).toBe( true );
+    } );
+    // On the line from frame 9 to frame 12, and held at the ends.
+    expect( path[10].x ).toBeCloseTo( path[9].x + ( path[12].x - path[9].x ) / 3 );
+    expect( path[0] ).toEqual( path[1] );
+    expect( path[n - 1] ).toEqual( path[n - 2] );
+  } );
+
+  it( "falls back to the background when the subject was never found", ( ) => {
+    const lostEverywhere = analysis( Array.from( { length: n }, ( _v, i ) => i ) );
+    expect( subjectPath( lostEverywhere ) ).toBeNull( );
+    expect( planStabilization( lostEverywhere, { ...baseSettings, mode: "subject" } ).transforms )
+      .toEqual( planStabilization( lostEverywhere, baseSettings ).transforms );
+  } );
+} );
+
 describe( "rolling-shutter correction", ( ) => {
   // The camera pans steadily right, so the picture moves left 20 px a frame,
   // and each row is read later than the one above it.
@@ -208,7 +256,7 @@ describe( "rolling-shutter correction", ( ) => {
       const b = applyHomography( plan.transforms[10], recorded( bottom, 10 ) );
       return Math.abs( a.x - b.x );
     };
-    const settings = { ...baseSettings, still: false, strength: 0 };
+    const settings = baseSettings;
     const uncorrected = lean( planStabilization( analysis, settings ) );
     const corrected = lean( planStabilization( analysis, {
       ...settings, rollingShutter: readout,
@@ -300,11 +348,6 @@ describe( "small helpers", ( ) => {
     expect( outputSize( 3840, 2160, 1920 ) ).toEqual( { width: 1920, height: 1080 } );
     expect( outputSize( 1080, 1920, 640 ) ).toEqual( { width: 360, height: 640 } );
     expect( outputSize( 641, 361, 2000 ) ).toEqual( { width: 642, height: 362 } );
-  } );
-
-  it( "smooths from 0.2 s to 8 s across the strength slider", ( ) => {
-    expect( strengthToSigmaSeconds( 1 ) ).toBeCloseTo( 8 );
-    expect( strengthToSigmaSeconds( 0 ) ).toBeCloseTo( 0.2 );
   } );
 
   it( "flattens homographies to nine numbers ending in 1", ( ) => {
