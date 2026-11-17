@@ -1,15 +1,16 @@
-# Runs the Video Stabilizer's analysis (stabilization-eval/analyze.m, which
-# reuses VideoStabilizer.m's code) with Apple's Vision on the clips in
-# stabilization-eval/clips, and commits the measurements to the branch.
-# The clips aren't kept in the tree: add them back to rerun.
+# Runs the Video Stabilizer's FFT tile analysis (stabilization-eval/
+# analyze_fft.m, built around the registration block cut straight out of
+# VideoStabilizer.m) on the test clips, and commits the measurements to the
+# branch. The clips aren't kept in the tree; they're read from the commit that
+# added them. (analyze.m measured the earlier Vision analysis the same way.)
 name: Stabilization eval
 
 on:
   push:
     branches: [claude/stoic-curie-sovvo9]
     paths:
-      - "stabilization-eval/analyze.m"
-      - "stabilization-eval/clips/**"
+      - "stabilization-eval/analyze_fft.m"
+      - "ios/iNaturalistReactNative/VideoStabilizer.m"
       - ".github/workflows/stabilization-eval.yml"
 
 permissions:
@@ -21,18 +22,22 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Build
         run: |
-          clang -fobjc-arc -O2 -Wno-unused-function \
+          sed -n '/BEGIN FFT REGISTRATION/,/END FFT REGISTRATION/p' \
+            ios/iNaturalistReactNative/VideoStabilizer.m > stabilization-eval/fft_block.inc
+          clang -fobjc-arc -O2 -Wall -Wno-unused-function \
             -framework Foundation -framework AVFoundation -framework CoreImage \
-            -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework Vision \
-            stabilization-eval/analyze.m -o analyze
+            -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework Accelerate \
+            -I stabilization-eval stabilization-eval/analyze_fft.m -o analyze_fft
       - name: Analyze
         run: |
-          mkdir -p stabilization-eval/results
-          for f in stabilization-eval/clips/*.mov; do
-            [ -e "$f" ] || continue
-            ./analyze "$f" > "stabilization-eval/results/$(basename "$f" .mov).json"
+          mkdir -p clips stabilization-eval/results
+          for c in 3S1A8429 3S1A0091 3S1A1836; do
+            git show "bb58d89:stabilization-eval/clips/$c.mov" > "clips/$c.mov"
+            ./analyze_fft "clips/$c.mov" > "stabilization-eval/results/fft_$c.json"
           done
       - name: Commit results
         run: |
@@ -40,7 +45,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add stabilization-eval/results
           git diff --cached --quiet && exit 0
-          git commit -m "Add stabilization eval results from run ${{ github.run_id }}"
+          git commit -m "Add FFT stabilization eval results from run ${{ github.run_id }}"
           for i in 1 2 3 4; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
             sleep $((i * 5))
