@@ -14,10 +14,12 @@ import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import type {
   Point,
+  ReadoutEstimate,
   StabilizationSettings,
   VideoAnalysis,
 } from "sharedHelpers/videoStabilization";
 import {
+  estimateReadout,
   flattenTransforms,
   outputSize,
   planStabilization,
@@ -68,7 +70,7 @@ const percent = ( progress: number ) => Math.round( progress * 100 );
 interface Choices {
   strength: number;
   still: boolean;
-  rollingShutter: number;
+  rollingShutter: boolean;
   zoom: number;
   avoidEdges: boolean;
   cropCenter: Point | null;
@@ -78,12 +80,15 @@ const settingsFor = (
   analysis: VideoAnalysis,
   maxDimension: number,
   choices: Choices,
+  readout: ReadoutEstimate | null,
 ): StabilizationSettings => {
   const size = outputSize( analysis.width, analysis.height, maxDimension );
   return {
     strength: choices.strength,
     still: choices.still,
-    rollingShutter: choices.rollingShutter,
+    rollingShutter: choices.rollingShutter
+      ? readout?.readout ?? 0
+      : 0,
     zoom: choices.zoom,
     avoidEdges: choices.avoidEdges,
     maxZoom: MAX_ZOOM,
@@ -106,7 +111,6 @@ const VideoStabilizer = ( ) => {
   // Slider positions while dragging; settings are only committed on release.
   const [startDraft, setStartDraft] = useState<number | null>( null );
   const [strengthDraft, setStrengthDraft] = useState<number | null>( null );
-  const [rollingShutterDraft, setRollingShutterDraft] = useState<number | null>( null );
   const [zoomDraft, setZoomDraft] = useState<number | null>( null );
 
   useEffect( ( ) => onVideoStabilizerProgress( ( { progress, job } ) => {
@@ -133,12 +137,26 @@ const VideoStabilizer = ( ) => {
 
   // What each result has to have been made with to be current. A result made
   // with anything else is stale, and the effect below reruns it.
-  const wantedAnalysisKey = videoPath
-    ? JSON.stringify( [videoPath, start, still] )
-    : null;
-  const currentAnalysis = analysis && analysisKey === wantedAnalysisKey
+  // Rolling-shutter correction needs the strips measured; an analysis that
+  // has them serves just as well with the correction off.
+  const analysisKeyFor = ( strips: boolean ) => (
+    videoPath
+      ? JSON.stringify( [videoPath, start, still, strips] )
+      : null
+  );
+  const wantedAnalysisKey = analysisKeyFor( rollingShutter );
+  const currentAnalysis = analysis && (
+    analysisKey === wantedAnalysisKey
+    || ( !rollingShutter && analysisKey === analysisKeyFor( true ) )
+  )
     ? analysis
     : null;
+  const readout = useMemo(
+    ( ) => ( currentAnalysis
+      ? estimateReadout( currentAnalysis )
+      : null ),
+    [currentAnalysis],
+  );
   const choices: Choices = {
     strength, still, rollingShutter, zoom, avoidEdges, cropCenter,
   };
@@ -155,9 +173,9 @@ const VideoStabilizer = ( ) => {
     currentAnalysis
       ? planStabilization( currentAnalysis, settingsFor( currentAnalysis, EXPORT_MAX_DIMENSION, {
         strength, still, rollingShutter, zoom, avoidEdges, cropCenter,
-      } ) )
+      }, readout ) )
       : null
-  ), [currentAnalysis, strength, still, rollingShutter, zoom, avoidEdges, cropCenter] );
+  ), [currentAnalysis, strength, still, rollingShutter, zoom, avoidEdges, cropCenter, readout] );
 
   // Runs one native job. Starting a job cancels the one before (natively,
   // too), and only the latest job's result, error and progress count.
@@ -187,20 +205,32 @@ const VideoStabilizer = ( ) => {
 
   const runAnalysis = ( key: string ) => {
     const {
-      videoPath: path, start: from, still: reference,
+      videoPath: path, start: from, still: reference, rollingShutter: strips,
     } = useVideoStabilizer.getState( );
     if ( !path ) return;
     runJob(
       key,
       "analyzing",
-      job => analyzeVideo( path, { start: from, reference, job } ),
+      job => analyzeVideo( path, {
+        start: from, reference, strips, job,
+      } ),
       result => {
         const lost = result.frames.filter( f => !f.ok ).length;
+        const measured = strips
+          ? estimateReadout( result )
+          : null;
+        let readoutNote = "";
+        if ( strips ) {
+          readoutNote = measured
+            ? `, readout ${measured.readout.toFixed( 3 )}±${measured.error.toFixed( 3 )}`
+              + ` of a frame from ${measured.frames} frames`
+            : ", readout not measurable";
+        }
         logger.info(
           `analyzed ${result.frames.length} frames, ${lost} unusable`
           + `${reference
             ? `, ${result.refinedFrames} locked to the first frame`
-            : ""}`,
+            : ""}${readoutNote}`,
         );
         set( { analysis: result, analysisKey: key } );
       },
@@ -217,6 +247,7 @@ const VideoStabilizer = ( ) => {
         ? PREVIEW_MAX_DIMENSION
         : EXPORT_MAX_DIMENSION,
       choices,
+      readout,
     );
     const rendered = planStabilization( currentAnalysis, settings );
     runJob(
@@ -413,10 +444,15 @@ const VideoStabilizer = ( ) => {
     ];
 
   const sigma = strengthToSigmaSeconds( strengthDraft ?? strength );
-  const shownReadout = rollingShutterDraft ?? rollingShutter;
-  const readoutLabel = shownReadout > 0.005
-    ? t( "Rolling-shutter-readout-x-percent", { percent: percent( shownReadout ) } )
-    : t( "Rolling-shutter-off" );
+  let readoutLabel: string | null = null;
+  if ( rollingShutter && currentAnalysis ) {
+    readoutLabel = readout
+      ? t( "Sensor-readout-x-ms-x-percent-of-a-frame", {
+        ms: ( ( readout.readout * 1000 ) / currentAnalysis.fps ).toFixed( 1 ),
+        percent: percent( readout.readout ),
+      } )
+      : t( "Readout-could-not-be-measured" );
+  }
 
   const disabled = exporting;
   const source = currentAnalysis && {
@@ -546,24 +582,16 @@ const VideoStabilizer = ( ) => {
           )}
 
         <Heading4 className="mt-6 mb-2">{t( "ROLLING-SHUTTER" )}</Heading4>
-        <View className="flex-row items-center">
-          <Body2 className="w-[110px]">{readoutLabel}</Body2>
-          <FineSlider
-            accessibilityLabel={t( "Rolling-shutter-correction" )}
-            disabled={disabled}
-            minimumValue={0}
-            maximumValue={1}
-            value={shownReadout}
-            snapValue={0}
-            snapThreshold={0.03}
-            onChange={setRollingShutterDraft}
-            onComplete={value => {
-              setRollingShutterDraft( null );
-              set( { rollingShutter: value } );
-            }}
-          />
-        </View>
-        <Body3 className="mt-2">{t( "Straightens-lines-that-lean-or-wobble-in-fast-pans" )}</Body3>
+        <SwitchRow
+          label={t( "Correct-rolling-shutter" )}
+          value={rollingShutter}
+          disabled={disabled}
+          onValueChange={value => set( { rollingShutter: value } )}
+        />
+        {readoutLabel && <Body2 className="mt-2">{readoutLabel}</Body2>}
+        <Body3 className="mt-2">
+          {t( "Straightens-lines-that-lean-in-fast-moves-measured-from-the-video" )}
+        </Body3>
 
         <Heading4 className="mt-6 mb-2">{t( "CROP" )}</Heading4>
         <View className="flex-row items-center">

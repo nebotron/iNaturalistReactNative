@@ -53,6 +53,10 @@ export interface AnalysisFrame {
   // first frame's, measured against the first frame itself so that errors
   // don't add up over the clip.
   r?: number[];
+  // Analyses for rolling-shutter correction: like `m`, but for the top and
+  // bottom strips of the frame registered on their own.
+  mt?: number[];
+  mb?: number[];
 }
 
 export interface VideoAnalysis {
@@ -60,6 +64,9 @@ export interface VideoAnalysis {
   height: number;
   fps: number;
   frames: AnalysisFrame[];
+  // Where the middles of the strips behind `mt` and `mb` sit, in frame heights
+  // from the frame's middle (top negative).
+  strips?: { top: number; bottom: number };
 }
 
 export const IDENTITY: Affine = {
@@ -264,6 +271,110 @@ export const rollingShutterCorrection = (
     d: 1 - velocity.y * k,
     e: velocity.x * k * middle,
     f: velocity.y * k * middle,
+  };
+};
+
+export interface ReadoutEstimate {
+  // Readout time as a fraction of the frame interval.
+  readout: number;
+  // Its standard error, likewise.
+  error: number;
+  // Frames that went into it.
+  frames: number;
+}
+
+// The fewest frames, and the largest standard error, an estimate is trusted
+// with. Below that the camera didn't change speed enough to tell.
+const MIN_READOUT_FRAMES = 10;
+const MAX_READOUT_ERROR = 0.1;
+
+// Works out the sensor's readout time from how differently the top and bottom
+// of the picture moved between frames.
+//
+// With the picture at X(t), a strip whose rows are read r·s frames after the
+// middle row (s its offset from the middle in frame heights) moves by
+// X(i + r·s) − X(i − 1 + r·s) between frames i − 1 and i. To first order
+// that's the whole frame's step plus r·s·(V(i) − V(i − 1)), where V(i), the
+// velocity at frame i, is the mean of the steps either side. So
+//
+//   bottom step − top step = r · (s_bottom − s_top) · (step(i+1) − step(i−1)) / 2
+//
+// and r is the least-squares slope over every frame and both axes. Steady
+// motion says nothing about it (the strips then move alike, however long the
+// readout); only speeding up and slowing down does, which handheld shake
+// supplies plenty of. Frames where a moving subject or a bad registration
+// throws a strip off are dropped as outliers. Footage the camera already
+// corrected (iPhone video stabilization does) measures close to zero.
+export const estimateReadout = ( analysis: VideoAnalysis ): ReadoutEstimate | null => {
+  const {
+    width, height, frames, strips,
+  } = analysis;
+  if ( !strips ) return null;
+  const center = { x: width / 2, y: height / 2 };
+  const spread = strips.bottom - strips.top;
+  if ( !( spread > 0 ) ) return null;
+  const stepAt = ( m: number[] | undefined ): Point | null => {
+    if ( m?.length !== 9 ) return null;
+    const before = applyHomography( m, center );
+    return Number.isFinite( before.x ) && Number.isFinite( before.y )
+      ? { x: center.x - before.x, y: center.y - before.y }
+      : null;
+  };
+  const steps = frames.map( ( frame, i ) => ( usableStep( frame, i )
+    ? stepAt( frame.m )
+    : null ) );
+
+  // Pairs of (predictor, measured difference), one per axis per frame.
+  const pairs: [number, number][] = [];
+  frames.forEach( ( frame, i ) => {
+    const before = steps[i - 1];
+    const after = steps[i + 1];
+    const top = stepAt( frame.mt );
+    const bottom = stepAt( frame.mb );
+    if ( !before || !after || !top || !bottom ) return;
+    pairs.push( [spread * ( ( after.x - before.x ) / 2 ), bottom.x - top.x] );
+    pairs.push( [spread * ( ( after.y - before.y ) / 2 ), bottom.y - top.y] );
+  } );
+
+  const fit = ( used: [number, number][] ) => {
+    const sxx = used.reduce( ( sum, [a] ) => sum + a * a, 0 );
+    const sxy = used.reduce( ( sum, [a, d] ) => sum + a * d, 0 );
+    return sxx > 0
+      ? sxy / sxx
+      : 0;
+  };
+  const median = ( values: number[] ) => {
+    const sorted = [...values].sort( ( p, q ) => p - q );
+    const mid = Math.floor( sorted.length / 2 );
+    return sorted.length % 2
+      ? sorted[mid]
+      : ( sorted[mid - 1] + sorted[mid] ) / 2;
+  };
+
+  let used = pairs;
+  let readout = fit( used );
+  // Twice: fit, drop what's far off the line, fit again.
+  for ( let pass = 0; pass < 2 && used.length > 0; pass += 1 ) {
+    const slope = readout;
+    const residuals = pairs.map( ( [a, d] ) => Math.abs( d - slope * a ) );
+    // Three standard deviations, from the median (robust to the outliers
+    // themselves), but never under half a pixel.
+    const limit = Math.max( 3 * 1.4826 * median( residuals ), 0.5 );
+    used = pairs.filter( ( [a, d] ) => Math.abs( d - slope * a ) <= limit );
+    readout = fit( used );
+  }
+
+  const sxx = used.reduce( ( sum, [a] ) => sum + a * a, 0 );
+  if ( used.length < 2 * MIN_READOUT_FRAMES || !( sxx > 0 ) ) return null;
+  const residual = used.reduce( ( sum, [a, d] ) => sum + ( d - readout * a ) ** 2, 0 );
+  const error = Math.sqrt( residual / ( used.length - 1 ) / sxx );
+  if ( !( error <= MAX_READOUT_ERROR ) ) return null;
+  return {
+    // A sensor can't read faster than instantly, nor (in video) slower than
+    // a frame.
+    readout: Math.min( 1, Math.max( 0, readout ) ),
+    error,
+    frames: Math.round( used.length / 2 ),
   };
 };
 

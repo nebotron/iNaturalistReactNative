@@ -8,6 +8,7 @@ import {
   applyAffine,
   applyHomography,
   compose,
+  estimateReadout,
   flattenTransforms,
   invert,
   invertHomography,
@@ -214,6 +215,83 @@ describe( "rolling-shutter correction", ( ) => {
     } ) );
     expect( uncorrected ).toBeCloseTo( Math.abs( speed ) * readout * ( 500 / HEIGHT ) );
     expect( corrected ).toBeLessThan( 0.5 );
+  } );
+} );
+
+describe( "readout estimate", ( ) => {
+  const FPS = 30;
+  const STRIPS = { top: -0.3, bottom: 0.3 };
+  // A handheld camera's wander: where the picture is, in pixels, at time t
+  // in frames.
+  const handheld = ( t: number ): Point => {
+    const s = t / FPS;
+    return {
+      x: 30 * Math.sin( 2 * Math.PI * 0.7 * s ) + 12 * Math.sin( 2 * Math.PI * 2.3 * s + 1 ),
+      y: 18 * Math.sin( 2 * Math.PI * 1.1 * s + 2 ) + 8 * Math.sin( 2 * Math.PI * 3.1 * s ),
+    };
+  };
+  // What the analysis reports for a sensor with the given readout. `noise`
+  // perturbs each strip's measurement by a repeatable pseudo-random amount.
+  const recorded = (
+    picture: ( t: number ) => Point,
+    readout: number,
+    { n = 150, noise = 0, strips = true } = {},
+  ): VideoAnalysis => {
+    const shiftMatrix = ( from: Point, to: Point ) => (
+      [1, 0, -( to.x - from.x ), 0, 1, -( to.y - from.y ), 0, 0, 1]
+    );
+    const jitter = ( k: number ) => noise * Math.sin( k * 12.9898 ) * 2;
+    return {
+      width: WIDTH,
+      height: HEIGHT,
+      fps: FPS,
+      strips: strips
+        ? STRIPS
+        : undefined,
+      frames: Array.from( { length: n }, ( _v, i ): AnalysisFrame => {
+        if ( i === 0 ) return { t: 0, ok: true, m: [1, 0, 0, 0, 1, 0, 0, 0, 1] };
+        const strip = ( s: number, k: number ) => {
+          const m = shiftMatrix( picture( i - 1 + readout * s ), picture( i + readout * s ) );
+          m[2] += jitter( i * 4 + k );
+          m[5] += jitter( i * 4 + k + 1 );
+          return m;
+        };
+        return {
+          t: i / FPS,
+          ok: true,
+          m: shiftMatrix( picture( i - 1 ), picture( i ) ),
+          ...( strips && { mt: strip( STRIPS.top, 0 ), mb: strip( STRIPS.bottom, 2 ) } ),
+        };
+      } ),
+    };
+  };
+
+  it.each( [0.3, 0.6, 0.9] )( "measures a readout of %p of a frame from handheld shake", r => {
+    const estimate = estimateReadout( recorded( handheld, r ) );
+    expect( estimate?.readout ).toBeCloseTo( r, 1 );
+  } );
+
+  it( "measures through noisy registrations and an outlier", ( ) => {
+    const analysis = recorded( handheld, 0.5, { noise: 0.3 } );
+    // A bird flies through the bottom strip.
+    ( analysis.frames[40].mb as number[] )[2] += 40;
+    const estimate = estimateReadout( analysis );
+    expect( estimate?.readout ).toBeCloseTo( 0.5, 1 );
+    expect( estimate?.error ).toBeLessThan( 0.1 );
+  } );
+
+  it( "measures nothing for footage already corrected", ( ) => {
+    expect( estimateReadout( recorded( handheld, 0 ) )?.readout ).toBeLessThan( 0.02 );
+  } );
+
+  it( "can't tell from a steady pan or a still camera", ( ) => {
+    expect( estimateReadout( recorded( t => ( { x: -20 * t, y: 0 } ), 0.5 ) ) ).toBeNull( );
+    expect( estimateReadout( recorded( ( ) => ( { x: 0, y: 0 } ), 0.5, { noise: 0.3 } ) ) )
+      .toBeNull( );
+  } );
+
+  it( "needs the strip measurements", ( ) => {
+    expect( estimateReadout( recorded( handheld, 0.5, { strips: false } ) ) ).toBeNull( );
   } );
 } );
 

@@ -28,8 +28,8 @@ export interface VideoStabilizerState {
   strength: number;
   // Hold the background completely still instead of smoothing its motion.
   still: boolean;
-  // Rolling-shutter readout, as a fraction of the frame interval; 0 is off.
-  rollingShutter: number;
+  // Correct rolling shutter, with the readout time measured from the video.
+  rollingShutter: boolean;
   zoom: number;
   avoidEdges: boolean;
   // Each result remembers the settings it was made with (see the screen's
@@ -58,7 +58,7 @@ const initialSession = {
   cropCenter: null,
   strength: 0.5,
   still: false,
-  rollingShutter: 0,
+  rollingShutter: false,
   zoom: 1,
   avoidEdges: false,
   analysis: null,

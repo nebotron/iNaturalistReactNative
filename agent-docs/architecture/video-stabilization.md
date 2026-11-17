@@ -3,15 +3,15 @@
 Menu → **Video Stabilizer** (iOS only). Import a video from Photos, hold its
 background steady (smoothed, or completely still) by correcting shift only
 (rotation and zoom are left as shot), optionally correct rolling
-shutter, and crop in closer. The copy keeps the original's sound and metadata.
+shutter with a readout time measured from the video, and crop in closer. The copy keeps the original's sound and metadata.
 
 ## How it is split
 
 | Layer | File | Job |
 | --- | --- | --- |
-| Screen | `src/components/VideoStabilizer/` | Import, start time, still lock, smoothing, rolling shutter, crop, side-by-side preview, export/save |
+| Screen | `src/components/VideoStabilizer/` | Import, start time, still lock, smoothing, rolling-shutter switch and measured readout, crop, side-by-side preview, export/save |
 | Session state | `src/stores/videoStabilizer.ts` | Zustand, not persisted, so a tab switch doesn't drop a finished analysis |
-| Math | `src/sharedHelpers/videoStabilization.ts` | Camera path, smoothing, rolling shutter, crop/zoom planning; unit tested |
+| Math | `src/sharedHelpers/videoStabilization.ts` | Camera path, smoothing, readout estimate, rolling shutter, crop/zoom planning; unit tested |
 | Bridge | `src/sharedHelpers/videoStabilizerNative.ts` | Typed wrapper, progress events, the comparison player view |
 | Native | `ios/iNaturalistReactNative/VideoStabilizer.m` | Picking, frame reading, Vision registration, Core Image warping, AVAssetWriter, saving, player |
 
@@ -20,7 +20,8 @@ The native module runs two passes over the same upright, constant-frame-rate
 frame *i* of the render.
 
 1. **Analyze**: the native pass measures per-frame motion. It's slow, so it
-   runs once per video, start time and still lock.
+   runs once per video, start time, still lock and rolling-shutter switch
+   (an analysis made with the switch on also serves with it off).
 2. **Plan**: JS turns the measurements into one homography per frame. This is
    instant, so smoothing, rolling shutter, zoom, crop position and "hide
    edges" can change without re-reading the video.
@@ -66,11 +67,32 @@ is a drift-free shift (`r` per frame). Pans and walks show black edges by
 design.
 
 **Rolling shutter** (`R_i`). Rows are read top to bottom over a readout time
-`r` (a fraction of the frame interval, the slider). With the picture moving
+`r` (a fraction of the frame interval). With the picture moving
 at `v` px/frame (from the registration steps either side of the frame), a row
 `y` is captured `r·(y − H/2)/H` frames after the middle row, so
 `R_i` = shift each row back by `v` times that: a shear for sideways motion and
 a stretch for vertical motion. Rotation wobble isn't modeled.
+
+**Measuring the readout.** The correction is a switch; `r` comes from the
+video. With it on, the analysis also registers the top and bottom 40% of each
+frame against the previous frame's, at 960 px (finer than the 480 px
+whole-frame pass, since the signal is a pixel or two), and reports them as
+`mt`/`mb` with the strips' offsets from the middle (`strips`, ±0.3 frame
+heights). A strip at offset `s` moves by `X(i + r·s) − X(i − 1 + r·s)`, which
+to first order is the frame's step plus `r·s·(step(i+1) − step(i−1))/2`. So
+the bottom-minus-top difference is proportional to the camera's change in
+speed, and `estimateReadout` fits `r` as the least-squares slope over both
+axes of every frame, twice dropping residuals beyond three robust standard
+deviations (or half a pixel). Steady pans and still cameras carry no signal:
+under 10 usable frames or a standard error over 0.1 gives no estimate, and the
+screen says so and corrects nothing. Otherwise it shows the readout in ms
+(`r / fps`) and as a share of the frame. Footage iOS already corrected
+(Camera's video stabilization) measures near zero. The strip pass roughly
+doubles analysis time, which is why it only runs with the switch on.
+
+No metadata gives `r`: readout time isn't stored in the file, and a
+make/model lookup would need every sensor mode measured and would be wrong for
+clips iOS already corrected.
 
 **Metadata.** The render copies QuickTime metadata and user data as is and
 maps other formats' common keys (creation date, ISO 6709 location, make,
@@ -115,7 +137,9 @@ now a constant.
 - HDR (HLG/Dolby Vision) clips are read as 8-bit BGRA and written SDR.
 - Frame rate is capped at 60 fps, so slow-motion clips lose frames.
 - Rolling-shutter correction models shear and stretch from shift only, with a
-  readout the user sets; rotation wobble isn't corrected.
+  readout measured from the clip's own changes in speed; rotation wobble and
+  sub-frame jello aren't corrected. A large subject moving through one strip
+  can bias the measurement where the outlier rejection doesn't catch it.
 - The export is capped at 1920 px on the long side. A deep crop is upscaled,
   and the screen shows how many source pixels the output comes from.
 - Work stops if the app is backgrounded: the screen is kept awake, but there

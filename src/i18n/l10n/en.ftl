@@ -418,6 +418,8 @@ Copy-coordinates = Copy Coordinates
 # heading to describe general information about rights, attribution, and
 # licensing
 Copyright = Copyright
+# Switch in the video stabilizer that corrects rolling-shutter distortion, using a readout time measured from the video
+Correct-rolling-shutter = Correct rolling shutter
 # Error message when original photos could not be deleted from the device
 Could-not-delete-original-photos = Could not delete the original photos from your device. This is a known iOS issue — try restarting your iPhone, then delete the photo from the Photos app.
 # Error message when no camera can be found
@@ -1712,6 +1714,8 @@ Ranks-Zoosection = Zoosection
 Ranks-ZOOSUBSECTION = ZOOSUBSECTION
 Ranks-Zoosubsection = Zoosubsection
 Read-more-on-Wikipedia = Read more on Wikipedia
+# Shown in the video stabilizer when the video has too little camera shake to measure how long the sensor takes to read a frame, so rolling shutter is left uncorrected
+Readout-could-not-be-measured = The readout time could not be measured from this video (the camera moved too little or too steadily), so nothing was corrected.
 # Help text for the button that opens the sound recorder
 Record-a-sound = Record a sound
 # Title of screen asking for permission to access the microphone
@@ -1788,12 +1792,6 @@ Reviewed-observations-only = Reviewed observations only
 Right--correct = Right
 # Section header in the video stabilizer for correcting rolling-shutter distortion
 ROLLING-SHUTTER = ROLLING SHUTTER
-# Accessibility label for the slider that sets how much rolling-shutter distortion the video stabilizer corrects
-Rolling-shutter-correction = Rolling-shutter correction
-# Rolling-shutter correction is turned off
-Rolling-shutter-off = Off
-# How long the camera's sensor takes to read a frame, as a share of the time between frames, e.g. "Readout 50%"
-Rolling-shutter-readout-x-percent = Readout { $percent }%
 # Shown when the route without any hotspots already takes longer to drive than the chosen time limit
 Route-is-longer-than-time-limit = The route without hotspots is longer than the time limit
 # Number of stops on a route, shown after the start and end in the collapsed route summary
@@ -1899,6 +1897,8 @@ SELECT-THIS-TAXON = SELECT THIS TAXON
 # Label for an element that let's you select a user
 Select-user = Select user
 Selects-iconic-taxon-X = Selects iconic taxon { $iconicTaxon }.
+# How long the camera's sensor took to read a frame top to bottom, measured from the video: in milliseconds and as a share of the time between frames, e.g. "Sensor readout: 12.4 ms (37% of a frame)"
+Sensor-readout-x-ms-x-percent-of-a-frame = Sensor readout: { $ms } ms ({ $percent }% of a frame)
 Separate-Photos = Separate Photos
 # Month of September
 September = September
@@ -2058,8 +2058,8 @@ Stops-the-sound = Stops the sound.
 STORAGE-USAGE = STORAGE USAGE
 # Shown on the storage usage screen when folder sizes could not be read
 Storage-usage-could-not-be-measured = Storage usage could not be measured.
-# Explains the video stabilizer's rolling-shutter slider
-Straightens-lines-that-lean-or-wobble-in-fast-pans = Straightens lines that lean, stretch or wobble when the camera moves fast. Raise it until upright things stay upright in a pan.
+# Explains the video stabilizer's rolling-shutter switch
+Straightens-lines-that-lean-in-fast-moves-measured-from-the-video = Straightens lines that lean, stretch or squash when the camera moves fast. How long the sensor takes to read each frame is measured from the video's own shake. Clips the camera already corrected measure close to zero.
 # Sort option: distance from camera to subject, nearest first
 Subject-distance-Nearest = Subject distance (nearest)
 SUBMIT = SUBMIT

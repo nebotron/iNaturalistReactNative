@@ -21,7 +21,9 @@
 //   analyze      one pass over the frames, reporting per frame how the
 //                picture moved since the previous frame (Vision image
 //                registration) and, for a complete lock, where it sits on the
-//                first frame
+//                first frame; for rolling-shutter correction, also how the
+//                top and bottom of the picture moved, each on its own, from
+//                which JS works out the sensor's readout time
 //   render       a second pass that warps each frame by the homography JS
 //                computed for it, crops to the output size and writes an
 //                H.264 .mov, passing the audio through untouched and keeping
@@ -560,6 +562,14 @@ RCT_EXPORT_METHOD( analyze
     // A complete lock also measures every frame against the first, so the
     // small errors of chaining frame to frame don't add up to a drift.
     BOOL reference = [options[@"reference"] boolValue];
+    // Rolling shutter: register the top and bottom of each frame separately.
+    // Their rows are read at different times, so when the camera speeds up or
+    // slows down they move by different amounts, and how different measures
+    // the readout. The difference is a pixel or two, so the strips are
+    // registered at twice the detail of the whole frame.
+    BOOL strips = [options[@"strips"] boolValue];
+    double stripMaxDimension = 960;
+    double stripFraction = 0.4;
     id job = options[@"job"];
     // Registration needs little detail.
     double maxDimension = 480;
@@ -590,6 +600,12 @@ RCT_EXPORT_METHOD( analyze
     double smallWidth = 0;
     double smallHeight = 0;
     BOOL bufferFailed = NO;
+    CVPixelBufferPoolRef stripPool = NULL;
+    CVPixelBufferRef previousTop = NULL;
+    CVPixelBufferRef previousBottom = NULL;
+    double stripScale = 1;
+    double stripFullHeight = 0;
+    NSMutableDictionary<NSNumber *, NSArray *> *stripSteps = [NSMutableDictionary dictionary];
 
     while ( [self isCurrent:generation] ) {
       @autoreleasepool {
@@ -606,6 +622,14 @@ RCT_EXPORT_METHOD( analyze
           pool = makePixelBufferPool( (size_t)smallWidth, (size_t)smallHeight );
           blackSmall = [[CIImage imageWithColor:[CIColor colorWithRed:0 green:0 blue:0]]
             imageByCroppingToRect:CGRectMake( 0, 0, smallWidth, smallHeight )];
+          if ( strips ) {
+            stripScale = MIN( 1, stripMaxDimension / MAX( fullWidth, fullHeight ) );
+            stripFullHeight = round( fullHeight * stripFraction );
+            stripPool = makePixelBufferPool(
+              (size_t)round( fullWidth * stripScale ),
+              (size_t)round( stripFullHeight * stripScale )
+            );
+          }
         }
         CVPixelBufferRef small = NULL;
         if ( pool ) CVPixelBufferPoolCreatePixelBuffer( NULL, pool, &small );
@@ -617,6 +641,25 @@ RCT_EXPORT_METHOD( analyze
         CIImage *fullImage = [CIImage imageWithCVPixelBuffer:full];
         [self->_ciContext render:[fullImage imageByApplyingTransform:CGAffineTransformMakeScale( scale, scale )]
                  toCVPixelBuffer:small];
+        // Core Image is bottom-left: the top strip is the highest rows.
+        CVPixelBufferRef top = NULL;
+        CVPixelBufferRef bottom = NULL;
+        if ( stripPool ) {
+          CVPixelBufferPoolCreatePixelBuffer( NULL, stripPool, &top );
+          CVPixelBufferPoolCreatePixelBuffer( NULL, stripPool, &bottom );
+          double origins[2] = { fullHeight - stripFullHeight, 0 };
+          CVPixelBufferRef targets[2] = { top, bottom };
+          for ( int k = 0; k < 2; k++ ) {
+            if ( !targets[k] ) continue;
+            CGRect rect = CGRectMake( 0, origins[k], fullWidth, stripFullHeight );
+            CGAffineTransform place = CGAffineTransformConcat(
+              CGAffineTransformMakeTranslation( 0, -origins[k] ),
+              CGAffineTransformMakeScale( stripScale, stripScale )
+            );
+            [self->_ciContext render:[[fullImage imageByCroppingToRect:rect] imageByApplyingTransform:place]
+                     toCVPixelBuffer:targets[k]];
+          }
+        }
         CFRelease( sample );
 
         NSMutableDictionary *frame = [@{ @"t": @( t ), @"ok": @YES } mutableCopy];
@@ -626,6 +669,21 @@ RCT_EXPORT_METHOD( analyze
           frame[@"ok"] = @NO;
         }
         [steps addObject:[NSValue valueWithBytes:&step objCType:@encode( Mat3 )]];
+
+        if ( top && bottom && previousTop && previousBottom ) {
+          Mat3 topStep;
+          Mat3 bottomStep;
+          if ( registerImages( top, previousTop, &topStep ) && registerImages( bottom, previousBottom, &bottomStep ) ) {
+            stripSteps[@( frames.count )] = @[
+              [NSValue valueWithBytes:&topStep objCType:@encode( Mat3 )],
+              [NSValue valueWithBytes:&bottomStep objCType:@encode( Mat3 )],
+            ];
+          }
+        }
+        if ( previousTop ) CVPixelBufferRelease( previousTop );
+        if ( previousBottom ) CVPixelBufferRelease( previousBottom );
+        previousTop = top;
+        previousBottom = bottom;
 
         if ( reference ) {
           if ( !first ) {
@@ -662,6 +720,9 @@ RCT_EXPORT_METHOD( analyze
     if ( previous ) CVPixelBufferRelease( previous );
     if ( first ) CVPixelBufferRelease( first );
     if ( pool ) CVPixelBufferPoolRelease( pool );
+    if ( previousTop ) CVPixelBufferRelease( previousTop );
+    if ( previousBottom ) CVPixelBufferRelease( previousBottom );
+    if ( stripPool ) CVPixelBufferPoolRelease( stripPool );
 
     if ( ![self isCurrent:generation] ) {
       [reader cancelReading];
@@ -687,16 +748,34 @@ RCT_EXPORT_METHOD( analyze
         frames[i][@"r"] = mat3Array( mat3Mul( toTopLeft, mat3Mul( r, fromTopLeft ) ) );
       }
     }
+    // The strips' steps, likewise in top-left pixels of the full frame. They
+    // are pure shifts, so which strip they came from doesn't change this.
+    Mat3 stripToTopLeft = mat3Mul( mat3Scale( 1 / stripScale ), mat3FlipY( stripFullHeight * stripScale ) );
+    Mat3 stripFromTopLeft = mat3Inv( stripToTopLeft );
+    for ( NSNumber *index in stripSteps ) {
+      Mat3 topStep;
+      Mat3 bottomStep;
+      [stripSteps[index][0] getValue:&topStep];
+      [stripSteps[index][1] getValue:&bottomStep];
+      frames[index.unsignedIntegerValue][@"mt"] = mat3Array( mat3Mul( stripToTopLeft, mat3Mul( topStep, stripFromTopLeft ) ) );
+      frames[index.unsignedIntegerValue][@"mb"] = mat3Array( mat3Mul( stripToTopLeft, mat3Mul( bottomStep, stripFromTopLeft ) ) );
+    }
 
     [self emitProgress:@"analyze" job:job progress:1 force:YES];
-    resolve( @{
+    NSMutableDictionary *result = [@{
       @"width": @( fullWidth ),
       @"height": @( fullHeight ),
       @"fps": @( frameRateOf( [asset tracksWithMediaType:AVMediaTypeVideo].firstObject ) ),
       @"frames": frames,
       // How many frames the lock against the first frame could refine.
       @"refinedFrames": @( refined ),
-    } );
+    } mutableCopy];
+    if ( strips && fullHeight > 0 ) {
+      // Where the strips' middles sit, in frame heights from the frame's middle.
+      double half = stripFullHeight / 2 / fullHeight;
+      result[@"strips"] = @{ @"top": @( half - 0.5 ), @"bottom": @( 0.5 - half ) };
+    }
+    resolve( result );
   } );
 }
 

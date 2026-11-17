@@ -28,6 +28,9 @@ export interface AnalyzeOptions {
   start: number;
   // Also measure every frame against the first, for a complete lock.
   reference: boolean;
+  // Also measure the top and bottom of each frame on their own, to work out
+  // the rolling shutter's readout time.
+  strips: boolean;
   job: number;
 }
 
