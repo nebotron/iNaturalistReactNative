@@ -25,6 +25,7 @@ export interface HotspotSpecies {
   id?: number;
   name: string;
   preferred_common_name?: string;
+  iconic_taxon_name?: string;
   count: number;
 }
 
@@ -439,6 +440,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm: number ): Map<string
             id: taxon.id,
             name: taxon.name ?? "",
             preferred_common_name: taxon.preferred_common_name,
+            iconic_taxon_name: taxon.iconic_taxon_name,
             count: 1,
           } );
         }

@@ -97,7 +97,13 @@ const HotspotListItem = ( {
                 key={species.id ?? species.name}
                 className="flex-row items-center mb-0.5"
               >
-                <INatIcon name="leaf" size={10} color={colors.inatGreen} />
+                <INatIcon
+                  name={species.iconic_taxon_name
+                    ? `iconic-${species.iconic_taxon_name.toLowerCase( )}`
+                    : "iconic-unknown"}
+                  size={14}
+                  color={colors.inatGreen}
+                />
                 <Body3
                   className="ml-2 flex-1 text-darkGray"
                   numberOfLines={1}
