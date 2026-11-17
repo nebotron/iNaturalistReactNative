@@ -43,9 +43,8 @@ The screen keys each result by the settings it was made with
 analysis whenever its key is stale and, once it's current, re-renders the
 preview, which loops below the original, each the full screen width
 (`VideoStabilizerComparison`: the original from the start time the preview
-was rendered with, then the stabilized preview). The pair is pinned below the
-settings when it fits in half the screen, and otherwise ends the scrolling
-settings. Both are tracks of one `AVMutableComposition` stacked by an
+was rendered with, then the stabilized preview). The pair scrolls with the
+settings, below them. Both are tracks of one `AVMutableComposition` stacked by an
 `AVVideoComposition`, so a single player clock keeps them frame for frame in
 step, across the loop too. Native analyses and renders are numbered;
 starting one cancels the one before, and progress events carry the JS job

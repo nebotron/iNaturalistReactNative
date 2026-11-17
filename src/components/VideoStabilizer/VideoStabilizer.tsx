@@ -497,12 +497,9 @@ const VideoStabilizer = ( ) => {
   const exportSize = outputSize( info.width, info.height, EXPORT_MAX_DIMENSION );
   const previewIsCurrent = !!previewUri && previewKey === wantedPreviewKey;
 
-  // The original above the stabilized preview, each the full screen width.
-  // Pinned below the settings when the pair fits in half the screen (wide
-  // videos); otherwise (tall videos) at the end of the settings, so it
-  // doesn't cover them.
+  // The original above the stabilized preview, each the full screen width,
+  // below the settings.
   const videoHeight = windowWidth / aspect;
-  const comparisonPinned = videoHeight * 2 <= windowHeight * 0.5;
   const videoLabel = ( text: string, top: number ) => (
     <View
       className="absolute left-2 px-2 py-0.5 rounded bg-black/50"
@@ -514,10 +511,8 @@ const VideoStabilizer = ( ) => {
   );
   const comparison = (
     <View
-      className={`pt-2 bg-white ${comparisonPinned
-        ? "pb-6 border-t border-lightGray"
-        // Out to the screen edges, past the settings' padding.
-        : "mt-6 -mx-4"}`}
+      // Out to the screen edges, past the settings' padding.
+      className="mt-6 -mx-4 pt-2 bg-white"
     >
       <Heading4 className="px-4 mb-2">{t( "PREVIEW--video-stabilizer" )}</Heading4>
       {previewUri && VideoStabilizerComparison
@@ -699,9 +694,8 @@ const VideoStabilizer = ( ) => {
           disabled={disabled}
           onPress={importVideo}
         />
-        {!comparisonPinned && comparison}
+        {comparison}
       </ScrollView>
-      {comparisonPinned && comparison}
     </View>
   );
 };
