@@ -1,3 +1,4 @@
+import { isEbirdObservation } from "api/ebird";
 import type { ApiObservation } from "api/types";
 import { INatIcon } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
@@ -145,6 +146,11 @@ const ObsPressable = ( {
     );
   }
 
+  let accessibilityHint = unsynced
+    ? t( "Navigates-to-observation-edit-screen" )
+    : t( "Navigates-to-observation-details" );
+  if ( isEbirdObservation( observation ) ) accessibilityHint = t( "Opens-eBird-checklist" );
+
   return (
     <Pressable
       testID={`ObsPressable.${uuid}`}
@@ -165,9 +171,7 @@ const ObsPressable = ( {
       accessibilityState={selecting
         ? { selected }
         : undefined}
-      accessibilityHint={unsynced
-        ? t( "Navigates-to-observation-edit-screen" )
-        : t( "Navigates-to-observation-details" )}
+      accessibilityHint={accessibilityHint}
       disabled={queued}
     >
       {content}

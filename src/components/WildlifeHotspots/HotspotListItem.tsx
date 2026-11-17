@@ -104,6 +104,7 @@ const HotspotListItem = ( {
                 >
                   {species.preferred_common_name || species.name}
                   {"  ·  "}
+                  {/* eBird-only species have no iNaturalist taxon to open */}
                   {species.id
                     ? (
                       <Body3
