@@ -1,0 +1,44 @@
+# Runs the Video Stabilizer's analysis (stabilization-eval/analyze.m, which
+# reuses VideoStabilizer.m's code) with Apple's Vision on the clips in
+# stabilization-eval/clips, and commits the measurements to the branch.
+name: Stabilization eval
+
+on:
+  push:
+    branches: [claude/stoic-curie-sovvo9]
+    paths:
+      - "stabilization-eval/analyze.m"
+      - "stabilization-eval/clips/**"
+      - ".github/workflows/stabilization-eval.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          clang -fobjc-arc -O2 -Wno-unused-function \
+            -framework Foundation -framework AVFoundation -framework CoreImage \
+            -framework CoreMedia -framework CoreVideo -framework Vision \
+            stabilization-eval/analyze.m -o analyze
+      - name: Analyze
+        run: |
+          mkdir -p stabilization-eval/results
+          for f in stabilization-eval/clips/*.mov; do
+            ./analyze "$f" > "stabilization-eval/results/$(basename "$f" .mov).json"
+          done
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add stabilization-eval/results
+          git commit -m "Add stabilization eval results from run ${{ github.run_id }}"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep $((i * 5))
+          done
