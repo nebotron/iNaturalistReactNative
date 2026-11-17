@@ -40,6 +40,7 @@ import ExploreLocationSearchModal from "components/Explore/Modals/ExploreLocatio
 import ExploreProjectSearchModal from "components/Explore/Modals/ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "components/Explore/Modals/ExploreTaxonSearchModal";
 import ExploreUserSearchModal from "components/Explore/Modals/ExploreUserSearchModal";
+import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import { SaveOfflineButton } from "components/Explore/OfflineExplore";
 import type { ExploreSearchUser }
   from "components/Explore/SearchScreens/ExploreUserSearch";
@@ -722,6 +723,7 @@ const AdvancedSearch = ( ) => {
             />
           </View>
 
+          <ObservationSourceToggle className="mb-7 self-start" />
         </View>
       </ScrollView>
       <ButtonBar containerClass="bg-white border-t border-lightGray">

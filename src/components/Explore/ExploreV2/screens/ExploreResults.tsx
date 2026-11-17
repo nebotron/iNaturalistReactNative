@@ -1,6 +1,5 @@
 import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
-import { isEbirdEnabled } from "api/ebird";
 import type { ApiTotalBounds } from "api/types";
 import {
   CAMERA_STATS_TAB,
@@ -41,7 +40,6 @@ import useObservationsWithEbird
   from "components/Explore/hooks/useObservationsWithEbird";
 import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
-import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import {
   OfflineMapView,
@@ -735,12 +733,9 @@ const ExploreResults = ( ) => {
     }[state.activeTab as string];
     return (
       <>
-        {( totalCount || ( state.activeTab === OBSERVATIONS_TAB && isEbirdEnabled( ) ) ) && (
-          <View className="flex-row items-center justify-between gap-2 px-5 pb-2">
-            {totalCount
-              ? <Body2 testID="ExploreResults.totalCount">{totalCount}</Body2>
-              : <View />}
-            {state.activeTab === OBSERVATIONS_TAB && <ObservationSourceToggle />}
+        {totalCount && (
+          <View className="px-5 pb-2">
+            <Body2 testID="ExploreResults.totalCount">{totalCount}</Body2>
           </View>
         )}
         {renderTabContent( )}
