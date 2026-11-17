@@ -47,6 +47,15 @@ export interface AnalysisFrame {
   // frame's, measured against the first frame itself so that errors don't add
   // up over the clip.
   r?: number[];
+  // Whether `r` was measured against the first frame this frame (rather than
+  // carried over from the frame-to-frame steps).
+  rok?: boolean;
+  // Per tile of the frame (row by row from the top left), the shift [dx, dy]
+  // that maps it onto the previous frame (ts) and onto the first frame (tr),
+  // or null where the tile couldn't be measured (no texture, or moved out of
+  // the frame).
+  ts?: ( number[] | null )[];
+  tr?: ( number[] | null )[];
 }
 
 export interface VideoAnalysis {
@@ -189,9 +198,143 @@ export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
 export const hasReferencePath = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
   && analysis.frames.every( frame => frame.r?.length === 9 );
 
+// The robust fit's settings. Tukey widths are in pixels of a frame 960 px on
+// its long side (the size the shifts are measured at) and scale with the
+// source. The fit starts wide, so a path far from the readings can still find
+// them, and narrows pass by pass until only tiles that agree with the camera
+// path to within a few pixels count.
+const FIT_READING_WEIGHT = 0.1;
+const FIT_START_WIDTH = 48;
+const FIT_END_WIDTH = 3;
+const FIT_PASSES = 8;
+const FIT_REFERENCE_SIZE = 960;
+
+const tukey = ( residual: number, width: number ) => (
+  residual < width
+    ? ( 1 - ( residual / width ) ** 2 ) ** 2
+    : 0
+);
+
+const median = ( values: number[] ) => {
+  const sorted = [...values].sort( ( p, q ) => p - q );
+  const mid = Math.floor( sorted.length / 2 );
+  return sorted.length % 2
+    ? sorted[mid]
+    : ( sorted[mid - 1] + sorted[mid] ) / 2;
+};
+
+const tileShifts = ( tiles: ( number[] | null )[] | undefined ): Point[] => ( tiles || [] )
+  .filter( ( v ): v is number[] => !!v && v.length === 2
+    && Number.isFinite( v[0] ) && Number.isFinite( v[1] ) )
+  .map( v => ( { x: v[0], y: v[1] } ) );
+
+// Whether the analysis measured tiles of every frame against the first frame.
+export const hasTiles = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
+  && analysis.frames.every( frame => Array.isArray( frame.tr ) );
+
+// The camera path, as the shift from each frame onto the first, fitted to
+// every tile's measurements at once: each tile's step says how far the
+// path moved since the previous frame, and each tile's reading against the
+// first frame says where it is, with the readings weighted less so the steps
+// carry the frame-to-frame detail and the readings stop the drift. Iteratively
+// reweighted least squares with Tukey weights drops the tiles that disagree
+// with the path: on the subject, at another depth, or simply mismeasured.
+export const fittedTilePath = ( analysis: VideoAnalysis ): Point[] => {
+  const { frames } = analysis;
+  const n = frames.length;
+  if ( n === 0 ) return [];
+  const scale = Math.max( analysis.width, analysis.height ) / FIT_REFERENCE_SIZE;
+  const center = { x: analysis.width / 2, y: analysis.height / 2 };
+  const steps = frames.map( ( frame, i ) => {
+    if ( i === 0 ) return [];
+    const tiles = tileShifts( frame.ts );
+    if ( tiles.length > 0 ) return tiles;
+    // No tile could be measured: fall back to the frame's own step.
+    if ( usableStep( frame, i ) ) {
+      const s = shiftOf( frame.m as number[], center );
+      return [{ x: s.e, y: s.f }];
+    }
+    return [];
+  } );
+  const readings = frames.map( frame => tileShifts( frame.tr ) );
+
+  // Start from the median steps, chained.
+  let path: Point[] = [];
+  steps.forEach( ( tiles, i ) => {
+    const prev = i === 0
+      ? { x: 0, y: 0 }
+      : path[i - 1];
+    path.push( tiles.length > 0
+      ? { x: prev.x + median( tiles.map( p => p.x ) ), y: prev.y + median( tiles.map( p => p.y ) ) }
+      : prev );
+  } );
+
+  for ( let pass = 0; pass < FIT_PASSES; pass += 1 ) {
+    const width = Math.max( FIT_END_WIDTH, FIT_START_WIDTH / 2 ** pass ) * scale;
+    const current = path;
+    // Normal equations of a chain: tridiagonal, solved in O(n).
+    const diag = new Array( n ).fill( 1e-9 );
+    const off = new Array( n ).fill( 0 ); // off[i] couples i − 1 and i
+    const rhsX = new Array( n ).fill( 0 );
+    const rhsY = new Array( n ).fill( 0 );
+    for ( let i = 0; i < n; i += 1 ) {
+      readings[i].forEach( p => {
+        const w = FIT_READING_WEIGHT
+          * tukey( Math.hypot( p.x - current[i].x, p.y - current[i].y ), width );
+        diag[i] += w;
+        rhsX[i] += w * p.x;
+        rhsY[i] += w * p.y;
+      } );
+      if ( i > 0 ) {
+        const moved = { x: current[i].x - current[i - 1].x, y: current[i].y - current[i - 1].y };
+        steps[i].forEach( p => {
+          const w = tukey( Math.hypot( p.x - moved.x, p.y - moved.y ), width );
+          diag[i] += w;
+          diag[i - 1] += w;
+          off[i] -= w;
+          rhsX[i] += w * p.x;
+          rhsY[i] += w * p.y;
+          rhsX[i - 1] -= w * p.x;
+          rhsY[i - 1] -= w * p.y;
+        } );
+      }
+    }
+    // The first frame is the reference.
+    diag[0] += 1e6;
+    // Thomas algorithm.
+    const c: number[] = new Array( n ).fill( 0 );
+    const dx: number[] = new Array( n ).fill( 0 );
+    const dy: number[] = new Array( n ).fill( 0 );
+    let b = diag[0];
+    c[0] = n > 1
+      ? off[1] / b
+      : 0;
+    dx[0] = rhsX[0] / b;
+    dy[0] = rhsY[0] / b;
+    for ( let i = 1; i < n; i += 1 ) {
+      b = diag[i] - off[i] * c[i - 1];
+      c[i] = i + 1 < n
+        ? off[i + 1] / b
+        : 0;
+      dx[i] = ( rhsX[i] - off[i] * dx[i - 1] ) / b;
+      dy[i] = ( rhsY[i] - off[i] * dy[i - 1] ) / b;
+    }
+    const next: Point[] = new Array( n );
+    next[n - 1] = { x: dx[n - 1], y: dy[n - 1] };
+    for ( let i = n - 2; i >= 0; i -= 1 ) {
+      next[i] = { x: dx[i] - c[i] * next[i + 1].x, y: dy[i] - c[i] * next[i + 1].y };
+    }
+    path = next;
+  }
+  return path;
+};
+
 // L for every frame: the shift from the frame onto the first frame.
 export const lockPath = ( analysis: VideoAnalysis ): Affine[] => {
   const center = { x: analysis.width / 2, y: analysis.height / 2 };
+  if ( hasTiles( analysis ) ) {
+    return fittedTilePath( analysis ).map( p => translation( p.x, p.y ) );
+  }
   if ( hasReferencePath( analysis ) ) {
     return analysis.frames.map( frame => shiftOf( frame.r as number[], center ) );
   }
