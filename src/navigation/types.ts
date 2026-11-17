@@ -27,6 +27,9 @@ export interface ExploreV2EntryParams {
   activeTab?: ExploreV2Tab;
   filters?: Partial<ExploreV2Filters>;
   sortBy?: OBSERVATIONS_SORT;
+  // Opened from a link on the Hotspots view, so it opens on the view and sort
+  // last chosen from a hotspot link
+  fromHotspot?: boolean;
 }
 
 // Params sent to ExploreV1, read in components/Explore/hooks/useParams.js

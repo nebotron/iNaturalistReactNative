@@ -1,4 +1,8 @@
+import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import type { ExploreV2Tab } from "providers/ExploreV2Context";
 import type { GearKind, GearNicknames } from "sharedHelpers/gearNicknames";
+import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
+import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
 import type { StateCreator } from "zustand";
 
 export enum OBS_DETAILS_TAB {
@@ -60,6 +64,15 @@ export interface ExploreGridOverlays {
   shutterSpeed?: boolean;
   iso?: boolean;
   focusDistance?: boolean;
+}
+
+// View and sort for Explore opened from a link on the Hotspots view, kept so
+// every hotspot link opens the same way. Sorts are null until changed there,
+// falling back to the Explore search's.
+export interface HotspotLinkView {
+  activeTab: ExploreV2Tab;
+  sortBy: OBSERVATIONS_SORT | null;
+  speciesSortBy: SPECIES_SORT | null;
 }
 
 interface AICameraSettings {
@@ -125,6 +138,8 @@ export interface LayoutSlice {
     ) => void;
     exploreGridOverlays: ExploreGridOverlays;
     setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    hotspotLinkView: HotspotLinkView;
+    setHotspotLinkView: ( view: Partial<HotspotLinkView> ) => void;
     myObsGridOverlays: ExploreGridOverlays;
     setMyObsGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
     aiCameraSettings: AICameraSettings;
@@ -361,6 +376,17 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         exploreGridOverlays: { ...state.layout.exploreGridOverlays, [key]: value },
+      },
+    } ) ),
+    hotspotLinkView: {
+      activeTab: OBSERVATIONS_TAB,
+      sortBy: null,
+      speciesSortBy: null,
+    },
+    setHotspotLinkView: view => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotLinkView: { ...state.layout.hotspotLinkView, ...view },
       },
     } ) ),
     // Info overlaid on each photo in the Me tab observations grid

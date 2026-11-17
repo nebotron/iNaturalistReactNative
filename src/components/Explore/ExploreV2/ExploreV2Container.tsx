@@ -1,4 +1,5 @@
 import { useRoute } from "@react-navigation/native";
+import { HOTSPOTS_TAB } from "appConstants/tabs";
 import ExploreStackNavigator
   from "navigation/StackNavigators/ExploreStackNavigator";
 import type { TabStackScreenProps } from "navigation/types";
@@ -9,7 +10,7 @@ import {
   useExploreV2,
   withoutUnobservedFilter,
 } from "providers/ExploreV2Context";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import useStore from "stores/useStore";
 
 // Remembers the Explore tab's search and view so they survive a tab switch or relaunch
@@ -29,9 +30,38 @@ const LastSearchPersister = ( ) => {
   return null;
 };
 
+// Remembers the view and sort chosen in an Explore opened from a hotspot link,
+// so the next hotspot link opens the same way
+const HotspotLinkViewPersister = ( ) => {
+  const { state } = useExploreV2( );
+  const setHotspotLinkView = useStore( s => s.layout.setHotspotLinkView );
+  const { activeTab, sortBy, speciesSortBy } = state;
+  const previousRef = useRef( { activeTab, sortBy, speciesSortBy } );
+
+  useEffect( ( ) => {
+    const previous = previousRef.current;
+    previousRef.current = { activeTab, sortBy, speciesSortBy };
+    // Save only what was changed here, so an unchanged sort keeps following
+    // the Explore search's. The Hotspots view isn't kept, since a hotspot
+    // link opening on the Hotspots view would hide what was linked to.
+    if ( activeTab !== previous.activeTab && activeTab !== HOTSPOTS_TAB ) {
+      setHotspotLinkView( { activeTab } );
+    }
+    if ( sortBy !== previous.sortBy ) {
+      setHotspotLinkView( { sortBy } );
+    }
+    if ( speciesSortBy !== previous.speciesSortBy ) {
+      setHotspotLinkView( { speciesSortBy } );
+    }
+  }, [setHotspotLinkView, activeTab, sortBy, speciesSortBy] );
+
+  return null;
+};
+
 const ExploreV2Container = ( ) => {
   const { name, params } = useRoute<TabStackScreenProps<"Explore" | "RootExplore">["route"]>( );
   const isRootExplore = name === "RootExplore";
+  const fromHotspot = !isRootExplore && !!params?.fromHotspot;
   const restoreLastSearch = isRootExplore && !params?.subject && !params?.location;
   const [initialState] = React.useState( ( ) => {
     const storedSearch = useStore.getState( ).lastExploreSearch;
@@ -44,12 +74,21 @@ const ExploreV2Container = ( ) => {
         activeTab: params?.activeTab || lastSearch.activeTab || initialExploreV2State.activeTab,
       };
     }
-    return initialStateFromEntryParams( params );
+    const entryState = initialStateFromEntryParams( params );
+    if ( !fromHotspot ) return entryState;
+    const { hotspotLinkView } = useStore.getState( ).layout;
+    return {
+      ...entryState,
+      activeTab: hotspotLinkView.activeTab,
+      sortBy: hotspotLinkView.sortBy || entryState.sortBy,
+      speciesSortBy: hotspotLinkView.speciesSortBy || entryState.speciesSortBy,
+    };
   } );
 
   return (
     <ExploreV2Provider initialState={initialState}>
       {isRootExplore && <LastSearchPersister />}
+      {fromHotspot && <HotspotLinkViewPersister />}
       <ExploreStackNavigator showBackButton={!isRootExplore} />
     </ExploreV2Provider>
   );

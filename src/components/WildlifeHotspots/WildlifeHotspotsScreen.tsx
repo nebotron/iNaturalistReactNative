@@ -742,7 +742,6 @@ const WildlifeHotspotsScreen = ( {
     useStore.setState( state => ( {
       layout: { ...state.layout, lastExploreMapRegion: null },
     } ) );
-    zustandStorage.setItem( "exploreV2ObservationsLayout", "map" );
     const taxon = species && {
       id: species.id,
       name: species.name,
@@ -784,6 +783,10 @@ const WildlifeHotspotsScreen = ( {
         },
       },
       activeTab: OBSERVATIONS_TAB,
+      // Explore opens on the view and sort last chosen from a hotspot link,
+      // overriding activeTab and sortBy here. Its layout and grid overlays
+      // are Explore's own, so they carry over as left.
+      fromHotspot: true,
       ...( taxon && { taxon } ),
       lat: hotspot.area.lat,
       lng: hotspot.area.lng,
