@@ -24,7 +24,7 @@ jobs:
         run: |
           clang -fobjc-arc -O2 -Wno-unused-function \
             -framework Foundation -framework AVFoundation -framework CoreImage \
-            -framework CoreMedia -framework CoreVideo -framework Vision \
+            -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework Vision \
             stabilization-eval/analyze.m -o analyze
       - name: Analyze
         run: |
