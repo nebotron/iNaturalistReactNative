@@ -63,12 +63,32 @@ import planHotspotRoute from "./planHotspotRoute";
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
 const CURRENT_LOCATION_PLACE_ID = -1;
+// Used only when there's no route to frame
 const INITIAL_REGION: Region = {
   latitude: 25,
   longitude: -40,
   latitudeDelta: 80,
   longitudeDelta: 100,
 };
+// Smallest span to frame, so a single point isn't zoomed in all the way
+const MIN_REGION_DELTA = 0.05;
+
+// A region with margin around the given points, or null if there are none
+function regionAround( points: LatLng[] ): Region | null {
+  if ( points.length === 0 ) return null;
+  const lats = points.map( p => p.latitude );
+  const lngs = points.map( p => p.longitude );
+  const minLat = Math.min( ...lats );
+  const maxLat = Math.max( ...lats );
+  const minLng = Math.min( ...lngs );
+  const maxLng = Math.max( ...lngs );
+  return {
+    latitude: ( minLat + maxLat ) / 2,
+    longitude: ( minLng + maxLng ) / 2,
+    latitudeDelta: Math.min( Math.max( ( maxLat - minLat ) * 1.4, MIN_REGION_DELTA ), 89 ),
+    longitudeDelta: Math.min( Math.max( ( maxLng - minLng ) * 1.4, MIN_REGION_DELTA ), 179 ),
+  };
+}
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
@@ -271,6 +291,9 @@ const WildlifeHotspotsScreen = ( {
     ? 0
     : insets.bottom;
   const mapRef = useRef<MapView>( null );
+  // fitToCoordinates is dropped if called before the map is ready, which
+  // would leave it on the initial region
+  const [mapReady, setMapReady] = useState( false );
   const carouselRef = useRef<ICarouselInstance>( null );
   // Index the carousel was scrolled to programmatically (by tapping a map
   // marker), so the resulting snap doesn't redo the selection work.
@@ -329,6 +352,13 @@ const WildlifeHotspotsScreen = ( {
     .filter( s => s.text && s.text !== t( "Current-location" ) )
     .map( s => s.id ) ) );
   const editedStopIdsRef = useRef( initialEditedStopIds );
+  // Open on the saved route's stops, which bound where its hotspots will be,
+  // until the hotspots load and the map fits to them
+  const [initialRegion] = useState( () => regionAround(
+    stops.flatMap( s => ( s.point
+      ? [{ latitude: s.point.latitude, longitude: s.point.longitude }]
+      : [] ) ),
+  ) || INITIAL_REGION );
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
@@ -385,7 +415,7 @@ const WildlifeHotspotsScreen = ( {
   // Once hotspots are chosen it covers them as well as the route.
   const fittedWaypointsKeyRef = useRef<string | null>( null );
   useEffect( () => {
-    if ( routeCoords.length === 0 || !mapRef.current ) return;
+    if ( !mapReady || routeCoords.length === 0 || !mapRef.current ) return;
     const waypointsKey = JSON.stringify( [confirmedStopPoints, hotspots.map( h => h.id )] );
     if ( fittedWaypointsKeyRef.current === waypointsKey ) return;
     fittedWaypointsKeyRef.current = waypointsKey;
@@ -399,7 +429,7 @@ const WildlifeHotspotsScreen = ( {
       animated: true,
     } );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeCoords, hotspots] );
+  }, [mapReady, routeCoords, hotspots] );
 
   const handleStopTextChange = useCallback( ( id: string, text: string ) => {
     editedStopIdsRef.current.add( id );
@@ -1002,7 +1032,8 @@ const WildlifeHotspotsScreen = ( {
       <View className="flex-1">
         <Map
           ref={mapRef}
-          initialRegion={INITIAL_REGION}
+          initialRegion={initialRegion}
+          onMapReady={() => setMapReady( true )}
           // Called on any map press; used here only to dismiss the popover
           openMapScreen={() => setTimeLimitPopoverOpen( false )}
           showCurrentLocationButton
