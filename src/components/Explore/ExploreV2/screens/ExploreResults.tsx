@@ -1,5 +1,6 @@
 import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
+import { isEbirdEnabled } from "api/ebird";
 import type { ApiTotalBounds } from "api/types";
 import {
   CAMERA_STATS_TAB,
@@ -13,6 +14,7 @@ import {
   SPECIES_TAB,
 } from "appConstants/tabs";
 import CameraStatsView from "components/Explore/CameraStatsView";
+import EbirdNotice from "components/Explore/EbirdNotice";
 import ExcludedSpeciesError
   from "components/Explore/ExploreV2/components/ExcludedSpeciesError";
 import ExploreV2Header
@@ -35,8 +37,11 @@ import ExploreV2UsersView
   from "components/Explore/ExploreV2/screens/ExploreV2UsersView";
 import useInfiniteExploreScroll
   from "components/Explore/hooks/useInfiniteExploreScroll";
+import useObservationsWithEbird
+  from "components/Explore/hooks/useObservationsWithEbird";
 import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
+import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import {
   OfflineMapView,
@@ -208,11 +213,6 @@ const ExploreResults = ( ) => {
     isNearby, hasPermissions, hasBlockedPermissions, nearbyCoords, appliedSearchCount, dispatch,
   ] ) );
 
-  const handleCurrentLocationPress = useCallback(
-    ( ) => dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY } ),
-    [dispatch],
-  );
-
   const handleRedoSearchPress = useCallback(
     ( bounds: ApiTotalBounds ) => dispatch( {
       type: EXPLORE_V2_ACTION.SET_LOCATION_MAP_AREA,
@@ -235,6 +235,7 @@ const ExploreResults = ( ) => {
   const excludedSpeciesIds = excludedSpecies.ids;
   const excludedSpeciesReady = !excludedSpecies.active || !!excludedSpeciesIds;
   const canFetch = !needsPermission && nearbyResolved && excludedSpeciesReady;
+  const ebirdOnly = useStore( s => s.layout.observationSource === "ebird" );
 
   const queryParams = useMemo(
     ( ) => buildExploreV2QueryParams(
@@ -269,6 +270,7 @@ const ExploreResults = ( ) => {
     error: observationsError,
     fetchNextPage,
     fetchStatus: observationsFetchStatus,
+    hasNextPage,
     isFetchingNextPage,
     isLoading,
     handlePullToRefresh,
@@ -279,16 +281,35 @@ const ExploreResults = ( ) => {
   } = useInfiniteExploreScroll( {
     params: queryParams,
     // Only the observations view uses this search
-    enabled: canFetch && state.activeTab === OBSERVATIONS_TAB,
+    enabled: canFetch && state.activeTab === OBSERVATIONS_TAB && !ebirdOnly,
   } );
+  const { ebird, observations: observationsWithEbird } = useObservationsWithEbird(
+    observations,
+    queryParams,
+    {
+      enabled: canFetch && state.activeTab === OBSERVATIONS_TAB,
+      complete: !isLoading && !hasNextPage,
+    },
+  );
+  const resultsLoading = ebirdOnly
+    ? !!ebird?.isLoading
+    : isLoading;
+  let observationsCount = totalResults;
+  if ( ebirdOnly ) {
+    observationsCount = ebird && !ebird.isLoading
+      ? observationsWithEbird.length
+      : null;
+  } else if ( typeof totalResults === "number" && ebird && !ebird.isLoading ) {
+    observationsCount = totalResults + ebird.observations.length;
+  }
 
   // Only the user's own local photos have a subject distance, so loaded results are
   // sorted on device and everyone else's come last
   const bySubjectDistance = state.sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;
   const subjectDistances = useSubjectDistances( bySubjectDistance );
   const sortedObservations = useMemo( ( ) => ( bySubjectDistance
-    ? sortBySubjectDistance( observations, subjectDistances )
-    : observations ), [bySubjectDistance, observations, subjectDistances] );
+    ? sortBySubjectDistance( observationsWithEbird, subjectDistances )
+    : observationsWithEbird ), [bySubjectDistance, observationsWithEbird, subjectDistances] );
 
   // Diagnostics: observations sometimes show nothing after switching from
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
@@ -309,6 +330,10 @@ const ExploreResults = ( ) => {
     error: observationsError
       ? `${errorStatus ?? ""} ${( observationsError as Error ).message ?? observationsError}`
       : null,
+    ebirdOnly,
+    ebirdLimits: ebird?.limits,
+    ebirdError: !!ebird?.error,
+    // Includes eBird sightings, so eBird-only searches aren't counted as empty
     observationCount: sortedObservations.length,
     totalResults,
     hasTotalBounds: !!totalBounds,
@@ -333,7 +358,11 @@ const ExploreResults = ( ) => {
       logger.info( "explore_tab_switch", JSON.stringify( { fromTab, ...diagnosticsRef.current } ) );
       timer = setTimeout( ( ) => {
         const latest = diagnosticsRef.current;
-        if ( latest.activeTab === OBSERVATIONS_TAB && latest.observationCount === 0 ) {
+        // eBird-only with filters eBird can't match is empty by design, and says so
+        const explained = latest.ebirdOnly
+          && ( latest.ebirdLimits as string[] | undefined )?.includes( "filters" );
+        if ( latest.activeTab === OBSERVATIONS_TAB && latest.observationCount === 0
+          && !explained ) {
           const details = JSON.stringify( { fromTab, ...latest } );
           logger.error( "explore_empty_after_tab_switch", details );
         }
@@ -486,19 +515,20 @@ const ExploreResults = ( ) => {
   const renderTabContent = ( ) => {
     switch ( state.activeTab ) {
       case OBSERVATIONS_TAB: {
-        const hasNoResults = canFetch && totalResults === 0;
+        const hasNoResults = canFetch && observationsCount === 0
+          && sortedObservations.length === 0;
         return (
           <>
             {showMap
               ? (
                 <ExploreV2MapView
                   appliedSearchCount={state.appliedSearchCount}
-                  isLoading={isLoading}
+                  isLoading={resultsLoading}
                   mapAreaBounds={state.location.placeMode === EXPLORE_V2_PLACE_MODE.MAP_AREA
                     ? state.location.bounds
                     : undefined}
                   nearbyCoords={nearbyCoords}
-                  onCurrentLocationPress={handleCurrentLocationPress}
+                  notice={<EbirdNotice ebird={ebird} />}
                   onRedoSearchPress={handleRedoSearchPress}
                   placeMode={state.location.placeMode}
                   queryParams={queryParams}
@@ -518,6 +548,7 @@ const ExploreResults = ( ) => {
                   layout={layout === "list"
                     ? "list"
                     : "grid"}
+                  listHeaderContent={<EbirdNotice ebird={ebird} />}
                   // bit over a misnomer on this prop; in this case it hides the
                   // ID/comments/quality badges that grid results can technically have
                   hideObsUploadStatus={layout !== "list"}
@@ -693,8 +724,8 @@ const ExploreResults = ( ) => {
       return renderPermissionPrompt( );
     }
     const totalCount = {
-      [OBSERVATIONS_TAB]: typeof totalResults === "number"
-        && t( "X-Observations", { count: totalResults } ),
+      [OBSERVATIONS_TAB]: typeof observationsCount === "number"
+        && t( "X-Observations", { count: observationsCount } ),
       [SPECIES_TAB]: typeof speciesCount === "number"
         && t( "X-Species", { count: speciesCount } ),
       [LIFELIST_TAB]: typeof lifeListCount === "number"
@@ -704,9 +735,12 @@ const ExploreResults = ( ) => {
     }[state.activeTab as string];
     return (
       <>
-        {totalCount && (
-          <View className="px-5 pb-2">
-            <Body2 testID="ExploreResults.totalCount">{totalCount}</Body2>
+        {( totalCount || ( state.activeTab === OBSERVATIONS_TAB && isEbirdEnabled( ) ) ) && (
+          <View className="flex-row items-center justify-between gap-2 px-5 pb-2">
+            {totalCount
+              ? <Body2 testID="ExploreResults.totalCount">{totalCount}</Body2>
+              : <View />}
+            {state.activeTab === OBSERVATIONS_TAB && <ObservationSourceToggle />}
           </View>
         )}
         {renderTabContent( )}

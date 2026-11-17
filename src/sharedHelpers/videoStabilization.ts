@@ -1,10 +1,9 @@
 // The math behind the video stabilizer (components/VideoStabilizer). The native
 // module (ios/.../VideoStabilizer.m) only measures and renders: one pass reads
 // the video and reports, per frame, how the picture moved since the last frame
-// plus either where the frame sits on the start frame (background mode) or
-// where the subject is (subject mode), and a second pass warps every frame by
+// plus where the frame sits on the start frame, and a second pass warps every frame by
 // the transform this file computes for it. Keeping that math here means
-// changing the crop, zoom or rolling shutter never re-reads the video, and the
+// changing the crop or zoom never re-reads the video, and the
 // math can be unit tested.
 //
 // Coordinates: pixels of the upright (display-oriented) source frame, origin
@@ -13,13 +12,9 @@
 // for column vectors (x, y, 1).
 //
 // The model, for frame i:
-//   L_i  the lock: the shift that maps frame i onto the first frame. In
-//        background mode it lines the background up with the first frame's (a
-//        tripod); in subject mode it puts the subject where it was in the first
-//        frame (a camera that follows it exactly).
-//   R_i  the rolling-shutter correction: undoes the lean and squash a moving
-//        camera puts into a frame whose rows were read one after another.
-// A pixel x of frame i is drawn at  L_i · R_i · x − center  in stable space,
+//   L_i  the lock: the shift that maps frame i onto the first frame, lining
+//        the background up with the first frame's (a tripod).
+// A pixel x of frame i is drawn at  L_i · x − center  in stable space,
 // and the crop window (center k, zoom z) maps that to the output. Only shifts
 // are measured and corrected: rotation and zoom are left as they were shot.
 
@@ -48,29 +43,26 @@ export interface AnalysisFrame {
   // Homography mapping this frame's pixels onto the previous frame's
   // (identity for the first frame).
   m?: number[];
-  // Background mode: transform mapping this frame's pixels onto the first
+  // Transform mapping this frame's pixels onto the first
   // frame's, measured against the first frame itself so that errors don't add
   // up over the clip.
   r?: number[];
-  // Analyses for rolling-shutter correction: like `m`, but for the top and
-  // bottom strips of the frame registered on their own.
-  mt?: number[];
-  mb?: number[];
-  // Subject mode: where the tracked subject's center is in this frame, as
-  // [x, y], or null where the tracker lost it.
-  s?: number[] | null;
+  // Whether `r` was measured against the first frame this frame (rather than
+  // carried over from the frame-to-frame steps).
+  rok?: boolean;
+  // Per tile of the frame (row by row from the top left), the shift [dx, dy]
+  // that maps it onto the previous frame (ts) and onto the first frame (tr),
+  // or null where the tile couldn't be measured (no texture, or moved out of
+  // the frame).
+  ts?: ( number[] | null )[];
+  tr?: ( number[] | null )[];
 }
-
-export type StabilizationMode = "background" | "subject";
 
 export interface VideoAnalysis {
   width: number;
   height: number;
   fps: number;
   frames: AnalysisFrame[];
-  // Where the middles of the strips behind `mt` and `mb` sit, in frame heights
-  // from the frame's middle (top negative).
-  strips?: { top: number; bottom: number };
 }
 
 export const IDENTITY: Affine = {
@@ -206,216 +198,151 @@ export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
 export const hasReferencePath = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
   && analysis.frames.every( frame => frame.r?.length === 9 );
 
-const trackedPoint = ( frame: AnalysisFrame ): Point | null => (
-  frame.s?.length === 2 && Number.isFinite( frame.s[0] ) && Number.isFinite( frame.s[1] )
-    ? { x: frame.s[0], y: frame.s[1] }
-    : null
+// The robust fit's settings. Tukey widths are in pixels of a frame 960 px on
+// its long side (the size the shifts are measured at) and scale with the
+// source. The fit starts wide, so a path far from the readings can still find
+// them, and narrows pass by pass until only tiles that agree with the camera
+// path to within a few pixels count.
+const FIT_READING_WEIGHT = 0.1;
+const FIT_START_WIDTH = 48;
+const FIT_END_WIDTH = 3;
+const FIT_PASSES = 8;
+const FIT_REFERENCE_SIZE = 960;
+
+const tukey = ( residual: number, width: number ) => (
+  residual < width
+    ? ( 1 - ( residual / width ) ** 2 ) ** 2
+    : 0
 );
 
-// Where the subject is in every frame. Frames where the tracker lost it are
-// filled in along a straight line between the frames either side (or held at
-// the nearest one at the ends). Not smoothed: a smooth would also blur the
-// camera's frame-to-frame shake, which is what has to come out. Null when the
-// subject wasn't found in any frame.
-export const subjectPath = ( analysis: VideoAnalysis ): Point[] | null => {
-  const points = analysis.frames.map( trackedPoint );
-  const known = points
-    .map( ( p, i ) => ( p
-      ? i
-      : -1 ) )
-    .filter( i => i >= 0 );
-  if ( known.length === 0 ) return null;
-  return points.map( ( p, i ) => {
-    if ( p ) return p;
-    const after = known.find( k => k > i );
-    const before = [...known].reverse( ).find( k => k < i );
-    if ( before === undefined ) return points[after as number] as Point;
-    if ( after === undefined ) return points[before] as Point;
-    const a = points[before] as Point;
-    const b = points[after] as Point;
-    const w = ( i - before ) / ( after - before );
-    return { x: a.x + ( b.x - a.x ) * w, y: a.y + ( b.y - a.y ) * w };
+const median = ( values: number[] ) => {
+  const sorted = [...values].sort( ( p, q ) => p - q );
+  const mid = Math.floor( sorted.length / 2 );
+  return sorted.length % 2
+    ? sorted[mid]
+    : ( sorted[mid - 1] + sorted[mid] ) / 2;
+};
+
+const tileShifts = ( tiles: ( number[] | null )[] | undefined ): Point[] => ( tiles || [] )
+  .filter( ( v ): v is number[] => !!v && v.length === 2
+    && Number.isFinite( v[0] ) && Number.isFinite( v[1] ) )
+  .map( v => ( { x: v[0], y: v[1] } ) );
+
+// Whether the analysis measured tiles of every frame against the first frame.
+export const hasTiles = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
+  && analysis.frames.every( frame => Array.isArray( frame.tr ) );
+
+// The camera path, as the shift from each frame onto the first, fitted to
+// every tile's measurements at once: each tile's step says how far the
+// path moved since the previous frame, and each tile's reading against the
+// first frame says where it is, with the readings weighted less so the steps
+// carry the frame-to-frame detail and the readings stop the drift. Iteratively
+// reweighted least squares with Tukey weights drops the tiles that disagree
+// with the path: on the subject, at another depth, or simply mismeasured.
+export const fittedTilePath = ( analysis: VideoAnalysis ): Point[] => {
+  const { frames } = analysis;
+  const n = frames.length;
+  if ( n === 0 ) return [];
+  const scale = Math.max( analysis.width, analysis.height ) / FIT_REFERENCE_SIZE;
+  const center = { x: analysis.width / 2, y: analysis.height / 2 };
+  const steps = frames.map( ( frame, i ) => {
+    if ( i === 0 ) return [];
+    const tiles = tileShifts( frame.ts );
+    if ( tiles.length > 0 ) return tiles;
+    // No tile could be measured: fall back to the frame's own step.
+    if ( usableStep( frame, i ) ) {
+      const s = shiftOf( frame.m as number[], center );
+      return [{ x: s.e, y: s.f }];
+    }
+    return [];
   } );
+  const readings = frames.map( frame => tileShifts( frame.tr ) );
+
+  // Start from the median steps, chained.
+  let path: Point[] = [];
+  steps.forEach( ( tiles, i ) => {
+    const prev = i === 0
+      ? { x: 0, y: 0 }
+      : path[i - 1];
+    path.push( tiles.length > 0
+      ? { x: prev.x + median( tiles.map( p => p.x ) ), y: prev.y + median( tiles.map( p => p.y ) ) }
+      : prev );
+  } );
+
+  for ( let pass = 0; pass < FIT_PASSES; pass += 1 ) {
+    const width = Math.max( FIT_END_WIDTH, FIT_START_WIDTH / 2 ** pass ) * scale;
+    const current = path;
+    // Normal equations of a chain: tridiagonal, solved in O(n).
+    const diag = new Array( n ).fill( 1e-9 );
+    const off = new Array( n ).fill( 0 ); // off[i] couples i − 1 and i
+    const rhsX = new Array( n ).fill( 0 );
+    const rhsY = new Array( n ).fill( 0 );
+    for ( let i = 0; i < n; i += 1 ) {
+      readings[i].forEach( p => {
+        const w = FIT_READING_WEIGHT
+          * tukey( Math.hypot( p.x - current[i].x, p.y - current[i].y ), width );
+        diag[i] += w;
+        rhsX[i] += w * p.x;
+        rhsY[i] += w * p.y;
+      } );
+      if ( i > 0 ) {
+        const moved = { x: current[i].x - current[i - 1].x, y: current[i].y - current[i - 1].y };
+        steps[i].forEach( p => {
+          const w = tukey( Math.hypot( p.x - moved.x, p.y - moved.y ), width );
+          diag[i] += w;
+          diag[i - 1] += w;
+          off[i] -= w;
+          rhsX[i] += w * p.x;
+          rhsY[i] += w * p.y;
+          rhsX[i - 1] -= w * p.x;
+          rhsY[i - 1] -= w * p.y;
+        } );
+      }
+    }
+    // The first frame is the reference.
+    diag[0] += 1e6;
+    // Thomas algorithm.
+    const c: number[] = new Array( n ).fill( 0 );
+    const dx: number[] = new Array( n ).fill( 0 );
+    const dy: number[] = new Array( n ).fill( 0 );
+    let b = diag[0];
+    c[0] = n > 1
+      ? off[1] / b
+      : 0;
+    dx[0] = rhsX[0] / b;
+    dy[0] = rhsY[0] / b;
+    for ( let i = 1; i < n; i += 1 ) {
+      b = diag[i] - off[i] * c[i - 1];
+      c[i] = i + 1 < n
+        ? off[i + 1] / b
+        : 0;
+      dx[i] = ( rhsX[i] - off[i] * dx[i - 1] ) / b;
+      dy[i] = ( rhsY[i] - off[i] * dy[i - 1] ) / b;
+    }
+    const next: Point[] = new Array( n );
+    next[n - 1] = { x: dx[n - 1], y: dy[n - 1] };
+    for ( let i = n - 2; i >= 0; i -= 1 ) {
+      next[i] = { x: dx[i] - c[i] * next[i + 1].x, y: dy[i] - c[i] * next[i + 1].y };
+    }
+    path = next;
+  }
+  return path;
 };
 
 // L for every frame: the shift from the frame onto the first frame.
-export const lockPath = ( analysis: VideoAnalysis, mode: StabilizationMode ): Affine[] => {
+export const lockPath = ( analysis: VideoAnalysis ): Affine[] => {
   const center = { x: analysis.width / 2, y: analysis.height / 2 };
-  if ( mode === "subject" ) {
-    const path = subjectPath( analysis );
-    if ( path ) {
-      return path.map( p => translation( path[0].x - p.x, path[0].y - p.y ) );
-    }
+  if ( hasTiles( analysis ) ) {
+    return fittedTilePath( analysis ).map( p => translation( p.x, p.y ) );
   }
-  if ( mode === "background" && hasReferencePath( analysis ) ) {
+  if ( hasReferencePath( analysis ) ) {
     return analysis.frames.map( frame => shiftOf( frame.r as number[], center ) );
   }
   // Without a direct measurement, chain the frame-to-frame steps.
   return measuredPath( analysis );
 };
 
-// How fast the picture moves across the frame at each frame, in pixels per
-// frame, from the registration steps either side of it.
-export const contentVelocity = ( analysis: VideoAnalysis ): Point[] => {
-  const { width, height, frames } = analysis;
-  const center = { x: width / 2, y: height / 2 };
-  // Step i: where the content at the center of frame i came from in frame i−1.
-  const steps = frames.map( ( frame, i ) => {
-    if ( !usableStep( frame, i ) ) return null;
-    const before = applyHomography( frame.m as number[], center );
-    return Number.isFinite( before.x ) && Number.isFinite( before.y )
-      ? { x: center.x - before.x, y: center.y - before.y }
-      : null;
-  } );
-  const raw = frames.map( ( _frame, i ) => {
-    const around = [steps[i], steps[i + 1]].filter( Boolean ) as Point[];
-    if ( around.length === 0 ) return { x: 0, y: 0 };
-    return {
-      x: around.reduce( ( sum, p ) => sum + p.x, 0 ) / around.length,
-      y: around.reduce( ( sum, p ) => sum + p.y, 0 ) / around.length,
-    };
-  } );
-  // Registration is noisy by a pixel or so; a light smooth keeps that from
-  // turning into a wobble of its own.
-  const xs = gaussianSmooth( raw.map( v => v.x ), 1 );
-  const ys = gaussianSmooth( raw.map( v => v.y ), 1 );
-  return raw.map( ( _v, i ) => ( { x: xs[i], y: ys[i] } ) );
-};
-
-// A rolling shutter reads the sensor top to bottom, so a row below the middle
-// is captured later than the middle row, and a moving picture has moved on by
-// then. Sideways motion leans verticals over; up-and-down motion stretches or
-// squashes the frame. `readout` is the time the sensor takes to read the frame
-// top to bottom, as a fraction of the time between frames. The returned
-// affine maps the frame as recorded onto the frame as if every row had been
-// read at the moment the middle row was.
-export const rollingShutterCorrection = (
-  velocity: Point,
-  readout: number,
-  height: number,
-): Affine => {
-  // Frames of delay per pixel down the frame.
-  const k = readout / height;
-  const middle = height / 2;
-  return {
-    a: 1,
-    b: 0,
-    c: -velocity.x * k,
-    d: 1 - velocity.y * k,
-    e: velocity.x * k * middle,
-    f: velocity.y * k * middle,
-  };
-};
-
-export interface ReadoutEstimate {
-  // Readout time as a fraction of the frame interval.
-  readout: number;
-  // Its standard error, likewise.
-  error: number;
-  // Frames that went into it.
-  frames: number;
-}
-
-// The fewest frames, and the largest standard error, an estimate is trusted
-// with. Below that the camera didn't change speed enough to tell.
-const MIN_READOUT_FRAMES = 10;
-const MAX_READOUT_ERROR = 0.1;
-
-// Works out the sensor's readout time from how differently the top and bottom
-// of the picture moved between frames.
-//
-// With the picture at X(t), a strip whose rows are read r·s frames after the
-// middle row (s its offset from the middle in frame heights) moves by
-// X(i + r·s) − X(i − 1 + r·s) between frames i − 1 and i. To first order
-// that's the whole frame's step plus r·s·(V(i) − V(i − 1)), where V(i), the
-// velocity at frame i, is the mean of the steps either side. So
-//
-//   bottom step − top step = r · (s_bottom − s_top) · (step(i+1) − step(i−1)) / 2
-//
-// and r is the least-squares slope over every frame and both axes. Steady
-// motion says nothing about it (the strips then move alike, however long the
-// readout); only speeding up and slowing down does, which handheld shake
-// supplies plenty of. Frames where a moving subject or a bad registration
-// throws a strip off are dropped as outliers. Footage the camera already
-// corrected (iPhone video stabilization does) measures close to zero.
-export const estimateReadout = ( analysis: VideoAnalysis ): ReadoutEstimate | null => {
-  const {
-    width, height, frames, strips,
-  } = analysis;
-  if ( !strips ) return null;
-  const center = { x: width / 2, y: height / 2 };
-  const spread = strips.bottom - strips.top;
-  if ( !( spread > 0 ) ) return null;
-  const stepAt = ( m: number[] | undefined ): Point | null => {
-    if ( m?.length !== 9 ) return null;
-    const before = applyHomography( m, center );
-    return Number.isFinite( before.x ) && Number.isFinite( before.y )
-      ? { x: center.x - before.x, y: center.y - before.y }
-      : null;
-  };
-  const steps = frames.map( ( frame, i ) => ( usableStep( frame, i )
-    ? stepAt( frame.m )
-    : null ) );
-
-  // Pairs of (predictor, measured difference), one per axis per frame.
-  const pairs: [number, number][] = [];
-  frames.forEach( ( frame, i ) => {
-    const before = steps[i - 1];
-    const after = steps[i + 1];
-    const top = stepAt( frame.mt );
-    const bottom = stepAt( frame.mb );
-    if ( !before || !after || !top || !bottom ) return;
-    pairs.push( [spread * ( ( after.x - before.x ) / 2 ), bottom.x - top.x] );
-    pairs.push( [spread * ( ( after.y - before.y ) / 2 ), bottom.y - top.y] );
-  } );
-
-  const fit = ( used: [number, number][] ) => {
-    const sxx = used.reduce( ( sum, [a] ) => sum + a * a, 0 );
-    const sxy = used.reduce( ( sum, [a, d] ) => sum + a * d, 0 );
-    return sxx > 0
-      ? sxy / sxx
-      : 0;
-  };
-  const median = ( values: number[] ) => {
-    const sorted = [...values].sort( ( p, q ) => p - q );
-    const mid = Math.floor( sorted.length / 2 );
-    return sorted.length % 2
-      ? sorted[mid]
-      : ( sorted[mid - 1] + sorted[mid] ) / 2;
-  };
-
-  let used = pairs;
-  let readout = fit( used );
-  // Twice: fit, drop what's far off the line, fit again.
-  for ( let pass = 0; pass < 2 && used.length > 0; pass += 1 ) {
-    const slope = readout;
-    const residuals = pairs.map( ( [a, d] ) => Math.abs( d - slope * a ) );
-    // Three standard deviations, from the median (robust to the outliers
-    // themselves), but never under half a pixel.
-    const limit = Math.max( 3 * 1.4826 * median( residuals ), 0.5 );
-    used = pairs.filter( ( [a, d] ) => Math.abs( d - slope * a ) <= limit );
-    readout = fit( used );
-  }
-
-  const sxx = used.reduce( ( sum, [a] ) => sum + a * a, 0 );
-  if ( used.length < 2 * MIN_READOUT_FRAMES || !( sxx > 0 ) ) return null;
-  const residual = used.reduce( ( sum, [a, d] ) => sum + ( d - readout * a ) ** 2, 0 );
-  const error = Math.sqrt( residual / ( used.length - 1 ) / sxx );
-  if ( !( error <= MAX_READOUT_ERROR ) ) return null;
-  return {
-    // A sensor can't read faster than instantly, nor (in video) slower than
-    // a frame.
-    readout: Math.min( 1, Math.max( 0, readout ) ),
-    error,
-    frames: Math.round( used.length / 2 ),
-  };
-};
-
 export interface StabilizationSettings {
-  // Hold the background, or the subject, where it was in the first frame.
-  mode: StabilizationMode;
-  // Rolling-shutter readout as a fraction of the frame interval; 0 is off.
-  rollingShutter?: number;
   // Requested zoom, ≥ 1.
   zoom: number;
   // Zoom in further, if needed, until no frame shows an empty edge.
@@ -452,18 +379,9 @@ export const planStabilization = (
   const maxZoom = settings.maxZoom ?? DEFAULT_MAX_ZOOM;
 
   // Stable space → source pixels, per frame.
-  let toSource: Homography[] = lockPath( analysis, settings.mode ).map(
+  const toSource: Homography[] = lockPath( analysis ).map(
     lock => multiplyHomographies( homographyFromAffine( invert( lock ) ), fromCentered ),
   );
-  const readout = settings.rollingShutter ?? 0;
-  if ( readout > 0 ) {
-    const velocity = contentVelocity( analysis );
-    toSource = toSource.map( ( m, i ) => multiplyHomographies(
-      homographyFromAffine( invert( rollingShutterCorrection( velocity[i], readout, height ) ) ),
-      m,
-    ) );
-  }
-
   const cropCenter = settings.cropCenter && toSource.length > 0
     ? applyHomography( invertHomography( toSource[0] ), settings.cropCenter )
     : { x: 0, y: 0 };

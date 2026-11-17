@@ -246,6 +246,18 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-usbStagingRetentionDays" ),
     t( "Tunable-usbStagingRetentionDays-description" ),
   ],
+  ebirdMaxDistKm: [
+    t( "Tunable-ebirdMaxDistKm" ),
+    t( "Tunable-ebirdMaxDistKm-description" ),
+  ],
+  ebirdBackDays: [
+    t( "Tunable-ebirdBackDays" ),
+    t( "Tunable-ebirdBackDays-description" ),
+  ],
+  ebirdMaxResults: [
+    t( "Tunable-ebirdMaxResults" ),
+    t( "Tunable-ebirdMaxResults-description" ),
+  ],
   placeSearchMaxSuggestions: [
     t( "Tunable-placeSearchMaxSuggestions" ),
     t( "Tunable-placeSearchMaxSuggestions-description" ),

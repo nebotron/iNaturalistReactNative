@@ -1,6 +1,5 @@
 import type {
   AnalysisFrame,
-  Homography,
   Point,
   VideoAnalysis,
 } from "sharedHelpers/videoStabilization";
@@ -8,13 +7,11 @@ import {
   applyAffine,
   applyHomography,
   compose,
-  estimateReadout,
+  fittedTilePath,
   flattenTransforms,
   invert,
-  invertHomography,
   outputSize,
   planStabilization,
-  subjectPath,
 } from "sharedHelpers/videoStabilization";
 
 const WIDTH = 1000;
@@ -45,7 +42,6 @@ const jitter = ( n: number, amplitude: number ) => Array.from( { length: n }, ( 
 } ) );
 
 const baseSettings = {
-  mode: "background" as const,
   zoom: 1,
   avoidEdges: false,
   outputWidth: WIDTH,
@@ -141,205 +137,94 @@ describe( "background stabilization", ( ) => {
 } );
 
 describe( "holding the background against the first frame", ( ) => {
-  // The chained frame-to-frame steps drift; the shifts measured against the
-  // first frame don't.
-  const n = 30;
+  // The camera's offset in frame i; a world point W appears at W − offset.
+  const n = 40;
   const offset = ( i: number ) => ( { x: 3 * Math.sin( i ) * i, y: 2 * Math.cos( i ) - 2 } );
-  const toFirst = ( i: number ): Homography => [
-    1, 0, offset( i ).x, 0, 1, offset( i ).y, 0, 0, 1,
-  ];
-  const analysis: VideoAnalysis = {
+  const TILES = 16;
+  // Each tile's step onto the previous frame and reading onto the first, as
+  // the native analysis reports them; `tile` can distort any of them.
+  const tiledAnalysis = (
+    tile: ( k: number, i: number, step: Point, reading: Point ) => {
+      step: Point | null;
+      reading: Point | null;
+    } = ( _k, _i, step, reading ) => ( { step, reading } ),
+  ): VideoAnalysis => ( {
     width: WIDTH,
     height: HEIGHT,
     fps: 30,
-    frames: Array.from( { length: n }, ( _v, i ) => ( {
-      t: i / 30,
-      ok: true,
-      m: [1, 0, 0.5, 0, 1, -0.5, 0, 0, 1],
-      r: toFirst( i ),
-    } ) ),
-  };
+    frames: Array.from( { length: n }, ( _v, i ) => {
+      const o = offset( i );
+      const prev = offset( Math.max( 0, i - 1 ) );
+      const measured = Array.from( { length: TILES }, ( _t, k ) => tile(
+        k,
+        i,
+        { x: o.x - prev.x, y: o.y - prev.y },
+        o,
+      ) );
+      return {
+        t: i / 30,
+        ok: true,
+        m: [1, 0, o.x - prev.x, 0, 1, o.y - prev.y, 0, 0, 1],
+        r: [1, 0, o.x, 0, 1, o.y, 0, 0, 1],
+        rok: true,
+        ts: measured.map( ( { step } ) => ( i > 0 && step
+          ? [step.x, step.y]
+          : null ) ),
+        tr: measured.map( ( { reading } ) => ( reading
+          ? [reading.x, reading.y]
+          : null ) ),
+      };
+    } ),
+  } );
+  const worstError = ( analysis: VideoAnalysis ) => Math.max( ...fittedTilePath( analysis ).map(
+    ( p, i ) => Math.hypot( p.x - offset( i ).x, p.y - offset( i ).y ),
+  ) );
 
   it( "pins every background point to the first frame", ( ) => {
-    const plan = planStabilization( analysis, { ...baseSettings, zoom: 1.5 } );
+    const plan = planStabilization( tiledAnalysis( ), { ...baseSettings, zoom: 1.5 } );
     [{ x: 100, y: 80 }, { x: 900, y: 520 }, { x: 500, y: 300 }].forEach( point => {
-      const out = plan.transforms.map( ( m, i ) => applyHomography(
-        m,
-        applyHomography( invertHomography( toFirst( i ) ), point ),
-      ) );
-      expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
-      expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
+      const out = plan.transforms.map( ( m, i ) => applyHomography( m, {
+        x: point.x - offset( i ).x,
+        y: point.y - offset( i ).y,
+      } ) );
+      expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-3 );
+      expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-3 );
     } );
   } );
-} );
 
-describe( "subject stabilization", ( ) => {
-  // The camera shakes while the subject walks steadily right, 10 px a frame.
-  const n = 40;
-  const offsets = jitter( n, 15 );
-  const subjectInWorld = ( i: number ) => ( { x: 300 + 10 * i, y: 250 } );
-  const subjectInFrame = ( i: number ) => ( {
-    x: subjectInWorld( i ).x - offsets[i].x,
-    y: subjectInWorld( i ).y - offsets[i].y,
-  } );
-  const analysis = ( lost: number[] = [] ): VideoAnalysis => {
-    const background = shakyBackground( offsets );
-    return {
-      ...background,
-      frames: background.frames.map( ( frame, i ) => ( {
-        ...frame,
-        s: lost.includes( i )
-          ? null
-          : [subjectInFrame( i ).x, subjectInFrame( i ).y],
-      } ) ),
-    };
-  };
-
-  it( "keeps the subject where it was in the first frame", ( ) => {
-    const plan = planStabilization( analysis( ), { ...baseSettings, mode: "subject" } );
-    const out = plan.transforms.map( ( m, i ) => applyHomography( m, subjectInFrame( i ) ) );
-    expect( spread( out.map( p => p.x ) ) ).toBeLessThan( 1e-6 );
-    expect( spread( out.map( p => p.y ) ) ).toBeLessThan( 1e-6 );
+  it( "ignores tiles that follow a moving subject", ( ) => {
+    // Five tiles sit on an animal walking 4 px a frame across the scene.
+    const walking = tiledAnalysis( ( k, i, step, reading ) => ( k < 5
+      ? {
+        step: { x: step.x + 4, y: step.y },
+        reading: { x: reading.x + 4 * i, y: reading.y },
+      }
+      : { step, reading } ) );
+    expect( worstError( walking ) ).toBeLessThan( 0.01 );
   } );
 
-  it( "lets the background move past the subject", ( ) => {
-    const plan = planStabilization( analysis( ), { ...baseSettings, mode: "subject" } );
-    const world = { x: 500, y: 300 };
-    const out = plan.transforms.map( ( m, i ) => applyHomography( m, {
-      x: world.x - offsets[i].x,
-      y: world.y - offsets[i].y,
+  it( "ignores readings that jump to the wrong match", ( ) => {
+    // Every few frames, half the readings latch onto something 60 px away.
+    const jumpy = tiledAnalysis( ( k, i, step, reading ) => ( i % 4 === 3 && k % 2 === 0
+      ? { step, reading: { x: reading.x + 60, y: reading.y - 20 } }
+      : { step, reading } ) );
+    expect( worstError( jumpy ) ).toBeLessThan( 0.01 );
+  } );
+
+  it( "stops frame-to-frame steps from drifting", ( ) => {
+    // Every step is a little long, which would add up to 12 px by the end.
+    const biased = tiledAnalysis( ( _k, _i, step, reading ) => ( {
+      step: { x: step.x + 0.3, y: step.y },
+      reading,
     } ) );
-    expect( out[0].x - out[n - 1].x ).toBeGreaterThan( 10 * ( n - 2 ) );
+    expect( worstError( biased ) ).toBeLessThan( 1 );
   } );
 
-  it( "fills in frames where the tracker lost the subject", ( ) => {
-    const path = subjectPath( analysis( [0, 10, 11, n - 1] ) ) as Point[];
-    expect( path ).toHaveLength( n );
-    path.forEach( p => {
-      expect( Number.isFinite( p.x ) && Number.isFinite( p.y ) ).toBe( true );
-    } );
-    // On the line from frame 9 to frame 12, and held at the ends.
-    expect( path[10].x ).toBeCloseTo( path[9].x + ( path[12].x - path[9].x ) / 3 );
-    expect( path[0] ).toEqual( path[1] );
-    expect( path[n - 1] ).toEqual( path[n - 2] );
-  } );
-
-  it( "falls back to the background when the subject was never found", ( ) => {
-    const lostEverywhere = analysis( Array.from( { length: n }, ( _v, i ) => i ) );
-    expect( subjectPath( lostEverywhere ) ).toBeNull( );
-    expect( planStabilization( lostEverywhere, { ...baseSettings, mode: "subject" } ).transforms )
-      .toEqual( planStabilization( lostEverywhere, baseSettings ).transforms );
-  } );
-} );
-
-describe( "rolling-shutter correction", ( ) => {
-  // The camera pans steadily right, so the picture moves left 20 px a frame,
-  // and each row is read later than the one above it.
-  const n = 20;
-  const speed = -20;
-  const readout = 0.5;
-  const analysis = shakyBackground(
-    Array.from( { length: n }, ( _v, i ) => ( { x: -speed * i, y: 0 } ) ),
-  );
-  // Where a world point at `world` is recorded in frame i: rows lower down
-  // were read later, so the picture had moved further.
-  const recorded = ( world: Point, i: number ): Point => {
-    const delay = readout * ( ( world.y - HEIGHT / 2 ) / HEIGHT );
-    return { x: world.x + speed * ( i + delay ), y: world.y };
-  };
-
-  it( "straightens verticals leaned over by a pan", ( ) => {
-    const top = { x: 500, y: 50 };
-    const bottom = { x: 500, y: 550 };
-    const lean = ( plan: ReturnType<typeof planStabilization> ) => {
-      const a = applyHomography( plan.transforms[10], recorded( top, 10 ) );
-      const b = applyHomography( plan.transforms[10], recorded( bottom, 10 ) );
-      return Math.abs( a.x - b.x );
-    };
-    const settings = baseSettings;
-    const uncorrected = lean( planStabilization( analysis, settings ) );
-    const corrected = lean( planStabilization( analysis, {
-      ...settings, rollingShutter: readout,
-    } ) );
-    expect( uncorrected ).toBeCloseTo( Math.abs( speed ) * readout * ( 500 / HEIGHT ) );
-    expect( corrected ).toBeLessThan( 0.5 );
-  } );
-} );
-
-describe( "readout estimate", ( ) => {
-  const FPS = 30;
-  const STRIPS = { top: -0.3, bottom: 0.3 };
-  // A handheld camera's wander: where the picture is, in pixels, at time t
-  // in frames.
-  const handheld = ( t: number ): Point => {
-    const s = t / FPS;
-    return {
-      x: 30 * Math.sin( 2 * Math.PI * 0.7 * s ) + 12 * Math.sin( 2 * Math.PI * 2.3 * s + 1 ),
-      y: 18 * Math.sin( 2 * Math.PI * 1.1 * s + 2 ) + 8 * Math.sin( 2 * Math.PI * 3.1 * s ),
-    };
-  };
-  // What the analysis reports for a sensor with the given readout. `noise`
-  // perturbs each strip's measurement by a repeatable pseudo-random amount.
-  const recorded = (
-    picture: ( t: number ) => Point,
-    readout: number,
-    { n = 150, noise = 0, strips = true } = {},
-  ): VideoAnalysis => {
-    const shiftMatrix = ( from: Point, to: Point ) => (
-      [1, 0, -( to.x - from.x ), 0, 1, -( to.y - from.y ), 0, 0, 1]
-    );
-    const jitter = ( k: number ) => noise * Math.sin( k * 12.9898 ) * 2;
-    return {
-      width: WIDTH,
-      height: HEIGHT,
-      fps: FPS,
-      strips: strips
-        ? STRIPS
-        : undefined,
-      frames: Array.from( { length: n }, ( _v, i ): AnalysisFrame => {
-        if ( i === 0 ) return { t: 0, ok: true, m: [1, 0, 0, 0, 1, 0, 0, 0, 1] };
-        const strip = ( s: number, k: number ) => {
-          const m = shiftMatrix( picture( i - 1 + readout * s ), picture( i + readout * s ) );
-          m[2] += jitter( i * 4 + k );
-          m[5] += jitter( i * 4 + k + 1 );
-          return m;
-        };
-        return {
-          t: i / FPS,
-          ok: true,
-          m: shiftMatrix( picture( i - 1 ), picture( i ) ),
-          ...( strips && { mt: strip( STRIPS.top, 0 ), mb: strip( STRIPS.bottom, 2 ) } ),
-        };
-      } ),
-    };
-  };
-
-  it.each( [0.3, 0.6, 0.9] )( "measures a readout of %p of a frame from handheld shake", r => {
-    const estimate = estimateReadout( recorded( handheld, r ) );
-    expect( estimate?.readout ).toBeCloseTo( r, 1 );
-  } );
-
-  it( "measures through noisy registrations and an outlier", ( ) => {
-    const analysis = recorded( handheld, 0.5, { noise: 0.3 } );
-    // A bird flies through the bottom strip.
-    ( analysis.frames[40].mb as number[] )[2] += 40;
-    const estimate = estimateReadout( analysis );
-    expect( estimate?.readout ).toBeCloseTo( 0.5, 1 );
-    expect( estimate?.error ).toBeLessThan( 0.1 );
-  } );
-
-  it( "measures nothing for footage already corrected", ( ) => {
-    expect( estimateReadout( recorded( handheld, 0 ) )?.readout ).toBeLessThan( 0.02 );
-  } );
-
-  it( "can't tell from a steady pan or a still camera", ( ) => {
-    expect( estimateReadout( recorded( t => ( { x: -20 * t, y: 0 } ), 0.5 ) ) ).toBeNull( );
-    expect( estimateReadout( recorded( ( ) => ( { x: 0, y: 0 } ), 0.5, { noise: 0.3 } ) ) )
-      .toBeNull( );
-  } );
-
-  it( "needs the strip measurements", ( ) => {
-    expect( estimateReadout( recorded( handheld, 0.5, { strips: false } ) ) ).toBeNull( );
+  it( "keeps going through frames with no tile measured", ( ) => {
+    const gappy = tiledAnalysis( ( _k, i, step, reading ) => ( i >= 10 && i < 14
+      ? { step: null, reading: null }
+      : { step, reading } ) );
+    expect( worstError( gappy ) ).toBeLessThan( 0.01 );
   } );
 } );
 

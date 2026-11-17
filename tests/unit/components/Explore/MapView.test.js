@@ -39,8 +39,6 @@ const mockObservationBounds = {
   nelng: 40,
 };
 
-const mockRequestLocationPermissions = jest.fn( );
-
 const defaultProps = {
   observationBounds: mockObservationBounds,
   queryParams: {
@@ -48,9 +46,7 @@ const defaultProps = {
     return_bounds: true,
   },
   isLoading: false,
-  hasLocationPermissions: true,
   renderLocationPermissionsGate: jest.fn( ),
-  requestLocationPermissions: mockRequestLocationPermissions,
 };
 
 const mockObservations = [
@@ -92,7 +88,7 @@ describe( "MapView", ( ) => {
     expect( redoSearchButton ).toBeFalsy( );
   } );
 
-  it( "should dispatch SET_EXPLORE_LOCATION when current location button is pressed", async ( ) => {
+  it( "should not change the location filter when current location is pressed", async ( ) => {
     renderMapView( );
 
     const currentLocationButton = screen.getByTestId( "Map.CurrentLocationButton" );
@@ -101,32 +97,10 @@ describe( "MapView", ( ) => {
     await Promise.resolve( );
     jest.runAllTimers( );
 
-    expect( mockDefaultExploreLocation ).toHaveBeenCalled( );
-
-    expect( mockDispatch ).toHaveBeenCalledWith( {
-      type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
-      exploreLocation: { lat: 10, lng: 20 },
-    } );
-  } );
-
-  it( "should dispatch requestLocationPermissions when current location button "
-    + " is pressed and user has not given permissions", async ( ) => {
-    renderComponent(
-      <ExploreProvider>
-        <MapView
-          {...defaultProps}
-          hasLocationPermissions={false}
-        />
-      </ExploreProvider>,
+    expect( mockDefaultExploreLocation ).not.toHaveBeenCalled( );
+    expect( mockDispatch ).not.toHaveBeenCalledWith(
+      expect.objectContaining( { type: EXPLORE_ACTION.SET_EXPLORE_LOCATION } ),
     );
-
-    const currentLocationButton = screen.getByTestId( "Map.CurrentLocationButton" );
-    await actor.press( currentLocationButton );
-
-    await Promise.resolve( );
-    jest.runAllTimers( );
-
-    expect( mockRequestLocationPermissions ).toHaveBeenCalled( );
   } );
 
   it( "should show loading indicator when isLoading is true", ( ) => {

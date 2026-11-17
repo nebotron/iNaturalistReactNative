@@ -3,7 +3,9 @@
 import {
   useNetInfo,
 } from "@react-native-community/netinfo";
+import EbirdNotice from "components/Explore/EbirdNotice";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
+import useObservationsWithEbird from "components/Explore/hooks/useObservationsWithEbird";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
@@ -20,9 +22,7 @@ type Props = {
   layout: ?string,
   queryParams: Object,
   handleUpdateCount: Function,
-  hasLocationPermissions?: boolean,
-  renderLocationPermissionsGate: Function,
-  requestLocationPermissions: Function
+  renderLocationPermissionsGate: Function
 }
 
 const OBS_LIST_CONTAINER_STYLE = { paddingTop: 50 };
@@ -34,19 +34,23 @@ const ObservationsView = ( {
   layout,
   queryParams,
   handleUpdateCount,
-  hasLocationPermissions,
   renderLocationPermissionsGate,
-  requestLocationPermissions,
 }: Props ): Node => {
   const {
     fetchNextPage,
+    hasNextPage,
     isFetchingNextPage,
     handlePullToRefresh,
-    observations,
+    observations: inatObservations,
     totalBounds,
     totalResults,
     isLoading,
   } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
+  const { ebird, observations } = useObservationsWithEbird(
+    inatObservations,
+    queryParams,
+    { enabled: !!canFetch, complete: !isLoading && !hasNextPage },
+  );
 
   const {
     isLandscapeMode,
@@ -101,9 +105,10 @@ const ObservationsView = ( {
         isFetchingNextPage={isFetchingNextPage}
         isConnected={isConnected}
         layout={layout}
+        listHeaderContent={<EbirdNotice ebird={ebird} />}
         obsListKey="ExploreObservations"
         onEndReached={fetchNextPage}
-        showNoResults={!canFetch || totalResults === 0}
+        showNoResults={!canFetch || ( totalResults === 0 && observations.length === 0 )}
         hideObsUploadStatus={layout === "grid"}
         testID="ExploreObservationsAnimatedList"
       />
@@ -111,9 +116,7 @@ const ObservationsView = ( {
         observationBounds={totalBounds}
         isLoading={isLoading}
         queryParams={queryParams}
-        hasLocationPermissions={hasLocationPermissions}
         renderLocationPermissionsGate={renderLocationPermissionsGate}
-        requestLocationPermissions={requestLocationPermissions}
       />
     </View>
   );

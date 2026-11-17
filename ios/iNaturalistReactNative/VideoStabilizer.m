@@ -1,3 +1,4 @@
+#import <Accelerate/Accelerate.h>
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
 #import <CoreImage/CoreImage.h>
@@ -10,21 +11,15 @@
 #import <React/RCTViewManager.h>
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
-#import <Vision/Vision.h>
 
 // The measuring and rendering half of the video stabilizer; the camera-path
 // math lives in JS (sharedHelpers/videoStabilization.ts).
 //
 //   pickVideo    copies a video from Photos into the working folder
 //   probe        upright size, duration, frame rate
-//   frameAt      a JPEG of one frame, for choosing the crop
-//   analyze      one pass over the frames, reporting per frame how the
-//                picture moved since the previous frame (Vision image
-//                registration) and either where it sits on the first frame
-//                (background mode) or where the subject is (subject mode,
-//                Vision object tracking); for rolling-shutter correction, also
-//                how the top and bottom of the picture moved, each on its own,
-//                from which JS works out the sensor's readout time
+//   analyze      one pass over the frames, reporting per frame how each of
+//                16 tiles moved since the previous frame and where it sits
+//                on the first frame (phase correlation with Accelerate's FFT)
 //   render       a second pass that warps each frame by the homography JS
 //                computed for it, crops to the output size and writes an
 //                H.264 .mov, passing the audio through untouched and keeping
@@ -38,15 +33,11 @@
 // Both passes read frames through the same AVAssetReaderVideoCompositionOutput
 // (upright, constant frame rate, same time range), so frame i of the analysis
 // is frame i of the render. All coordinates crossing the bridge are pixels of
-// the upright full-size frame with the origin top-left; Core Image and Vision
-// work bottom-left, and the conversions happen here.
+// the upright full-size frame with the origin top-left; Core Image works
+// bottom-left, and the conversions happen here.
 
 static NSString *const kProgressEvent = @"VideoStabilizerProgress";
 static const double kMaxFrameRate = 60;
-// The box tracked in subject mode, as a fraction of the frame's short side.
-static const double kSubjectBoxFraction = 0.25;
-// Tracker confidence below which a frame's subject position isn't reported.
-static const float kSubjectMinConfidence = 0.3;
 
 typedef struct { double m[9]; } Mat3;  // row-major
 
@@ -67,21 +58,6 @@ static Mat3 mat3Mul( Mat3 a, Mat3 b )
   return r;
 }
 
-static Mat3 mat3Inv( Mat3 a )
-{
-  const double *m = a.m;
-  double det = m[0] * ( m[4] * m[8] - m[5] * m[7] )
-    - m[1] * ( m[3] * m[8] - m[5] * m[6] )
-    + m[2] * ( m[3] * m[7] - m[4] * m[6] );
-  if ( fabs( det ) < 1e-12 ) return mat3Identity( );
-  Mat3 r = { {
-    ( m[4] * m[8] - m[5] * m[7] ) / det, ( m[2] * m[7] - m[1] * m[8] ) / det, ( m[1] * m[5] - m[2] * m[4] ) / det,
-    ( m[5] * m[6] - m[3] * m[8] ) / det, ( m[0] * m[8] - m[2] * m[6] ) / det, ( m[2] * m[3] - m[0] * m[5] ) / det,
-    ( m[3] * m[7] - m[4] * m[6] ) / det, ( m[1] * m[6] - m[0] * m[7] ) / det, ( m[0] * m[4] - m[1] * m[3] ) / det,
-  } };
-  return r;
-}
-
 // y ↦ height − y, its own inverse: converts between top-left and bottom-left.
 static Mat3 mat3FlipY( double height )
 {
@@ -89,22 +65,10 @@ static Mat3 mat3FlipY( double height )
   return r;
 }
 
-static Mat3 mat3Scale( double s )
-{
-  Mat3 r = { { s, 0, 0, 0, s, 0, 0, 0, 1 } };
-  return r;
-}
-
 static CGAffineTransform mat3AffinePart( Mat3 h )
 {
   double w = fabs( h.m[8] ) > 1e-9 ? h.m[8] : 1;
   return CGAffineTransformMake( h.m[0] / w, h.m[3] / w, h.m[1] / w, h.m[4] / w, h.m[2] / w, h.m[5] / w );
-}
-
-static Mat3 mat3FromAffine( CGAffineTransform a )
-{
-  Mat3 r = { { a.a, a.c, a.tx, a.b, a.d, a.ty, 0, 0, 1 } };
-  return r;
 }
 
 // Warps `image` by `h`, a homography between bottom-left pixel spaces. Core
@@ -135,13 +99,6 @@ static CIImage *warpImage( CIImage *image, Mat3 h )
   [filter setValue:corners[2] forKey:@"inputBottomRight"];
   [filter setValue:corners[3] forKey:@"inputBottomLeft"];
   return filter.outputImage ?: [image imageByApplyingTransform:mat3AffinePart( h )];
-}
-
-static NSArray<NSNumber *> *mat3Array( Mat3 h )
-{
-  NSMutableArray *a = [NSMutableArray arrayWithCapacity:9];
-  for ( int i = 0; i < 9; i++ ) [a addObject:@( h.m[i] )];
-  return a;
 }
 
 static NSString *stripFileScheme( NSString *path )
@@ -479,48 +436,6 @@ RCT_EXPORT_METHOD( probe
   } );
 }
 
-RCT_EXPORT_METHOD( frameAt
-                  : ( NSString * )path seconds
-                  : ( double )seconds maxDimension
-                  : ( double )maxDimension resolver
-                  : ( RCTPromiseResolveBlock )resolve rejecter
-                  : ( RCTPromiseRejectBlock )reject )
-{
-  dispatch_async( _inspectQueue, ^{
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( path )] options:nil];
-    AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
-    generator.appliesPreferredTrackTransform = YES;
-    generator.maximumSize = CGSizeMake( maxDimension, maxDimension );
-    generator.requestedTimeToleranceBefore = kCMTimeZero;
-    generator.requestedTimeToleranceAfter = kCMTimeZero;
-    NSError *error = nil;
-    CGImageRef image = [generator copyCGImageAtTime:CMTimeMakeWithSeconds( seconds, 600 ) actualTime:NULL error:&error];
-    if ( !image ) {
-      reject( @"FRAME_FAILED", error.localizedDescription ?: @"Could not read the frame", error );
-      return;
-    }
-    NSData *jpeg = UIImageJPEGRepresentation( [UIImage imageWithCGImage:image], 0.85 );
-    size_t width = CGImageGetWidth( image );
-    size_t height = CGImageGetHeight( image );
-    CGImageRelease( image );
-    // A new name every time: React Native caches images by URI.
-    [[NSFileManager defaultManager] createDirectoryAtPath:workingDirectory( )
-                              withIntermediateDirectories:YES attributes:nil error:nil];
-    removeWorkingFiles( @"frame-", nil );
-    NSString *dest = [workingDirectory( ) stringByAppendingPathComponent:
-      [NSString stringWithFormat:@"frame-%@.jpg", [NSUUID UUID].UUIDString]];
-    if ( ![jpeg writeToFile:dest atomically:YES] ) {
-      reject( @"FRAME_FAILED", @"Could not save the frame", nil );
-      return;
-    }
-    resolve( @{
-      @"uri": [@"file://" stringByAppendingString:dest],
-      @"width": @( width ),
-      @"height": @( height ),
-    } );
-  } );
-}
-
 RCT_EXPORT_METHOD( cancel )
 {
   _generation += 1;
@@ -528,32 +443,476 @@ RCT_EXPORT_METHOD( cancel )
 
 // ─── Analysis ────────────────────────────────────────────────────────────────
 
-// Vision's registration transforms are in Core Image's bottom-left pixel
-// space and map the targeted image onto the reference one. That reading was
-// once settled by a vote on every analysis; every device log showed it as is,
-// so it's now taken as given.
+// BEGIN FFT REGISTRATION (stabilization-eval/analyze.m compiles this block
+// as is, so keep it free of the module's other code)
 //
-// Registers `targeted` against `reference`, returning the shift from the
-// targeted image's bottom-left pixels onto the reference's. Only shifts are
-// measured: rotation and zoom are left as they were shot.
-static BOOL registerImages(
-  CVPixelBufferRef targeted,
-  CVPixelBufferRef reference,
-  Mat3 *out
+// Shifts are measured by phase correlation on a 4×4 grid of tiles of a
+// grayscale copy of each frame, 960 px on its long side. Each tile reports
+// its own shift and JS fits the camera path to all of them robustly, so tiles
+// on a moving subject, or on something at another depth, drop out instead of
+// dragging the estimate the way one registration of the whole frame does.
+// Phase correlation gives sub-pixel shifts directly; Vision's registration
+// reports whole pixels.
+
+enum { kTileCols = 4, kTileRows = 4, kTileCount = kTileCols * kTileRows };
+static const double kRegistrationDimension = 960;
+// A tile counts only if this much of it lies inside the moved frame,
+static const double kMinTileCover = 0.95;
+// and its reference shows some texture (Laplacian standard deviation, in
+// 0–255 gray levels): a flat sky or wall has no shift to find.
+static const double kMinTileTexture = 1;
+static const int kMinTiles = 2;
+// Peak height (0–1) a whole-frame fallback must reach to be believed.
+static const float kFallbackResponse = 0.02f;
+// A reading against the first frame further than this share of the frame
+// from the chained estimate is a mismatch, not a correction.
+static const double kMaxReadingJump = 0.2;
+
+typedef struct {
+  float *px;
+  int width;
+  int height;
+} GrayImage;
+
+static GrayImage grayImageCreate( int width, int height )
+{
+  GrayImage g = { calloc( (size_t)width * height, sizeof( float ) ), width, height };
+  return g;
+}
+
+static void grayImageFree( GrayImage *g )
+{
+  free( g->px );
+  g->px = NULL;
+}
+
+// Luma of a BGRA buffer of the image's size.
+static void grayImageFill( GrayImage *g, CVPixelBufferRef bgra )
+{
+  CVPixelBufferLockBaseAddress( bgra, kCVPixelBufferLock_ReadOnly );
+  const uint8_t *base = CVPixelBufferGetBaseAddress( bgra );
+  size_t stride = CVPixelBufferGetBytesPerRow( bgra );
+  for ( int y = 0; y < g->height; y++ ) {
+    const uint8_t *row = base + y * stride;
+    float *out = g->px + (size_t)y * g->width;
+    for ( int x = 0; x < g->width; x++ ) {
+      out[x] = 0.114f * row[4 * x] + 0.587f * row[4 * x + 1] + 0.299f * row[4 * x + 2];
+    }
+  }
+  CVPixelBufferUnlockBaseAddress( bgra, kCVPixelBufferLock_ReadOnly );
+}
+
+// The longest length ≤ n that vDSP's DFT takes: f·2^k, f ∈ {1, 3, 5, 15}, k ≥ 3.
+static int dftLength( int n )
+{
+  int best = 0;
+  int factors[4] = { 1, 3, 5, 15 };
+  for ( int i = 0; i < 4; i++ ) {
+    for ( int length = factors[i] * 8; length <= n; length *= 2 ) {
+      if ( length > best ) best = length;
+    }
+  }
+  return best;
+}
+
+// Phase correlation of two width × height images: buffers and DFT setups,
+// made once per size.
+typedef struct {
+  int width;
+  int height;
+  vDSP_DFT_Setup rowsForward;
+  vDSP_DFT_Setup rowsInverse;
+  vDSP_DFT_Setup columnsForward;
+  vDSP_DFT_Setup columnsInverse;
+  float *window;
+  float *inRe, *inIm, *tmpRe, *tmpIm, *aRe, *aIm, *bRe, *bIm;
+} PhaseCorrelator;
+
+static void phaseCorrelatorFree( PhaseCorrelator *pc )
+{
+  if ( !pc ) return;
+  if ( pc->rowsForward ) vDSP_DFT_DestroySetup( pc->rowsForward );
+  if ( pc->rowsInverse ) vDSP_DFT_DestroySetup( pc->rowsInverse );
+  if ( pc->columnsForward ) vDSP_DFT_DestroySetup( pc->columnsForward );
+  if ( pc->columnsInverse ) vDSP_DFT_DestroySetup( pc->columnsInverse );
+  float *buffers[9] = { pc->window, pc->inRe, pc->inIm, pc->tmpRe, pc->tmpIm, pc->aRe, pc->aIm, pc->bRe, pc->bIm };
+  for ( int i = 0; i < 9; i++ ) free( buffers[i] );
+  free( pc );
+}
+
+static PhaseCorrelator *phaseCorrelatorCreate( int width, int height )
+{
+  if ( width < 8 || height < 8 ) return NULL;
+  PhaseCorrelator *pc = calloc( 1, sizeof( PhaseCorrelator ) );
+  pc->width = width;
+  pc->height = height;
+  pc->rowsForward = vDSP_DFT_zop_CreateSetup( NULL, (vDSP_Length)width, vDSP_DFT_FORWARD );
+  pc->rowsInverse = vDSP_DFT_zop_CreateSetup( pc->rowsForward, (vDSP_Length)width, vDSP_DFT_INVERSE );
+  pc->columnsForward = vDSP_DFT_zop_CreateSetup( NULL, (vDSP_Length)height, vDSP_DFT_FORWARD );
+  pc->columnsInverse = vDSP_DFT_zop_CreateSetup( pc->columnsForward, (vDSP_Length)height, vDSP_DFT_INVERSE );
+  size_t n = (size_t)width * height;
+  float **buffers[9] = {
+    &pc->window, &pc->inRe, &pc->inIm, &pc->tmpRe, &pc->tmpIm, &pc->aRe, &pc->aIm, &pc->bRe, &pc->bIm,
+  };
+  for ( int i = 0; i < 9; i++ ) *buffers[i] = calloc( n, sizeof( float ) );
+  if ( !pc->rowsForward || !pc->rowsInverse || !pc->columnsForward || !pc->columnsInverse ) {
+    phaseCorrelatorFree( pc );
+    return NULL;
+  }
+  // Hann window, the product of one along each axis.
+  for ( int y = 0; y < height; y++ ) {
+    double wy = 0.5 * ( 1 - cos( 2 * M_PI * y / ( height - 1 ) ) );
+    for ( int x = 0; x < width; x++ ) {
+      pc->window[(size_t)y * width + x] = (float)( wy * 0.5 * ( 1 - cos( 2 * M_PI * x / ( width - 1 ) ) ) );
+    }
+  }
+  return pc;
+}
+
+// 2-D DFT of inRe/inIm (height rows of width) into outRe/outIm, which come
+// out transposed (width rows of height); the inverse takes them that way and
+// gives height rows of width back. tmp is scratch.
+static void dft2d( PhaseCorrelator *pc, BOOL inverse, float *inRe, float *inIm, float *outRe, float *outIm )
+{
+  int w = pc->width;
+  int h = pc->height;
+  if ( !inverse ) {
+    for ( int y = 0; y < h; y++ ) {
+      vDSP_DFT_Execute( pc->rowsForward, inRe + y * w, inIm + y * w, pc->tmpRe + y * w, pc->tmpIm + y * w );
+    }
+    for ( int y = 0; y < h; y++ ) {
+      for ( int x = 0; x < w; x++ ) {
+        inRe[x * h + y] = pc->tmpRe[y * w + x];
+        inIm[x * h + y] = pc->tmpIm[y * w + x];
+      }
+    }
+    for ( int x = 0; x < w; x++ ) {
+      vDSP_DFT_Execute( pc->columnsForward, inRe + x * h, inIm + x * h, outRe + x * h, outIm + x * h );
+    }
+  } else {
+    for ( int x = 0; x < w; x++ ) {
+      vDSP_DFT_Execute( pc->columnsInverse, inRe + x * h, inIm + x * h, pc->tmpRe + x * h, pc->tmpIm + x * h );
+    }
+    for ( int x = 0; x < w; x++ ) {
+      for ( int y = 0; y < h; y++ ) {
+        inRe[y * w + x] = pc->tmpRe[x * h + y];
+        inIm[y * w + x] = pc->tmpIm[x * h + y];
+      }
+    }
+    for ( int y = 0; y < h; y++ ) {
+      vDSP_DFT_Execute( pc->rowsInverse, inRe + y * w, inIm + y * w, outRe + y * w, outIm + y * w );
+    }
+  }
+}
+
+// Copies a width × height window of `image` at (x0, y0), zero outside it,
+// times the correlator's window, into inRe (inIm cleared).
+static void loadWindowed( PhaseCorrelator *pc, const GrayImage *image, int x0, int y0 )
+{
+  int w = pc->width;
+  int h = pc->height;
+  for ( int y = 0; y < h; y++ ) {
+    int sy = y0 + y;
+    for ( int x = 0; x < w; x++ ) {
+      int sx = x0 + x;
+      float v = ( sx >= 0 && sy >= 0 && sx < image->width && sy < image->height )
+        ? image->px[(size_t)sy * image->width + sx]
+        : 0;
+      pc->inRe[y * w + x] = v * pc->window[y * w + x];
+      pc->inIm[y * w + x] = 0;
+    }
+  }
+}
+
+// The shift (dx, dy) that maps `targeted`'s window at (tx, ty) onto
+// `reference`'s window at (rx, ry), top-left pixels, with the height of the
+// correlation peak (1 for a perfect match).
+static void phaseCorrelate(
+  PhaseCorrelator *pc,
+  const GrayImage *targeted, int tx, int ty,
+  const GrayImage *reference, int rx, int ry,
+  double *dx, double *dy, float *response
 )
 {
-  VNImageRegistrationRequest *request =
-    [[VNTranslationalImageRegistrationRequest alloc] initWithTargetedCVPixelBuffer:targeted options:@{}];
-  VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCVPixelBuffer:reference options:@{}];
-  NSError *visionError = nil;
-  id observation = [handler performRequests:@[request] error:&visionError]
-    ? request.results.firstObject
-    : nil;
-  if ( [observation isKindOfClass:[VNImageTranslationAlignmentObservation class]] ) {
-    *out = mat3FromAffine( ( (VNImageTranslationAlignmentObservation *)observation ).alignmentTransform );
-    return YES;
+  int w = pc->width;
+  int h = pc->height;
+  size_t n = (size_t)w * h;
+  loadWindowed( pc, reference, rx, ry );
+  dft2d( pc, NO, pc->inRe, pc->inIm, pc->aRe, pc->aIm );
+  loadWindowed( pc, targeted, tx, ty );
+  dft2d( pc, NO, pc->inRe, pc->inIm, pc->bRe, pc->bIm );
+  // Normalized cross-power spectrum, reference times the conjugate of targeted.
+  for ( size_t k = 0; k < n; k++ ) {
+    float re = pc->aRe[k] * pc->bRe[k] + pc->aIm[k] * pc->bIm[k];
+    float im = pc->aIm[k] * pc->bRe[k] - pc->aRe[k] * pc->bIm[k];
+    float mag = sqrtf( re * re + im * im ) + 1e-12f;
+    pc->inRe[k] = re / mag;
+    pc->inIm[k] = im / mag;
   }
-  return NO;
+  dft2d( pc, YES, pc->inRe, pc->inIm, pc->aRe, pc->aIm );
+  // The peak sits at the shift, wrapped; a centroid over 5 × 5 around it
+  // gives the fraction.
+  const float *c = pc->aRe;
+  size_t peak = 0;
+  for ( size_t k = 1; k < n; k++ ) {
+    if ( c[k] > c[peak] ) peak = k;
+  }
+  int px = (int)( peak % w );
+  int py = (int)( peak / w );
+  double sum = 0;
+  double sumX = 0;
+  double sumY = 0;
+  for ( int oy = -2; oy <= 2; oy++ ) {
+    for ( int ox = -2; ox <= 2; ox++ ) {
+      double v = c[( ( py + oy + h ) % h ) * w + ( px + ox + w ) % w];
+      sum += v;
+      sumX += v * ox;
+      sumY += v * oy;
+    }
+  }
+  double x = px + ( sum > 0 ? sumX / sum : 0 );
+  double y = py + ( sum > 0 ? sumY / sum : 0 );
+  if ( x >= w / 2.0 ) x -= w;
+  if ( y >= h / 2.0 ) y -= h;
+  *dx = x;
+  *dy = y;
+  // The inverse DFT isn't scaled, so a perfect match peaks at n.
+  *response = c[peak] / (float)n;
+}
+
+// Standard deviation of the Laplacian over the inside of a region.
+static double textureOf( const GrayImage *g, int x0, int y0, int w, int h )
+{
+  double sum = 0;
+  double sumSq = 0;
+  int count = 0;
+  for ( int y = y0 + 1; y < y0 + h - 1; y++ ) {
+    const float *row = g->px + (size_t)y * g->width;
+    for ( int x = x0 + 1; x < x0 + w - 1; x++ ) {
+      double v = row[x - 1] + row[x + 1] + row[x - g->width] + row[x + g->width] - 4.0 * row[x];
+      sum += v;
+      sumSq += v * v;
+      count += 1;
+    }
+  }
+  if ( count == 0 ) return 0;
+  double mean = sum / count;
+  return sqrt( MAX( 0, sumSq / count - mean * mean ) );
+}
+
+typedef struct {
+  int tileWidth;
+  int tileHeight;
+  PhaseCorrelator *tiles;
+  PhaseCorrelator *whole;
+} Registration;
+
+static Registration registrationCreate( int width, int height )
+{
+  Registration r;
+  r.tileWidth = ( width / kTileCols ) / 4 * 4;
+  r.tileHeight = ( height / kTileRows ) / 4 * 4;
+  r.tiles = phaseCorrelatorCreate( dftLength( r.tileWidth ), dftLength( r.tileHeight ) );
+  r.whole = phaseCorrelatorCreate( dftLength( width ), dftLength( height ) );
+  return r;
+}
+
+static void registrationFree( Registration *r )
+{
+  phaseCorrelatorFree( r->tiles );
+  phaseCorrelatorFree( r->whole );
+  r->tiles = NULL;
+  r->whole = NULL;
+}
+
+// Every tile's shift from `targeted` onto `reference`, with `targeted` moved
+// by the whole-pixel `move` first so that the tiles nearly line up. shifts
+// gets (dx, dy) per tile, row by row from the top left, and found[k] says
+// whether tile k counted. Returns how many did.
+static int tileShifts(
+  const Registration *r,
+  const GrayImage *targeted,
+  const GrayImage *reference,
+  int moveX, int moveY,
+  double shifts[][2],
+  BOOL *found
+)
+{
+  int count = 0;
+  int tw = r->tileWidth;
+  int th = r->tileHeight;
+  for ( int k = 0; k < kTileCount; k++ ) found[k] = NO;
+  if ( !r->tiles ) return 0;
+  // The correlated window is the middle of the tile.
+  int ox = ( tw - r->tiles->width ) / 2;
+  int oy = ( th - r->tiles->height ) / 2;
+  for ( int j = 0; j < kTileRows; j++ ) {
+    for ( int i = 0; i < kTileCols; i++ ) {
+      int x0 = i * tw;
+      int y0 = j * th;
+      if ( textureOf( reference, x0, y0, tw, th ) < kMinTileTexture ) continue;
+      // The part of the moved tile that comes from inside the frame.
+      int sx0 = MAX( 0, x0 - moveX );
+      int sy0 = MAX( 0, y0 - moveY );
+      int sx1 = MIN( targeted->width, x0 - moveX + tw );
+      int sy1 = MIN( targeted->height, y0 - moveY + th );
+      double cover = ( sx1 > sx0 && sy1 > sy0 )
+        ? (double)( sx1 - sx0 ) * ( sy1 - sy0 ) / ( (double)tw * th )
+        : 0;
+      if ( cover < kMinTileCover ) continue;
+      double dx;
+      double dy;
+      float response;
+      phaseCorrelate( r->tiles, targeted, x0 - moveX + ox, y0 - moveY + oy, reference, x0 + ox, y0 + oy,
+        &dx, &dy, &response );
+      int k = j * kTileCols + i;
+      shifts[k][0] = dx + moveX;
+      shifts[k][1] = dy + moveY;
+      found[k] = YES;
+      count += 1;
+    }
+  }
+  return count;
+}
+
+static int compareDoubles( const void *a, const void *b )
+{
+  double x = *(const double *)a;
+  double y = *(const double *)b;
+  return ( x > y ) - ( x < y );
+}
+
+// Per-axis median of the tiles that counted; NO with fewer than kMinTiles.
+static BOOL medianShift( double shifts[][2], const BOOL *found, double *mx, double *my )
+{
+  double xs[kTileCount];
+  double ys[kTileCount];
+  int n = 0;
+  for ( int k = 0; k < kTileCount; k++ ) {
+    if ( !found[k] ) continue;
+    xs[n] = shifts[k][0];
+    ys[n] = shifts[k][1];
+    n += 1;
+  }
+  if ( n < kMinTiles ) return NO;
+  qsort( xs, n, sizeof( double ), compareDoubles );
+  qsort( ys, n, sizeof( double ), compareDoubles );
+  *mx = n % 2 ? xs[n / 2] : ( xs[n / 2 - 1] + xs[n / 2] ) / 2;
+  *my = n % 2 ? ys[n / 2] : ( ys[n / 2 - 1] + ys[n / 2] ) / 2;
+  return YES;
+}
+
+// One frame's measurements. The running estimate (`chain`, the shift onto
+// the first frame) only decides where the tiles are compared; JS fits the
+// path from the tiles themselves.
+typedef struct {
+  double stepShifts[kTileCount][2];
+  BOOL stepFound[kTileCount];
+  double readingShifts[kTileCount][2];
+  BOOL readingFound[kTileCount];
+  double stepX, stepY;
+  BOOL stepOK;
+  BOOL readingOK;
+} FrameMeasure;
+
+typedef struct {
+  Registration registration;
+  GrayImage first;
+  GrayImage previous;
+  BOOL started;
+  double chainX, chainY;
+  double lastStepX, lastStepY;
+} Tracker;
+
+static Tracker trackerCreate( int width, int height )
+{
+  Tracker t;
+  memset( &t, 0, sizeof( t ) );
+  t.registration = registrationCreate( width, height );
+  t.first = grayImageCreate( width, height );
+  t.previous = grayImageCreate( width, height );
+  return t;
+}
+
+static void trackerFree( Tracker *t )
+{
+  registrationFree( &t->registration );
+  grayImageFree( &t->first );
+  grayImageFree( &t->previous );
+}
+
+// Measures `current` (then remembers it as the previous frame). The first
+// frame's readings are all zero.
+static void trackerMeasure( Tracker *t, const GrayImage *current, FrameMeasure *m )
+{
+  memset( m, 0, sizeof( *m ) );
+  size_t bytes = (size_t)current->width * current->height * sizeof( float );
+  if ( !t->started ) {
+    memcpy( t->first.px, current->px, bytes );
+    memcpy( t->previous.px, current->px, bytes );
+    t->started = YES;
+    for ( int k = 0; k < kTileCount; k++ ) m->readingFound[k] = YES;
+    m->stepOK = YES;
+    m->readingOK = YES;
+    return;
+  }
+  const Registration *r = &t->registration;
+  // Onto the previous frame, moved by the last step: the camera rarely
+  // changes speed much in a frame.
+  tileShifts( r, current, &t->previous, (int)lround( t->lastStepX ), (int)lround( t->lastStepY ),
+    m->stepShifts, m->stepFound );
+  m->stepOK = medianShift( m->stepShifts, m->stepFound, &m->stepX, &m->stepY );
+  if ( !m->stepOK && r->whole ) {
+    double dx;
+    double dy;
+    float response;
+    int ox = ( current->width - r->whole->width ) / 2;
+    int oy = ( current->height - r->whole->height ) / 2;
+    phaseCorrelate( r->whole, current, ox, oy, &t->previous, ox, oy, &dx, &dy, &response );
+    if ( response > kFallbackResponse ) {
+      m->stepX = dx;
+      m->stepY = dy;
+      m->stepOK = YES;
+    }
+  }
+  if ( m->stepOK ) {
+    t->chainX += m->stepX;
+    t->chainY += m->stepY;
+  }
+  t->lastStepX = m->stepOK ? m->stepX : 0;
+  t->lastStepY = m->stepOK ? m->stepY : 0;
+  // Onto the first frame, moved by the chain so far.
+  tileShifts( r, current, &t->first, (int)lround( t->chainX ), (int)lround( t->chainY ),
+    m->readingShifts, m->readingFound );
+  double rx;
+  double ry;
+  if ( medianShift( m->readingShifts, m->readingFound, &rx, &ry )
+    && hypot( rx - t->chainX, ry - t->chainY ) < kMaxReadingJump * MAX( current->width, current->height ) ) {
+    t->chainX = rx;
+    t->chainY = ry;
+    m->readingOK = YES;
+  }
+  memcpy( t->previous.px, current->px, bytes );
+}
+
+// END FFT REGISTRATION
+
+// Tile shifts for the bridge: [dx, dy] per tile in full-frame pixels, or
+// null where the tile didn't count.
+static NSArray *tileArray( double shifts[][2], const BOOL *found, double toFull )
+{
+  NSMutableArray *out = [NSMutableArray arrayWithCapacity:kTileCount];
+  for ( int k = 0; k < kTileCount; k++ ) {
+    [out addObject:found[k]
+      ? @[@( shifts[k][0] * toFull ), @( shifts[k][1] * toFull )]
+      : (id)[NSNull null]];
+  }
+  return out;
+}
+
+static NSArray<NSNumber *> *shiftArray( double x, double y )
+{
+  return @[@1, @0, @( x ), @0, @1, @( y ), @0, @0, @1];
 }
 
 RCT_EXPORT_METHOD( analyze
@@ -564,26 +923,7 @@ RCT_EXPORT_METHOD( analyze
 {
   NSInteger generation = ++_generation;
   dispatch_async( _queue, ^{
-    // Holding the background also measures every frame against the first, so
-    // the small errors of chaining frame to frame don't add up to a drift.
-    BOOL subjectMode = [options[@"mode"] isEqual:@"subject"];
-    BOOL reference = !subjectMode;
-    // Subject mode tracks a box around the point the user picked on the first
-    // frame (normalized, top-left origin).
-    NSDictionary *subjectPoint = options[@"subject"];
-    double subjectX = MIN( 1, MAX( 0, subjectPoint ? [subjectPoint[@"x"] doubleValue] : 0.5 ) );
-    double subjectY = MIN( 1, MAX( 0, subjectPoint ? [subjectPoint[@"y"] doubleValue] : 0.5 ) );
-    // Rolling shutter: register the top and bottom of each frame separately.
-    // Their rows are read at different times, so when the camera speeds up or
-    // slows down they move by different amounts, and how different measures
-    // the readout. The difference is a pixel or two, so the strips are
-    // registered at twice the detail of the whole frame.
-    BOOL strips = [options[@"strips"] boolValue];
-    double stripMaxDimension = 960;
-    double stripFraction = 0.4;
     id job = options[@"job"];
-    // Registration needs little detail.
-    double maxDimension = 480;
 
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:stripFileScheme( path )] options:nil];
     CMTimeRange range = timeRangeFor( asset, options );
@@ -596,30 +936,17 @@ RCT_EXPORT_METHOD( analyze
       return;
     }
 
-    NSMutableArray<NSMutableDictionary *> *frames = [NSMutableArray array];
-    NSMutableArray<NSValue *> *steps = [NSMutableArray array];  // Mat3 per frame, onto the previous
-    NSMutableArray<NSValue *> *toFirst = [NSMutableArray array];  // Mat3 per frame, onto the first
+    NSMutableArray<NSDictionary *> *frames = [NSMutableArray array];
     CVPixelBufferPoolRef pool = NULL;
-    CVPixelBufferRef previous = NULL;
-    CVPixelBufferRef first = NULL;
-    CIImage *blackSmall = nil;
-    Mat3 chain = mat3Identity( );
+    GrayImage gray = { NULL, 0, 0 };
+    Tracker tracker;
+    memset( &tracker, 0, sizeof( tracker ) );
     NSInteger refined = 0;
-    VNSequenceRequestHandler *tracker = subjectMode ? [VNSequenceRequestHandler new] : nil;
-    VNDetectedObjectObservation *tracked = nil;
-    NSInteger trackedCount = 0;
     size_t fullWidth = 0;
     size_t fullHeight = 0;
     double scale = 1;
-    double smallWidth = 0;
-    double smallHeight = 0;
     BOOL bufferFailed = NO;
-    CVPixelBufferPoolRef stripPool = NULL;
-    CVPixelBufferRef previousTop = NULL;
-    CVPixelBufferRef previousBottom = NULL;
-    double stripScale = 1;
-    double stripFullHeight = 0;
-    NSMutableDictionary<NSNumber *, NSArray *> *stripSteps = [NSMutableDictionary dictionary];
+    FrameMeasure *measure = calloc( 1, sizeof( FrameMeasure ) );
 
     while ( [self isCurrent:generation] ) {
       @autoreleasepool {
@@ -630,24 +957,17 @@ RCT_EXPORT_METHOD( analyze
         if ( !pool ) {
           fullWidth = CVPixelBufferGetWidth( full );
           fullHeight = CVPixelBufferGetHeight( full );
-          scale = MIN( 1, maxDimension / MAX( fullWidth, fullHeight ) );
-          smallWidth = round( fullWidth * scale );
-          smallHeight = round( fullHeight * scale );
-          pool = makePixelBufferPool( (size_t)smallWidth, (size_t)smallHeight );
-          blackSmall = [[CIImage imageWithColor:[CIColor colorWithRed:0 green:0 blue:0]]
-            imageByCroppingToRect:CGRectMake( 0, 0, smallWidth, smallHeight )];
-          if ( strips ) {
-            stripScale = MIN( 1, stripMaxDimension / MAX( fullWidth, fullHeight ) );
-            stripFullHeight = round( fullHeight * stripFraction );
-            stripPool = makePixelBufferPool(
-              (size_t)round( fullWidth * stripScale ),
-              (size_t)round( stripFullHeight * stripScale )
-            );
-          }
+          scale = MIN( 1, kRegistrationDimension / MAX( fullWidth, fullHeight ) );
+          int width = (int)round( fullWidth * scale );
+          int height = (int)round( fullHeight * scale );
+          pool = makePixelBufferPool( (size_t)width, (size_t)height );
+          gray = grayImageCreate( width, height );
+          tracker = trackerCreate( width, height );
         }
         CVPixelBufferRef small = NULL;
         if ( pool ) CVPixelBufferPoolCreatePixelBuffer( NULL, pool, &small );
-        if ( !small ) {
+        if ( !small || !gray.px ) {
+          if ( small ) CVPixelBufferRelease( small );
           CFRelease( sample );
           bufferFailed = YES;
           break;
@@ -655,125 +975,29 @@ RCT_EXPORT_METHOD( analyze
         CIImage *fullImage = [CIImage imageWithCVPixelBuffer:full];
         [self->_ciContext render:[fullImage imageByApplyingTransform:CGAffineTransformMakeScale( scale, scale )]
                  toCVPixelBuffer:small];
-        // Core Image is bottom-left: the top strip is the highest rows.
-        CVPixelBufferRef top = NULL;
-        CVPixelBufferRef bottom = NULL;
-        if ( stripPool ) {
-          CVPixelBufferPoolCreatePixelBuffer( NULL, stripPool, &top );
-          CVPixelBufferPoolCreatePixelBuffer( NULL, stripPool, &bottom );
-          double origins[2] = { fullHeight - stripFullHeight, 0 };
-          CVPixelBufferRef targets[2] = { top, bottom };
-          for ( int k = 0; k < 2; k++ ) {
-            if ( !targets[k] ) continue;
-            CGRect rect = CGRectMake( 0, origins[k], fullWidth, stripFullHeight );
-            CGAffineTransform place = CGAffineTransformConcat(
-              CGAffineTransformMakeTranslation( 0, -origins[k] ),
-              CGAffineTransformMakeScale( stripScale, stripScale )
-            );
-            [self->_ciContext render:[[fullImage imageByCroppingToRect:rect] imageByApplyingTransform:place]
-                     toCVPixelBuffer:targets[k]];
-          }
-        }
         CFRelease( sample );
+        grayImageFill( &gray, small );
+        CVPixelBufferRelease( small );
 
-        NSMutableDictionary *frame = [@{ @"t": @( t ), @"ok": @YES } mutableCopy];
-        Mat3 step = mat3Identity( );
-        if ( previous && !registerImages( small, previous, &step ) ) {
-          step = mat3Identity( );
-          frame[@"ok"] = @NO;
-        }
-        [steps addObject:[NSValue valueWithBytes:&step objCType:@encode( Mat3 )]];
-
-        if ( top && bottom && previousTop && previousBottom ) {
-          Mat3 topStep;
-          Mat3 bottomStep;
-          if ( registerImages( top, previousTop, &topStep ) && registerImages( bottom, previousBottom, &bottomStep ) ) {
-            stripSteps[@( frames.count )] = @[
-              [NSValue valueWithBytes:&topStep objCType:@encode( Mat3 )],
-              [NSValue valueWithBytes:&bottomStep objCType:@encode( Mat3 )],
-            ];
-          }
-        }
-        if ( previousTop ) CVPixelBufferRelease( previousTop );
-        if ( previousBottom ) CVPixelBufferRelease( previousBottom );
-        previousTop = top;
-        previousBottom = bottom;
-
-        if ( reference ) {
-          if ( !first ) {
-            first = CVPixelBufferRetain( small );
-          } else {
-            chain = mat3Mul( chain, step );
-            // What's left after lining the frame up by the chained estimate is
-            // small, so registering that against the first frame is reliable
-            // even where the two frames are far apart.
-            CVPixelBufferRef warped = NULL;
-            CVPixelBufferPoolCreatePixelBuffer( NULL, pool, &warped );
-            if ( warped ) {
-              CIImage *aligned = [warpImage( [CIImage imageWithCVPixelBuffer:small], chain )
-                imageByCompositingOverImage:blackSmall];
-              [self->_ciContext render:[aligned imageByCroppingToRect:blackSmall.extent] toCVPixelBuffer:warped];
-              Mat3 residual;
-              if ( registerImages( warped, first, &residual )
-                && hypot( residual.m[2], residual.m[5] ) < 0.2 * MAX( smallWidth, smallHeight ) ) {
-                chain = mat3Mul( residual, chain );
-                refined += 1;
-              }
-              CVPixelBufferRelease( warped );
-            }
-          }
-          [toFirst addObject:[NSValue valueWithBytes:&chain objCType:@encode( Mat3 )]];
-        }
-
-        if ( subjectMode ) {
-          // Vision's boxes are normalized with the origin bottom-left.
-          CGRect box = CGRectNull;
-          if ( !tracked ) {
-            // A square a quarter of the frame's short side, kept in the frame.
-            double side = kSubjectBoxFraction * MIN( smallWidth, smallHeight );
-            double w = side / smallWidth;
-            double h = side / smallHeight;
-            double x = MIN( 1 - w, MAX( 0, subjectX - w / 2 ) );
-            double y = MIN( 1 - h, MAX( 0, ( 1 - subjectY ) - h / 2 ) );
-            tracked = [VNDetectedObjectObservation observationWithBoundingBox:CGRectMake( x, y, w, h )];
-            box = tracked.boundingBox;
-          } else {
-            VNTrackObjectRequest *request = [[VNTrackObjectRequest alloc] initWithDetectedObjectObservation:tracked];
-            request.trackingLevel = VNRequestTrackingLevelAccurate;
-            NSError *trackError = nil;
-            if ( [tracker performRequests:@[request] onCVPixelBuffer:small error:&trackError] ) {
-              VNDetectedObjectObservation *result = request.results.firstObject;
-              if ( [result isKindOfClass:[VNDetectedObjectObservation class]] ) {
-                // Keep following from the latest box either way, but only
-                // report the frames the tracker was sure of.
-                tracked = result;
-                if ( result.confidence >= kSubjectMinConfidence ) box = result.boundingBox;
-              }
-            }
-          }
-          if ( CGRectIsNull( box ) ) {
-            frame[@"s"] = [NSNull null];
-          } else {
-            trackedCount += 1;
-            frame[@"s"] = @[
-              @( CGRectGetMidX( box ) * fullWidth ),
-              @( ( 1 - CGRectGetMidY( box ) ) * fullHeight ),
-            ];
-          }
-        }
-
-        if ( previous ) CVPixelBufferRelease( previous );
-        previous = small;
-        [frames addObject:frame];
+        trackerMeasure( &tracker, &gray, measure );
+        if ( measure->readingOK ) refined += 1;
+        double toFull = 1 / scale;
+        [frames addObject:@{
+          @"t": @( t ),
+          @"ok": @( measure->stepOK ),
+          @"m": shiftArray( measure->stepX * toFull, measure->stepY * toFull ),
+          @"r": shiftArray( tracker.chainX * toFull, tracker.chainY * toFull ),
+          @"rok": @( measure->readingOK ),
+          @"ts": tileArray( measure->stepShifts, measure->stepFound, toFull ),
+          @"tr": tileArray( measure->readingShifts, measure->readingFound, toFull ),
+        }];
         [self emitProgress:@"analyze" job:job progress:( t - CMTimeGetSeconds( range.start ) ) / rangeSeconds force:NO];
       }
     }
-    if ( previous ) CVPixelBufferRelease( previous );
-    if ( first ) CVPixelBufferRelease( first );
+    free( measure );
+    trackerFree( &tracker );
+    grayImageFree( &gray );
     if ( pool ) CVPixelBufferPoolRelease( pool );
-    if ( previousTop ) CVPixelBufferRelease( previousTop );
-    if ( previousBottom ) CVPixelBufferRelease( previousBottom );
-    if ( stripPool ) CVPixelBufferPoolRelease( stripPool );
 
     if ( ![self isCurrent:generation] ) {
       [reader cancelReading];
@@ -786,49 +1010,17 @@ RCT_EXPORT_METHOD( analyze
       return;
     }
 
-    // Bottom-left pixels of the small frame → top-left pixels of the full one.
-    Mat3 toTopLeft = mat3Mul( mat3Scale( 1 / scale ), mat3FlipY( smallHeight ) );
-    Mat3 fromTopLeft = mat3Inv( toTopLeft );
-    for ( NSUInteger i = 0; i < frames.count; i++ ) {
-      Mat3 step;
-      [steps[i] getValue:&step];
-      frames[i][@"m"] = mat3Array( mat3Mul( toTopLeft, mat3Mul( i == 0 ? mat3Identity( ) : step, fromTopLeft ) ) );
-      if ( reference ) {
-        Mat3 r;
-        [toFirst[i] getValue:&r];
-        frames[i][@"r"] = mat3Array( mat3Mul( toTopLeft, mat3Mul( r, fromTopLeft ) ) );
-      }
-    }
-    // The strips' steps, likewise in top-left pixels of the full frame. They
-    // are pure shifts, so which strip they came from doesn't change this.
-    Mat3 stripToTopLeft = mat3Mul( mat3Scale( 1 / stripScale ), mat3FlipY( stripFullHeight * stripScale ) );
-    Mat3 stripFromTopLeft = mat3Inv( stripToTopLeft );
-    for ( NSNumber *index in stripSteps ) {
-      Mat3 topStep;
-      Mat3 bottomStep;
-      [stripSteps[index][0] getValue:&topStep];
-      [stripSteps[index][1] getValue:&bottomStep];
-      frames[index.unsignedIntegerValue][@"mt"] = mat3Array( mat3Mul( stripToTopLeft, mat3Mul( topStep, stripFromTopLeft ) ) );
-      frames[index.unsignedIntegerValue][@"mb"] = mat3Array( mat3Mul( stripToTopLeft, mat3Mul( bottomStep, stripFromTopLeft ) ) );
-    }
-
     [self emitProgress:@"analyze" job:job progress:1 force:YES];
-    NSMutableDictionary *result = [@{
+    resolve( @{
       @"width": @( fullWidth ),
       @"height": @( fullHeight ),
       @"fps": @( frameRateOf( [asset tracksWithMediaType:AVMediaTypeVideo].firstObject ) ),
       @"frames": frames,
-      // How many frames the lock against the first frame could refine.
+      @"tileCols": @( kTileCols ),
+      @"tileRows": @( kTileRows ),
+      // How many frames could be measured against the first frame.
       @"refinedFrames": @( refined ),
-      // How many frames the subject tracker was sure of.
-      @"trackedFrames": @( trackedCount ),
-    } mutableCopy];
-    if ( strips && fullHeight > 0 ) {
-      // Where the strips' middles sit, in frame heights from the frame's middle.
-      double half = stripFullHeight / 2 / fullHeight;
-      result[@"strips"] = @{ @"top": @( half - 0.5 ), @"bottom": @( 0.5 - half ) };
-    }
-    resolve( result );
+    } );
   } );
 }
 

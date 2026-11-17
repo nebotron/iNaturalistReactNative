@@ -5,7 +5,7 @@ import VideoStabilizer from "components/VideoStabilizer/VideoStabilizer";
 import initI18next from "i18n/initI18next";
 import i18next from "i18next";
 import React from "react";
-import { StyleSheet } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 import useVideoStabilizer from "stores/videoStabilizer";
 import { renderComponent } from "tests/helpers/render";
 
@@ -25,7 +25,6 @@ jest.mock( "sharedHelpers/videoStabilizerNative", ( ) => ( {
   probeVideo: ( ) => Promise.resolve( {
     width: 1920, height: 1080, duration: 4, fps: 30, hasAudio: true,
   } ),
-  videoFrameAt: ( ) => Promise.resolve( { uri: "file:///frame.jpg", width: 1080, height: 608 } ),
   analyzeVideo: ( ...args: unknown[] ) => mockAnalyze( ...args ),
   renderStabilizedVideo: ( ...args: unknown[] ) => mockRender( ...args ),
   playVideo: ( ...args: unknown[] ) => mockPlay( ...args ),
@@ -88,7 +87,7 @@ describe( "VideoStabilizer", ( ) => {
     expect( mockPickVideo ).toHaveBeenCalledWith( );
     expect( mockAnalyze ).toHaveBeenCalledWith(
       INPUT,
-      expect.objectContaining( { start: 0, mode: "background" } ),
+      expect.objectContaining( { start: 0 } ),
     );
     await waitFor( ( ) => expect( mockRender ).toHaveBeenCalledWith(
       INPUT,
@@ -123,21 +122,7 @@ describe( "VideoStabilizer", ( ) => {
     } ) ).not.toBeChecked( );
   } );
 
-  it( "tracks the subject when stabilizing the subject", async ( ) => {
-    const user = userEvent.setup( );
-    renderComponent( <VideoStabilizer /> );
-    await importVideo( user );
-    await waitFor( ( ) => expect( mockRender ).toHaveBeenCalled( ) );
-    await user.press( screen.getByTestId( "VideoStabilizer.mode.subject" ) );
-    await waitFor( ( ) => expect( mockAnalyze ).toHaveBeenLastCalledWith(
-      INPUT,
-      expect.objectContaining( { mode: "subject", subject: { x: 0.5, y: 0.5 } } ),
-    ) );
-    expect( mockAnalyze ).toHaveBeenCalledTimes( 2 );
-    expect( screen.getByText( i18next.t( "Tap-the-subject-to-follow-it" ) ) ).toBeVisible( );
-  } );
-
-  it( "zooms to a rectangle dragged over the stabilized preview", async ( ) => {
+  it( "zooms and moves the crop with a two-finger pinch on the stabilized preview", async ( ) => {
     const user = userEvent.setup( );
     renderComponent( <VideoStabilizer /> );
     await importVideo( user );
@@ -147,19 +132,35 @@ describe( "VideoStabilizer", ( ) => {
     expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
 
     const overlay = screen.getByAccessibilityHint(
-      i18next.t( "Zooms-to-the-rectangle-dragged-over-the-video" ),
+      i18next.t( "Pinch-with-two-fingers-to-zoom-and-move-the-crop" ),
     );
     const { width, height } = StyleSheet.flatten( overlay.props.style );
-    const at = ( x: number, y: number ) => ( {
-      nativeEvent: { locationX: x, locationY: y },
-      touchHistory: { touchBank: [] },
+    // The overlay sits 100 pt down the page.
+    const touch = ( x: number, y: number ) => ( {
+      locationX: x, locationY: y, pageX: x, pageY: y + 100,
     } );
-    // Half the width, so 2×, centered three quarters of the way across.
-    // The drag runs past the bottom; the box keeps the video's aspect.
-    fireEvent( overlay, "responderGrant", at( width / 2, height / 4 ) );
-    fireEvent( overlay, "responderMove", at( width, height ) );
-    fireEvent( overlay, "responderRelease", at( width, height ) );
+    const touches = ( ...points: [number, number][] ) => ( {
+      nativeEvent: { touches: points.map( ( [x, y] ) => touch( x, y ) ) },
+    } );
+    const scrollEnabled = ( ) => screen.UNSAFE_getByType( ScrollView ).props.scrollEnabled;
 
+    // One finger is a scroll: the page keeps scrolling and nothing zooms.
+    fireEvent( overlay, "touchStart", touches( [width / 2, height / 2] ) );
+    fireEvent( overlay, "touchMove", touches( [width / 2, height / 4] ) );
+    expect( scrollEnabled( ) ).toBe( true );
+    fireEvent( overlay, "touchEnd", touches( ) );
+    expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "1.0" } ) ) ).toBeVisible( );
+
+    // Fingers around three quarters across spread to twice as far apart
+    // while moving to the middle: 2×, with that point brought to the middle.
+    const y = height / 2;
+    const at = width * 0.75;
+    fireEvent( overlay, "touchStart", touches( [at - 20, y], [at + 20, y] ) );
+    expect( scrollEnabled( ) ).toBe( false );
+    fireEvent( overlay, "touchMove", touches( [width / 2 - 40, y], [width / 2 + 40, y] ) );
+    fireEvent( overlay, "touchEnd", touches( [width / 2 - 40, y] ) );
+
+    expect( scrollEnabled( ) ).toBe( true );
     expect( screen.getByText( i18next.t( "Crop-zoom-x", { zoom: "2.0" } ) ) ).toBeVisible( );
     const { cropCenter } = useVideoStabilizer.getState( );
     expect( cropCenter?.x ).toBeCloseTo( 0.75, 1 );

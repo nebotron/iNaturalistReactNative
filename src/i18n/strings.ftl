@@ -418,8 +418,6 @@ Copy-coordinates = Copy Coordinates
 # heading to describe general information about rights, attribution, and
 # licensing
 Copyright = Copyright
-# Switch in the video stabilizer that corrects rolling-shutter distortion, using a readout time measured from the video
-Correct-rolling-shutter = Correct rolling shutter
 # Error message when original photos could not be deleted from the device
 Could-not-delete-original-photos = Could not delete the original photos from your device. This is a known iOS issue — try restarting your iPhone, then delete the photo from the Photos app.
 # Error message when no camera can be found
@@ -645,8 +643,6 @@ DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
 # Maximum total driving time chosen for planning a route through wildlife hotspots
-# Note under the video stabilizer's crop settings explaining how to zoom in
-Drag-a-rectangle-over-the-stabilized-preview-to-zoom-in = Drag a rectangle over the stabilized preview to zoom in.
 Drive-time-limit =
     Max drive: { $hours ->
         [0] { $minutes } min
@@ -664,6 +660,22 @@ During-app-start-no-model-found = During app start there was no computer vision 
 # Button for editing something
 # Description of the Life List view in Explore
 Each-species-with-the-date-it-was-first-observed = Each species with the date it was first observed, most recent first
+# Shown with eBird results when the search area is larger than eBird allows
+eBird-limit-area = Only sightings within 50 km of the center of the search area are included.
+# Shown with eBird results when the search's dates reach back further than eBird sightings do
+eBird-limit-dates-window = Only eBird sightings from the last 30 days are included.
+# Shown when only eBird sightings are shown and the taxon filters exclude all birds
+eBird-limit-no-birds = eBird has only bird sightings, so none match these taxa.
+# Shown with eBird results when the search has no location
+eBird-limit-no-location = Choose a location to include eBird sightings.
+# Shown with eBird results when the app has paused eBird searches to limit traffic
+eBird-limit-rate = Too many eBird searches. Try again in a few minutes.
+# Shown with eBird results when the maximum number of sightings was returned
+eBird-limit-results = Only the first 100 eBird sightings are included.
+# Warning shown above the reasons eBird results are incomplete
+eBird-results-incomplete = eBird results are incomplete:
+# Shown when eBird results could not be loaded
+eBird-results-unavailable = eBird results could not be loaded.
 Edit = Edit
 EDIT-COMMENT = EDIT COMMENT
 Edit-comment = Edit comment
@@ -870,8 +882,6 @@ Hide-gear = Hide gear
 Hide-saved-photos = Hide saved photos
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
-# Explains the video stabilizer's "Stabilize the background" option
-Holds-the-background-where-it-is-at-the-start = Holds the background where it is at the start, like a tripod. Pans and walks will show black edges.
 # Label used for a stop added to a route from a wildlife hotspot
 Hotspot = Hotspot
 # Label for the bbox padding setting in the hotspot finder filter
@@ -1069,8 +1079,6 @@ KEEP-EDITING = KEEP EDITING
 Keep-in-mind-that-project-curators = Keep in mind that project curators will still be able to add your observations to their project unless you change your account settings.
 # Settings option to keep imported photos on the USB drive or SD card
 Keep-on-drive = Keep on Drive
-# Explains the video stabilizer's "Stabilize the subject" option
-Keeps-the-subject-you-tap-where-it-is-at-the-start = Keeps the subject you tap where it is at the start, so the background moves around it.
 # Display name for the iconic taxa category chromista
 Kelp-and-Diatoms = Kelp & Diatoms
 # Unit after the nearby search radius input
@@ -1230,8 +1238,6 @@ Motion-analyzed-across-x-frames =
         [one] Motion analyzed across 1 frame
        *[other] Motion analyzed across { $count } frames
     }
-# Accessibility hint for the video frame when stabilizing on the background
-Moves-the-crop-to-the-tapped-point = Moves the crop to the tapped point.
 must-be-captive-cultivated = must be captive / cultivated
 must-be-georeferenced = must be georeferenced
 must-be-identified = must be identified
@@ -1417,6 +1423,12 @@ Observation-photos--storage-description = Photos in your observations on this de
 # Storage category: sound recordings attached to observations
 Observation-sounds--storage = Observation sounds
 Observation-sounds--storage-description = Sound recordings in your observations
+# Option in Explore and Hotspots that shows both iNaturalist observations and eBird sightings
+Observation-source-both = Both
+# Option in Explore and Hotspots that shows only eBird sightings
+Observation-source-eBird = eBird
+# Option in Explore and Hotspots that shows only iNaturalist observations
+Observation-source-iNaturalist = iNaturalist
 OBSERVATION-WAS-DELETED = OBSERVATION WAS DELETED
 Observation-with-no-evidence = Observation with no evidence
 Observations = Observations
@@ -1486,6 +1498,8 @@ Opens-a-searchable-list-of-the-species-it-listens-for = Opens a searchable list 
 Opens-add-comment-form = Opens add comment form.
 # Accessibility hint for button that opens the AI camera
 Opens-AI-camera = Opens AI camera.
+# Accessibility hint for an eBird sighting among Explore results
+Opens-eBird-checklist = Opens the eBird checklist.
 # Accessibility hint for a button that opens a form for editing a comment
 Opens-edit-comment-form = Opens edit comment form.
 # Accessibility hint for the button in the Explore header that picks what Explore shows
@@ -1557,6 +1571,10 @@ Photos-stopped-responding-restart-the-app = Photos stopped responding on this de
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Settings option: the green observation button opens the photo picker
 Pick-photos = Pick photos
+# Note under the video stabilizer's crop settings explaining how to zoom in
+Pinch-the-stabilized-preview-to-zoom-drag-with-two-fingers-to-move = Pinch the stabilized preview to zoom. Drag it with two fingers to move the crop.
+# Accessibility hint for the stabilized video preview, where a two-finger pinch zooms and moves the crop
+Pinch-with-two-fingers-to-zoom-and-move-the-crop = Pinch with two fingers to zoom and move the crop.
 # Button that adds the hotspots with the most observations that fit within the time limit to the route
 Plan-route = Plan route
 # Result of planning a hotspot route within a time limit
@@ -1714,8 +1732,6 @@ Ranks-Zoosection = Zoosection
 Ranks-ZOOSUBSECTION = ZOOSUBSECTION
 Ranks-Zoosubsection = Zoosubsection
 Read-more-on-Wikipedia = Read more on Wikipedia
-# Shown in the video stabilizer when the video has too little camera shake to measure how long the sensor takes to read a frame, so rolling shutter is left uncorrected
-Readout-could-not-be-measured = The readout time could not be measured from this video (the camera moved too little or too steadily), so nothing was corrected.
 # Help text for the button that opens the sound recorder
 Record-a-sound = Record a sound
 # Title of screen asking for permission to access the microphone
@@ -1792,8 +1808,6 @@ Reviewed = Reviewed
 Reviewed-observations-only = Reviewed observations only
 # Accessibility label for tagging an Audio ID result as correct
 Right--correct = Right
-# Section header in the video stabilizer for correcting rolling-shutter distortion
-ROLLING-SHUTTER = ROLLING SHUTTER
 # Shown when the route without any hotspots already takes longer to drive than the chosen time limit
 Route-is-longer-than-time-limit = The route without hotspots is longer than the time limit
 # Number of stops on a route, shown after the start and end in the collapsed route summary
@@ -1899,8 +1913,6 @@ SELECT-THIS-TAXON = SELECT THIS TAXON
 # Label for an element that let's you select a user
 Select-user = Select user
 Selects-iconic-taxon-X = Selects iconic taxon { $iconicTaxon }.
-# How long the camera's sensor took to read a frame top to bottom, measured from the video: in milliseconds and as a share of the time between frames, e.g. "Sensor readout: 12.4 ms (37% of a frame)"
-Sensor-readout-x-ms-x-percent-of-a-frame = Sensor readout: { $ms } ms ({ $percent }% of a frame)
 Separate-Photos = Separate Photos
 # Month of September
 September = September
@@ -1919,6 +1931,8 @@ Shorten-time-limit = Shorten time limit
 # Accessibility label for the photo picker button that shows photos already saved or deleted
 Show-all-photos = Show all photos
 Show-observation-options = Show observation options.
+# Accessibility label for the iNaturalist / eBird / Both toggle in Explore and Hotspots
+Show-observations-from = Show observations from
 # Accessibility hint for a selected camera pairs preference bar; tapping it clears the filter
 Shows-all-pairs = Shows all pairs.
 # Label for button that shows identification suggestions
@@ -2014,12 +2028,6 @@ Specific-identification--project-rule = Specific identification
 # Header for a project rule requiring an observation to be in a place chosen
 # by the project
 Specific-location--project-rule = Specific location
-# Section header in the video stabilizer for choosing what to hold still
-STABILIZE--video-stabilizer = STABILIZE
-# Video stabilizer option that holds the background still
-Stabilize-the-background = Stabilize the background
-# Video stabilizer option that keeps the tapped subject still in the frame
-Stabilize-the-subject = Stabilize the subject
 # Label above the stabilized video, playing beside the original
 Stabilized--video-stabilizer = Stabilized
 # Label for the standard map type
@@ -2060,8 +2068,6 @@ Stops-the-sound = Stops the sound.
 STORAGE-USAGE = STORAGE USAGE
 # Shown on the storage usage screen when folder sizes could not be read
 Storage-usage-could-not-be-measured = Storage usage could not be measured.
-# Explains the video stabilizer's rolling-shutter switch
-Straightens-lines-that-lean-in-fast-moves-measured-from-the-video = Straightens lines that lean, stretch or squash when the camera moves fast. How long the sensor takes to read each frame is measured from the video's own shake. Clips the camera already corrected measure close to zero.
 # Sort option: distance from camera to subject, nearest first
 Subject-distance-Nearest = Subject distance (nearest)
 SUBMIT = SUBMIT
@@ -2079,10 +2085,6 @@ Take-photo = Take photo
 # Label for the button that opens the AI camera to take photos for a new observation
 Take-photos = Take photos
 Tap-here-to-switch-to-Advanced-Mode = Tap here to switch to Advanced Mode
-# Instruction under the video frame when stabilizing the background
-Tap-the-frame-to-choose-where-to-crop = Tap the frame to choose where to crop.
-# Instruction under the video frame when stabilizing the subject
-Tap-the-subject-to-follow-it = Tap the subject to follow it.
 # Shown in place of a group of observations that failed to load, prompting the user to
 # request them again
 Tap-to-try-loading-again = Tap to try loading again
@@ -2273,6 +2275,18 @@ Tunable-defaultObsLocationAccuracyM-description = Accuracy assumed for observati
 Tunable-desiredLocationAccuracyM = Location picker accuracy (m)
 # Description of a tunable parameter in settings
 Tunable-desiredLocationAccuracyM-description = Accuracy below which the location picker shows the location as precise.
+# Label for a tunable parameter in settings
+Tunable-ebirdBackDays = eBird days back
+# Description of a tunable parameter in settings
+Tunable-ebirdBackDays-description = How many days of recent eBird sightings to show. eBird allows at most 30.
+# Label for a tunable parameter in settings
+Tunable-ebirdMaxDistKm = eBird search radius (km)
+# Description of a tunable parameter in settings
+Tunable-ebirdMaxDistKm-description = Radius for nearby eBird sightings. eBird allows at most 50 km.
+# Label for a tunable parameter in settings
+Tunable-ebirdMaxResults = eBird max results
+# Description of a tunable parameter in settings
+Tunable-ebirdMaxResults-description = Maximum number of eBird sightings shown.
 # Label for a tunable parameter in settings
 Tunable-gameLocationRadiusKm = Species game local radius (km)
 # Description of a tunable parameter in settings
@@ -2540,8 +2554,6 @@ Verifiable--project-rule = Verifiable
 Verified-IDs-are-used-for-science-and-conservation = Verified IDs are used for science and conservation
 # Listing of app and build versions
 Version-app-build = Version { $appVersion } ({ $buildVersion })
-# Accessibility label for the still frame of a video being stabilized
-Video-frame = Video frame
 # Title of the video stabilizer tool, and its menu item
 VIDEO-STABILIZER = VIDEO STABILIZER
 # Alert title when the video stabilizer hits an error
@@ -2887,5 +2899,3 @@ Zoom-to-current-location = Zoom to current location
 zoom-x = { $zoom }×
 # Note that the video stabilizer zoomed in further than asked, to hide black edges
 Zoomed-to-x-to-hide-empty-edges = Zoomed to { $zoom }× to hide black edges.
-# Accessibility hint for the stabilized video preview, which zooms to a rectangle dragged over it
-Zooms-to-the-rectangle-dragged-over-the-video = Zooms to the rectangle dragged over the video.

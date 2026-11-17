@@ -1,3 +1,4 @@
+import EbirdMapMarkers from "components/Explore/EbirdMapMarkers";
 import {
   ActivityIndicator,
   Button,
@@ -67,26 +68,23 @@ interface Props {
     orderBy?: string;
   };
   isLoading: boolean;
-  hasLocationPermissions?: boolean;
   renderLocationPermissionsGate: RenderLocationPermissionsGateFunction;
-  requestLocationPermissions: ( ) => void;
 }
 
 const MapView = ( {
   observationBounds,
   queryParams,
   isLoading,
-  hasLocationPermissions,
   renderLocationPermissionsGate,
-  requestLocationPermissions,
 }: Props ) => {
   const { t } = useTranslation( );
-  const { state: exploreState, dispatch, defaultExploreLocation } = useExplore( );
+  const { state: exploreState, dispatch } = useExplore( );
   const [showRedoSearchButton, setShowRedoSearchButton] = useState( false );
   const [regionToAnimate, setRegionToAnimate] = useState<Region | null>( null );
   const isFirstRender = useRef( true );
   const lastExploreMapRegion = useStore( state => state.layout.lastExploreMapRegion );
   const setLastExploreMapRegion = useStore( state => state.layout.setLastExploreMapRegion );
+  const ebirdOnly = useStore( state => state.layout.observationSource === "ebird" );
 
   const mapRef = useRef<RNMapView | null>( null );
 
@@ -215,18 +213,6 @@ const MapView = ( {
 
   const handlePanDrag = ( ) => setShowRedoSearchButton( true );
 
-  const handleCurrentLocationPress = async ( ) => {
-    if ( hasLocationPermissions ) {
-      const exploreLocation = await defaultExploreLocation( );
-      dispatch( {
-        type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
-        exploreLocation,
-      } );
-    } else {
-      requestLocationPermissions( );
-    }
-  };
-
   return (
     <View className="flex-1 overflow-hidden h-full">
       <Map
@@ -235,6 +221,7 @@ const MapView = ( {
         onPanDrag={handlePanDrag}
         onRegionChangeComplete={handleRegionChangeComplete}
         initialRegion={initialRegion}
+        mapChildren={<EbirdMapMarkers params={queryParams} />}
         regionToAnimate={regionToAnimate}
         showCurrentLocationButton
         showSwitchMapTypeButton
@@ -242,8 +229,7 @@ const MapView = ( {
         switchMapTypeButtonClassName="left-20 bottom-20"
         showsUserLocation
         tileMapParams={tileMapParams}
-        withPressableObsTiles={tileMapParams !== null}
-        onCurrentLocationPress={handleCurrentLocationPress}
+        withPressableObsTiles={tileMapParams !== null && !ebirdOnly}
       />
       {showRedoSearchButton && (
         <View
@@ -264,7 +250,7 @@ const MapView = ( {
           <ActivityIndicator size={activityIndicatorSize} />
         </View>
       )}
-      {renderLocationPermissionsGate( { onPermissionGranted: handleCurrentLocationPress } )}
+      {renderLocationPermissionsGate( {} )}
     </View>
   );
 };

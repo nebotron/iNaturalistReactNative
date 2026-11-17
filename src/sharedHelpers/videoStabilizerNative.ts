@@ -3,7 +3,7 @@ import type { ViewProps } from "react-native";
 import {
   NativeEventEmitter, NativeModules, Platform, requireNativeComponent,
 } from "react-native";
-import type { Point, StabilizationMode, VideoAnalysis } from "sharedHelpers/videoStabilization";
+import type { VideoAnalysis } from "sharedHelpers/videoStabilization";
 
 // JS side of the VideoStabilizer native module (iOS only). The native side
 // reads and writes video; the camera-path math is in videoStabilization.ts.
@@ -16,32 +16,16 @@ export interface VideoInfo {
   hasAudio: boolean;
 }
 
-export interface VideoFrame {
-  uri: string;
-  width: number;
-  height: number;
-}
-
 // Starting an analysis or a render cancels the one before. `job` comes back
 // on progress events, so a superseded job's progress can be told apart.
 export interface AnalyzeOptions {
   start: number;
-  // Background: also measure every frame against the first. Subject: track
-  // the subject around `subject` instead.
-  mode: StabilizationMode;
-  // Subject mode: the subject's center on the first frame, normalized.
-  subject?: Point;
-  // Also measure the top and bottom of each frame on their own, to work out
-  // the rolling shutter's readout time.
-  strips: boolean;
   job: number;
 }
 
 export interface NativeAnalysis extends VideoAnalysis {
   // Frames the lock against the first frame could refine.
   refinedFrames: number;
-  // Frames the subject tracker was sure of.
-  trackedFrames?: number;
 }
 
 export interface RenderOptions {
@@ -67,7 +51,6 @@ export type ProgressPhase = "analyze" | "render";
 interface VideoStabilizerModule {
   pickVideo: ( ) => Promise<string | null>;
   probe: ( path: string ) => Promise<VideoInfo>;
-  frameAt: ( path: string, seconds: number, maxDimension: number ) => Promise<VideoFrame>;
   analyze: ( path: string, options: AnalyzeOptions ) => Promise<NativeAnalysis>;
   render: ( path: string, options: RenderOptions ) => Promise<RenderResult>;
   cancel: ( ) => void;
@@ -86,10 +69,6 @@ const unavailable = ( ) => Promise.reject( new Error( "Video stabilization is un
 export const pickVideo = ( ) => nativeModule?.pickVideo( ) ?? Promise.resolve( null );
 
 export const probeVideo = ( path: string ) => nativeModule?.probe( path ) ?? unavailable( );
-
-export const videoFrameAt = ( path: string, seconds: number, maxDimension = 1080 ) => (
-  nativeModule?.frameAt( path, seconds, maxDimension ) ?? unavailable( )
-);
 
 export const analyzeVideo = ( path: string, options: AnalyzeOptions ) => (
   nativeModule?.analyze( path, options ) ?? unavailable( )
