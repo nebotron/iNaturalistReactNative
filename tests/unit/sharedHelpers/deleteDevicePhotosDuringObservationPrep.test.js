@@ -3,10 +3,11 @@ import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 
-const mockDeleteOriginalDevicePhotos = jest.fn( async ( ) => undefined );
+const mockFileOriginalDevicePhotosForDeletion = jest.fn( async ( ) => undefined );
 
 jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
-  deleteOriginalDevicePhotos: ( ...args ) => mockDeleteOriginalDevicePhotos( ...args ),
+  fileOriginalDevicePhotosForDeletion:
+    ( ...args ) => mockFileOriginalDevicePhotosForDeletion( ...args ),
   __esModule: true,
   default: jest.fn( ( _uris, onComplete ) => onComplete( ) ),
 } ) );

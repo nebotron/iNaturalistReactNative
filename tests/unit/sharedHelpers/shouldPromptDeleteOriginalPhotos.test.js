@@ -1,10 +1,11 @@
 import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import useStore from "stores/useStore";
 
-const mockDeleteOriginalDevicePhotos = jest.fn( async ( ) => undefined );
+const mockFileOriginalDevicePhotosForDeletion = jest.fn( async ( ) => undefined );
 
 jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
-  deleteOriginalDevicePhotos: ( ...args ) => mockDeleteOriginalDevicePhotos( ...args ),
+  fileOriginalDevicePhotosForDeletion:
+    ( ...args ) => mockFileOriginalDevicePhotosForDeletion( ...args ),
   __esModule: true,
   default: jest.fn( ( _uris, onComplete ) => onComplete( ) ),
 } ) );
@@ -56,7 +57,7 @@ describe( "shouldPromptDeleteOriginalPhotos", ( ) => {
     useStore.getState( ).deletePhotoFromObservation( "file:///local/photo.jpg" );
 
     expect( useStore.getState( ).currentObservation?.observationPhotos ).toEqual( [] );
-    expect( mockDeleteOriginalDevicePhotos ).not.toHaveBeenCalled( );
+    expect( mockFileOriginalDevicePhotosForDeletion ).not.toHaveBeenCalled( );
     expect( useStore.getState( ).originalDevicePhotoUris ).toEqual( [] );
     expect( useStore.getState( ).removedOriginalDevicePhotoUris ).toEqual( ["ph://REMOVED"] );
     expect( shouldPromptDeleteOriginalPhotos( ) ).toBe( true );
@@ -82,7 +83,7 @@ describe( "shouldPromptDeleteOriginalPhotos", ( ) => {
 
       useStore.getState( ).deletePhotoFromObservation( "file:///local/camera.jpg" );
 
-      expect( mockDeleteOriginalDevicePhotos ).not.toHaveBeenCalled( );
+      expect( mockFileOriginalDevicePhotosForDeletion ).not.toHaveBeenCalled( );
       expect( useStore.getState( ).cameraRollUris ).toEqual( [] );
       expect( useStore.getState( ).removedOriginalDevicePhotoUris ).toEqual( ["ph://CAMERA-ROLL"] );
     },
@@ -109,6 +110,6 @@ describe( "shouldPromptDeleteOriginalPhotos", ( ) => {
 
     useStore.getState( ).deletePhotoFromObservation( "file:///local/photo.jpg" );
 
-    expect( mockDeleteOriginalDevicePhotos ).not.toHaveBeenCalled( );
+    expect( mockFileOriginalDevicePhotosForDeletion ).not.toHaveBeenCalled( );
   } );
 } );
