@@ -1,3 +1,6 @@
+import {
+  useExploreGridOverlays,
+} from "components/Explore/ExploreV2/hooks/useExploreDisplaySettings";
 import { BottomSheet, Checkbox, Heading4 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
@@ -15,12 +18,15 @@ interface Props {
 // Options that only affect the Observations view
 const GridOverlaysSheet = ( { onPressClose, showGridOverlays, myObs }: Props ) => {
   const { t } = useTranslation( );
-  const overlays = useStore( state => ( myObs
-    ? state.layout.myObsGridOverlays
-    : state.layout.exploreGridOverlays ) );
-  const setOverlay = useStore( state => ( myObs
-    ? state.layout.setMyObsGridOverlay
-    : state.layout.setExploreGridOverlay ) );
+  const explore = useExploreGridOverlays( );
+  const myObsOverlays = useStore( state => state.layout.myObsGridOverlays );
+  const setMyObsOverlay = useStore( state => state.layout.setMyObsGridOverlay );
+  const overlays = myObs
+    ? myObsOverlays
+    : explore.overlays;
+  const setOverlay = myObs
+    ? setMyObsOverlay
+    : explore.setOverlay;
   const options: { key: keyof ExploreGridOverlays; label: string }[] = [
     { key: "commonName", label: t( "Common-name" ) },
     { key: "scientificName", label: t( "Scientific-name" ) },

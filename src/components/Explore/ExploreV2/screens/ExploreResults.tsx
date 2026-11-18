@@ -28,6 +28,7 @@ import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import useExcludedSpecies
   from "components/Explore/ExploreV2/hooks/useExcludedSpecies";
+import { useExploreLayoutKey } from "components/Explore/ExploreV2/hooks/useExploreDisplaySettings";
 import ExploreV2IdentificationsView
   from "components/Explore/ExploreV2/screens/ExploreV2IdentificationsView";
 import ExploreV2SpeciesView
@@ -149,7 +150,7 @@ const ExploreResults = ( ) => {
   const [identificationsCount, setIdentificationsCount] = useState<number | null>( null );
   const observationsSortLabels = useObservationsSortLabels( );
   const speciesSortLabels = useSpeciesSortLabels( );
-  const { layout, writeLayoutToStorage } = useStoredLayout( "exploreV2ObservationsLayout" );
+  const { layout, writeLayoutToStorage } = useStoredLayout( useExploreLayoutKey( ) );
 
   const showMap = layout === "map";
 

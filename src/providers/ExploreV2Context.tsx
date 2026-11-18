@@ -362,12 +362,21 @@ const ExploreV2Context = React.createContext<ExploreV2ContextValue | undefined>(
   undefined,
 );
 
+// Whether this Explore was opened from a link on the Hotspots view, which
+// keeps a layout and grid overlays of its own. False outside any Explore.
+const ExploreFromHotspotContext = React.createContext( false );
+
+export const useExploreFromHotspot = ( ) => React.useContext( ExploreFromHotspotContext );
+
 interface ExploreV2ProviderProps {
   children: React.ReactNode;
   initialState: ExploreV2State;
+  fromHotspot?: boolean;
 }
 
-export const ExploreV2Provider = ( { children, initialState }: ExploreV2ProviderProps ) => {
+export const ExploreV2Provider = ( {
+  children, initialState, fromHotspot = false,
+}: ExploreV2ProviderProps ) => {
   const [state, dispatch] = React.useReducer( exploreV2Reducer, initialState );
 
   const value = React.useMemo(
@@ -377,7 +386,9 @@ export const ExploreV2Provider = ( { children, initialState }: ExploreV2Provider
 
   return (
     <ExploreV2Context value={value}>
-      {children}
+      <ExploreFromHotspotContext value={fromHotspot}>
+        {children}
+      </ExploreFromHotspotContext>
     </ExploreV2Context>
   );
 };

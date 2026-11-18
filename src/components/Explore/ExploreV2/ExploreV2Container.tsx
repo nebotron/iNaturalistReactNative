@@ -86,7 +86,7 @@ const ExploreV2Container = ( ) => {
   } );
 
   return (
-    <ExploreV2Provider initialState={initialState}>
+    <ExploreV2Provider initialState={initialState} fromHotspot={fromHotspot}>
       {isRootExplore && <LastSearchPersister />}
       {fromHotspot && <HotspotLinkViewPersister />}
       <ExploreStackNavigator showBackButton={!isRootExplore} />

@@ -34,6 +34,9 @@ import { resolveExcludedSpeciesIds } from "components/Explore/ExploreV2/helpers/
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import useApplySavedSearch from "components/Explore/ExploreV2/hooks/useApplySavedSearch";
 import { fetchNearbyCoords } from "components/Explore/ExploreV2/hooks/useExcludedSpecies";
+import {
+  useExploreGridOverlays, useExploreLayoutKey,
+} from "components/Explore/ExploreV2/hooks/useExploreDisplaySettings";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import ExploreLocationSearchModal from "components/Explore/Modals/ExploreLocationSearchModal";
@@ -120,8 +123,8 @@ const AdvancedSearch = ( ) => {
     [draft],
   );
 
-  const { layout: observationsLayout } = useStoredLayout( "exploreV2ObservationsLayout" );
-  const gridOverlays = useStore( state => state.layout.exploreGridOverlays );
+  const { layout: observationsLayout } = useStoredLayout( useExploreLayoutKey( ) );
+  const { overlays: gridOverlays } = useExploreGridOverlays( );
   const savedSearches = useStore( state => state.exploreSavedSearches.searches );
   const [pendingExit, setPendingExit] = useState( false );
   const [showSaveSheet, setShowSaveSheet] = useState( false );

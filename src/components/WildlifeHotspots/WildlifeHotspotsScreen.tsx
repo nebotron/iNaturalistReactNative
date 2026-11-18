@@ -784,8 +784,8 @@ const WildlifeHotspotsScreen = ( {
       },
       activeTab: OBSERVATIONS_TAB,
       // Explore opens on the view and sort last chosen from a hotspot link,
-      // overriding activeTab and sortBy here. Its layout and grid overlays
-      // are Explore's own, so they carry over as left.
+      // overriding activeTab and sortBy here, and keeps a layout and grid
+      // overlays of its own, apart from the Explore tab's
       fromHotspot: true,
       ...( taxon && { taxon } ),
       lat: hotspot.area.lat,

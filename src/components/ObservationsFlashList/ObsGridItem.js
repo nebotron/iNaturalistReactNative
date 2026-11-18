@@ -1,6 +1,9 @@
 // @flow
 
 import classNames from "classnames";
+import {
+  useExploreGridOverlays,
+} from "components/Explore/ExploreV2/hooks/useExploreDisplaySettings";
 import FaveButton from "components/ObsDetails/FaveButton";
 import {
   Body2, Body4, DateDisplay, DisplayTaxonName, INatIcon,
@@ -67,7 +70,7 @@ const ObsGridItem = ( {
   squareCorners = false,
 }: Props ): Node => {
   const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
-  const exploreOverlays = useStore( state => state.layout.exploreGridOverlays );
+  const { overlays: exploreOverlays } = useExploreGridOverlays( );
   const myObsOverlays = useStore( state => state.layout.myObsGridOverlays );
   const overlays = explore
     ? exploreOverlays

@@ -47,6 +47,7 @@ const BACKED_UP: BackedUp[] = [
       "myObservationsLayout",
       "exploreObservationsLayout",
       "exploreV2ObservationsLayout",
+      "hotspotExploreObservationsLayout",
       "camera-pair-votes",
       "camera-pair-zooms",
       "speciesGameStats",

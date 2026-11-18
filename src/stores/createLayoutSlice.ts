@@ -134,6 +134,8 @@ export interface LayoutSlice {
     ) => void;
     exploreGridOverlays: ExploreGridOverlays;
     setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    hotspotGridOverlays: ExploreGridOverlays | null;
+    setHotspotGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
     hotspotLinkView: HotspotLinkView;
     setHotspotLinkView: ( view: Partial<HotspotLinkView> ) => void;
     myObsGridOverlays: ExploreGridOverlays;
@@ -372,6 +374,18 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         exploreGridOverlays: { ...state.layout.exploreGridOverlays, [key]: value },
+      },
+    } ) ),
+    // Grid overlays for Explore opened from a hotspot link, kept apart from
+    // the Explore tab's. Null until changed there, following the Explore tab's.
+    hotspotGridOverlays: null,
+    setHotspotGridOverlay: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotGridOverlays: {
+          ...( state.layout.hotspotGridOverlays ?? state.layout.exploreGridOverlays ),
+          [key]: value,
+        },
       },
     } ) ),
     hotspotLinkView: {
