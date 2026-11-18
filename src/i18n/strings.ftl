@@ -781,6 +781,8 @@ EXPLORE-OBSERVERS = EXPLORE OBSERVERS
 EXPLORE-SPECIES = EXPLORE SPECIES
 # Button that renders and saves the stabilized video
 EXPORT = EXPORT
+# Error title shown when a photo could not be deleted from an observation
+Failed-to-delete-photo = Failed to delete photo
 Failed-to-delete-sound = Failed to delete sound
 Failed-to-load-game-data-Please-try-again = Failed to load game data. Please try again.
 Failed-to-load-hotspot-data = Failed to load hotspot data

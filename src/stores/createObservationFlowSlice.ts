@@ -4,6 +4,7 @@ import cloneDeep from "lodash/cloneDeep";
 import isEmpty from "lodash/isEmpty";
 import pull from "lodash/pull";
 import remove from "lodash/remove";
+import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import Sound from "realmModels/Sound";
 import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
@@ -277,24 +278,7 @@ const keysAndValuesToJSON = (
 const observationPhotoMatchesUri = (
   obsPhoto: RealmObservationPojo["observationPhotos"][number],
   uri: string,
-): boolean => {
-  const photo = obsPhoto?.photo;
-  if ( !photo ) {
-    return false;
-  }
-
-  const candidateUris = new Set(
-    [
-      Photo.getLocalPhotoUri( photo.localFilePath ),
-      photo.url,
-      Photo.displayLocalOrRemoteSquarePhoto( photo ),
-      Photo.displayCropSourcePhoto( photo ),
-      obsPhoto.originalPhotoUri,
-    ].filter( ( candidateUri ): candidateUri is string => !!candidateUri ),
-  );
-
-  return candidateUris.has( uri );
-};
+): boolean => ObservationPhoto.matchesUri( obsPhoto, uri );
 
 const updateObservationKeysWithState = (
   keysAndValues: Partial<RealmObservationPojo>,

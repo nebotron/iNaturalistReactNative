@@ -1,7 +1,87 @@
+import inatjs from "inaturalistjs";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 
+jest.mock( "components/LoginSignUp/AuthenticationService", ( ) => ( {
+  getJWT: jest.fn( async ( ) => "jwt" ),
+} ) );
+
 describe( "ObservationPhoto", ( ) => {
+  describe( "deletePhoto", ( ) => {
+    const syncedObsPhoto = {
+      uuid: "synced-obs-photo",
+      _synced_at: new Date( ),
+      photo: {
+        url: "https://static.inaturalist.org/photos/1/square.jpg",
+        localFilePath: "photoUploads/synced.jpg",
+      },
+    };
+    const localObsPhoto = {
+      uuid: "local-obs-photo",
+      _synced_at: null,
+      photo: { localFilePath: "photoUploads/local.jpg" },
+    };
+    const observation = { uuid: "obs", observationPhotos: [syncedObsPhoto, localObsPhoto] };
+
+    beforeEach( ( ) => {
+      jest.mocked( inatjs.observation_photos.delete ).mockReset( );
+      jest.spyOn( Photo, "deletePhotoFromDeviceStorage" ).mockReset( ).mockResolvedValue( );
+    } );
+
+    it( "deletes an uploaded photo on the server when shown by its local file", async ( ) => {
+      const localUri = Photo.getLocalPhotoUri( syncedObsPhoto.photo.localFilePath );
+      await ObservationPhoto.deletePhoto( localUri, observation );
+      expect( inatjs.observation_photos.delete ).toHaveBeenCalledWith(
+        { id: "synced-obs-photo" },
+        { api_token: "jwt" },
+      );
+      expect( Photo.deletePhotoFromDeviceStorage ).toHaveBeenCalledWith( localUri );
+    } );
+
+    it( "deletes an uploaded photo on the server when shown by a remote size", async ( ) => {
+      await ObservationPhoto.deletePhoto(
+        "https://static.inaturalist.org/photos/1/large.jpg",
+        observation,
+      );
+      expect( inatjs.observation_photos.delete ).toHaveBeenCalledWith(
+        { id: "synced-obs-photo" },
+        expect.anything( ),
+      );
+    } );
+
+    it( "does not call the server for a photo that was never uploaded", async ( ) => {
+      await ObservationPhoto.deletePhoto(
+        Photo.getLocalPhotoUri( localObsPhoto.photo.localFilePath ),
+        observation,
+      );
+      expect( inatjs.observation_photos.delete ).not.toHaveBeenCalled( );
+      expect( Photo.deletePhotoFromDeviceStorage ).toHaveBeenCalled( );
+    } );
+
+    it( "keeps the local photo when the server delete fails", async ( ) => {
+      jest.mocked( inatjs.observation_photos.delete ).mockRejectedValue( new Error( "offline" ) );
+      const localUri = Photo.getLocalPhotoUri( syncedObsPhoto.photo.localFilePath );
+      await expect( ObservationPhoto.deletePhoto( localUri, observation ) ).rejects.toThrow( );
+      expect( Photo.deletePhotoFromDeviceStorage ).not.toHaveBeenCalled( );
+    } );
+
+    it( "treats a photo already gone from the server as deleted", async ( ) => {
+      // A 404 page isn't JSON, so the API layer rethrows the raw error.
+      jest.mocked( inatjs.observation_photos.delete ).mockRejectedValue(
+        Object.assign( new Error( "not found" ), {
+          response: {
+            status: 404,
+            url: "u",
+            json: async ( ) => { throw new Error( "JSON Parse error" ); },
+          },
+        } ),
+      );
+      const localUri = Photo.getLocalPhotoUri( syncedObsPhoto.photo.localFilePath );
+      await ObservationPhoto.deletePhoto( localUri, observation );
+      expect( Photo.deletePhotoFromDeviceStorage ).toHaveBeenCalledWith( localUri );
+    } );
+  } );
+
   describe( "createObsPhotosWithPosition", ( ) => {
     it( "retains a crop framed in the Group Photos grid", async ( ) => {
       const [obsPhoto] = await ObservationPhoto.createObsPhotosWithPosition(

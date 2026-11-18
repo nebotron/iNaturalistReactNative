@@ -15,10 +15,12 @@ import React, {
   useState,
   useSyncExternalStore,
 } from "react";
+import { Alert } from "react-native";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import type { RealmPhoto } from "realmModels/types";
 import { subscribeAnimalCropLog } from "sharedHelpers/animalCropLog";
+import { log } from "sharedHelpers/logger";
 import { cropSignature, onlineSuggestionsQueryKey } from "sharedHelpers/suggestionsQueryKey";
 import {
   useCurrentUser,
@@ -28,6 +30,7 @@ import {
 } from "sharedHooks";
 import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import type { TopSuggestionType } from "sharedHooks/useSuggestions/types";
+import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 
 import fetchCoarseUserLocation from "../../sharedHelpers/fetchCoarseUserLocation";
@@ -152,9 +155,11 @@ const reducer = ( state, action ) => {
 };
 
 const { useRealm } = RealmContext;
+const logger = log.extend( "SuggestionsContainer" );
 
 const SuggestionsContainer = ( ) => {
   const realm = useRealm( );
+  const { t } = useTranslation( );
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const { isConnected } = useNetInfo( );
@@ -534,7 +539,17 @@ const SuggestionsContainer = ( ) => {
   }, [createUploadParams, navigation, shouldUseEvidenceLocation] );
 
   const onDeletePhoto = useCallback( async ( uriToDelete: string ) => {
-    await ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
+    try {
+      await ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
+    } catch ( deletePhotoError ) {
+      // Still on the server: keep it here too, so the observation matches.
+      logger.error( "Failed to delete photo", deletePhotoError );
+      Alert.alert(
+        t( "Failed-to-delete-photo" ),
+        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
+      );
+      return;
+    }
     deletePhotoFromObservation( uriToDelete );
     trackImageDeleted( uriToDelete );
     afterMediaDeleted( );
@@ -543,6 +558,7 @@ const SuggestionsContainer = ( ) => {
     currentObservation,
     deletePhotoFromObservation,
     realm,
+    t,
     trackImageDeleted,
   ] );
 
