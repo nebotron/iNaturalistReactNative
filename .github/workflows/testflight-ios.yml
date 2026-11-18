@@ -51,6 +51,10 @@ on:
         type: choice
         options: [xcode-27, macos-26, macos-26-intel]
         default: xcode-27
+      fallback:
+        description: Move to the next image if this one gets no runner.
+        type: boolean
+        default: true
 
 # One run at a time per starting image, so builds on different images can
 # run side by side. Their timestamp build numbers keep uploads distinct.
@@ -68,7 +72,7 @@ jobs:
   # Watches attempt-1 on xcode-27 or macos-26 and moves the build to the next
   # image if no runner picks it up within 30 seconds of being queued.
   fallback:
-    if: ${{ ( inputs.runner || 'xcode-27' ) != 'macos-26-intel' }}
+    if: ${{ inputs.fallback != false && ( inputs.runner || 'xcode-27' ) != 'macos-26-intel' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -108,7 +112,7 @@ jobs:
 
   attempt-2:
     needs: attempt-1
-    if: ${{ !cancelled() && needs.attempt-1.result != 'success' && needs.attempt-1.outputs.started != 'true' }}
+    if: ${{ !cancelled() && inputs.fallback != false && needs.attempt-1.result != 'success' && needs.attempt-1.outputs.started != 'true' }}
     uses: ./.github/workflows/testflight-ios-build.yml
     secrets: inherit
     with:
