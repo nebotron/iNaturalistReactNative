@@ -902,9 +902,6 @@ Hotspot-parking-minutes = Parking estimate (min)
 Hotspot-plan-candidates = Trip plan candidates
 # Label for the setting for how many recent addresses Wildlife Hotspots remembers
 Hotspot-recent-addresses = Recent addresses to remember
-# Label for the setting that routes to the nearest parking lot near each hotspot
-# instead of the nearest point on any road
-Hotspot-route-to-parking = Route to nearest parking
 # Section header for hotspot finder algorithm settings in the Explore filters modal
 HOTSPOT-SETTINGS = HOTSPOT SETTINGS
 # Label for the setting for how much each tap changes the trip time limit
@@ -1542,8 +1539,6 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 # Should be 16 characters or fewer or it will be ellipsized.
 OTHERS--notifications = OTHERS
 Overwrite-saved-filter = Overwrite saved filter
-# Letter on the map marker where a route to a wildlife hotspot parks
-Parking-map-marker = P
 PASSWORD = PASSWORD
 # Accessibility label for a button that pauses audio
 Pause--audio = Pause

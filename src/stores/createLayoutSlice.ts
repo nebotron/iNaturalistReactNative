@@ -32,9 +32,6 @@ export interface HotspotSettings {
   hotspotRecentAddresses: number;
   hotspotTimeStepMinutes: number;
   hotspotMaxPlanCandidates: number;
-  // Route to the nearest public parking near each hotspot instead of the
-  // point on a road nearest its center
-  hotspotRouteToParking: boolean;
 }
 
 // Configured only from the gear button on the Wildlife Hotspots map
@@ -47,7 +44,6 @@ export const DEFAULT_HOTSPOT_SETTINGS: HotspotSettings = {
   hotspotRecentAddresses: 10,
   hotspotTimeStepMinutes: 15,
   hotspotMaxPlanCandidates: 40,
-  hotspotRouteToParking: false,
 };
 
 export interface ExploreGridOverlays {

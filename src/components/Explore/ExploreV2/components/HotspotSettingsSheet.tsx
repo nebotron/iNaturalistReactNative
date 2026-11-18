@@ -1,5 +1,5 @@
 import {
-  Body2, Heading4, INatIconButton, SwitchRow,
+  Body2, Heading4, INatIconButton,
 } from "components/SharedComponents";
 import {
   KeyboardAvoidingView, Modal, ScrollView, TextInput, View,
@@ -103,7 +103,6 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
       FIELDS.map( field => [field.key, String( saved[field.key] )] ),
     ) as Record<NumericSettingKey, string>,
   );
-  const [routeToParking, setRouteToParking] = useState( saved.hotspotRouteToParking );
 
   const setDraft = ( key: NumericSettingKey, text: string ) => {
     setDrafts( prev => ( { ...prev, [key]: text } ) );
@@ -114,9 +113,6 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
       const next = parseField( field, drafts[field.key], saved[field.key] );
       if ( next !== saved[field.key] ) setHotspotSetting( field.key, next );
     } );
-    if ( routeToParking !== saved.hotspotRouteToParking ) {
-      setHotspotSetting( "hotspotRouteToParking", routeToParking );
-    }
     onPressClose( );
   };
 
@@ -167,12 +163,6 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
             keyboardShouldPersistTaps="handled"
           >
             <View className="px-7 pt-2 pb-2">
-              <SwitchRow
-                classNames="mb-5"
-                label={t( "Hotspot-route-to-parking" )}
-                onValueChange={setRouteToParking}
-                value={routeToParking}
-              />
               {FIELDS.map( field => (
                 <HotspotSettingField
                   key={field.key}
