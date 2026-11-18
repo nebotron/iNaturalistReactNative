@@ -2968,6 +2968,19 @@ RCT_EXPORT_METHOD( availableMemoryBytes
   resolve( @( (double)os_proc_available_memory( ) ) );
 }
 
+// The app's footprint (what iOS's memory limit is measured on) and what it may
+// still allocate, for memoryWatermark.ts to say which screen the memory went to
+// before an out-of-memory kill, which leaves nothing in the log itself.
+RCT_EXPORT_METHOD( memoryStats
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  resolve( @{
+    @"footprintMB": @( footprintMB( ) ),
+    @"freeMB":      @( freeMB( ) ),
+  } );
+}
+
 // Decodes a camera raw through Core Image's RAW pipeline and writes it as a
 // JPEG, scaled to fit maxPixel.
 //
