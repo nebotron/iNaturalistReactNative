@@ -1183,16 +1183,6 @@ const WildlifeHotspotsScreen = ( {
           )}
         />
 
-        <INatIconButton
-          className="absolute top-2 right-2 bg-white rounded-full w-10 h-10"
-          icon="gear"
-          size={20}
-          color={colors.darkGray}
-          onPress={() => setShowSettingsSheet( true )}
-          accessibilityLabel={t( "Change-hotspot-settings" )}
-          testID="WildlifeHotspotsScreen.settings"
-        />
-
         {( loading || hotspotRouteLoading ) && (
           <View
             className={"absolute top-0 left-0 right-0 bottom-0 "
@@ -1206,6 +1196,18 @@ const WildlifeHotspotsScreen = ( {
             </Body2>
           </View>
         )}
+
+        {/* After the loading overlay so settings can be changed mid-search; a
+            change starts a new search that supersedes the running one. */}
+        <INatIconButton
+          className="absolute top-2 right-2 bg-white rounded-full w-10 h-10"
+          icon="gear"
+          size={20}
+          color={colors.darkGray}
+          onPress={() => setShowSettingsSheet( true )}
+          accessibilityLabel={t( "Change-hotspot-settings" )}
+          testID="WildlifeHotspotsScreen.settings"
+        />
 
         {/* Rendered inside the map container rather than hanging off the top
             panel, since Android ignores touches outside a parent's bounds. */}
