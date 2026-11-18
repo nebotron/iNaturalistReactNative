@@ -5,6 +5,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
+import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useEffect,
@@ -150,7 +151,10 @@ const reducer = ( state, action ) => {
   }
 };
 
+const { useRealm } = RealmContext;
+
 const SuggestionsContainer = ( ) => {
+  const realm = useRealm( );
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const { isConnected } = useNetInfo( );
@@ -530,11 +534,17 @@ const SuggestionsContainer = ( ) => {
   }, [createUploadParams, navigation, shouldUseEvidenceLocation] );
 
   const onDeletePhoto = useCallback( async ( uriToDelete: string ) => {
-    await ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
+    await ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
     deletePhotoFromObservation( uriToDelete );
     trackImageDeleted( uriToDelete );
     afterMediaDeleted( );
-  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation, trackImageDeleted] );
+  }, [
+    afterMediaDeleted,
+    currentObservation,
+    deletePhotoFromObservation,
+    realm,
+    trackImageDeleted,
+  ] );
 
   // Cropping here only reframes what computer vision scores (re-scored by the
   // crop log effect above); the observation photo stays as it is.

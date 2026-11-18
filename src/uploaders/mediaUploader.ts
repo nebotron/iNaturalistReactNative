@@ -1,3 +1,4 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import { createOrUpdateEvidence } from "api/observations";
 import inatjs from "inaturalistjs";
 import type Realm from "realm";
@@ -11,10 +12,14 @@ import type {
   RealmPhoto,
   RealmSound,
 } from "realmModels/types";
+import { log } from "sharedHelpers/logger";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import prepareMediaForUpload from "uploaders/dataTransformation/prepareMediaForUpload";
 import { trackEvidenceUpload } from "uploaders/utils/progressTracker";
 import markRecordUploaded from "uploaders/utils/realmSync";
 import withRetry from "uploaders/utils/retry";
+
+const logger = log.extend( "mediaUploader" );
 
 export type EvidenceType = "Photo" | "ObservationPhoto" | "Sound" | "ObservationSound";
 export type ActionType = "upload" | "attach" | "update";
@@ -372,6 +377,43 @@ const createMediaOperations = (
   return operations;
 };
 
+// An unsynced photo whose file is gone can never upload: reading it hangs until
+// the upload times out, on every attempt, so the whole observation stays stuck.
+// Deleting a photo used to remove its file while leaving the saved record, so
+// drop such records here; there is nothing left of them to send.
+async function removeUnsyncedPhotosWithMissingFiles(
+  observation: RealmObservation,
+  realm: Realm,
+): Promise<void> {
+  const unsynced = ( observation?.observationPhotos || [] ).filter( op => !op.wasSynced( ) );
+  if ( unsynced.length === 0 ) return;
+
+  const missing: RealmObservationPhoto[] = [];
+  await Promise.all( unsynced.map( async obsPhoto => {
+    try {
+      const { photo } = obsPhoto;
+      // An uploaded photo only waits on its attach, which doesn't read the file.
+      if ( photo?.id != null ) return;
+      const uri = Photo.getLocalPhotoUri( photo?.localFilePath );
+      if ( !uri ) return;
+      if ( await exists( stripFilePrefix( uri ) ) === false ) missing.push( obsPhoto );
+    } catch {
+      // Unreadable record or file check: leave it to the upload's own handling.
+    }
+  } ) );
+  if ( missing.length === 0 ) return;
+
+  logger.warn(
+    `Removing ${missing.length} photo(s) with missing files from observation `
+    + `${observation.uuid} before upload`,
+  );
+  realm.write( ( ) => {
+    missing.forEach( obsPhoto => {
+      if ( obsPhoto.isValid?.( ) !== false ) realm.delete( obsPhoto );
+    } );
+  } );
+}
+
 async function uploadObservationMedia(
   observation: RealmObservation,
   options: UploadOptions,
@@ -385,6 +427,8 @@ async function uploadObservationMedia(
       unsyncedObservationSounds: [],
     };
   }
+
+  await removeUnsyncedPhotosWithMissingFiles( observation, realm );
 
   const mediaItems = filterMediaForUpload( observation );
 

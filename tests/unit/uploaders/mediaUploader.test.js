@@ -1,3 +1,4 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import { createOrUpdateEvidence } from "api/observations";
 import inatjs from "inaturalistjs";
 import Photo from "realmModels/Photo";
@@ -68,6 +69,46 @@ describe( "mediaUploader", () => {
         modifiedPhotosNeedingReupload: [],
         unsyncedObservationSounds: observation.observationSounds,
       } );
+    } );
+
+    it( "drops never-uploaded photos whose file is gone instead of uploading them", async () => {
+      jest.mocked( exists ).mockImplementation( async path => !path.includes( "deleted" ) );
+      const keptObsPhoto = {
+        uuid: "kept",
+        wasSynced: () => false,
+        photo: { uuid: "photo-kept", localFilePath: "photoUploads/kept.jpg" },
+      };
+      const deletedObsPhoto = {
+        uuid: "deleted",
+        wasSynced: () => false,
+        photo: { uuid: "photo-deleted", localFilePath: "photoUploads/deleted.jpg" },
+      };
+      const uploadedObsPhoto = {
+        uuid: "uploaded",
+        wasSynced: () => false,
+        photo: { id: 7, uuid: "photo-uploaded", localFilePath: "photoUploads/deleted-too.jpg" },
+      };
+      const observation = {
+        uuid: "obs-uuid-missing",
+        observationPhotos: [keptObsPhoto, deletedObsPhoto, uploadedObsPhoto],
+      };
+      const realm = {
+        write: jest.fn( cb => cb( ) ),
+        delete: jest.fn( obsPhoto => {
+          observation.observationPhotos = observation.observationPhotos
+            .filter( op => op !== obsPhoto );
+        } ),
+      };
+
+      await uploadObservationMedia( observation, { api_token: "t" }, realm );
+
+      // The already-uploaded photo only needs attaching, which needs no file.
+      expect( realm.delete ).toHaveBeenCalledTimes( 1 );
+      expect( realm.delete ).toHaveBeenCalledWith( deletedObsPhoto );
+      expect( observation.observationPhotos ).toEqual( [keptObsPhoto, uploadedObsPhoto] );
+      const uploadedUuids = mockedPrepareMediaForUpload.mock.calls.map( call => call[0].uuid );
+      expect( uploadedUuids ).not.toContain( "photo-deleted" );
+      expect( uploadedUuids ).toContain( "photo-kept" );
     } );
 
     it( "should handle empty media arrays", async () => {

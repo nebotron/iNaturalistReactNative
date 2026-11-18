@@ -15,6 +15,7 @@ import { preloadGroupedPhoto } from "components/SharedComponents/ImageCrop/keepC
 import { View } from "components/styledComponents";
 import cloneDeep from "lodash/cloneDeep";
 import type { SharedStackParamList } from "navigation/types";
+import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useEffect,
@@ -71,7 +72,10 @@ const RESUME_CROP_SAVE_DELAY_MS = 1000;
 // the marker was the largest group in the log without distinguishing anything.
 const SLOW_PHOTO_MS = 1500;
 
+const { useRealm } = RealmContext;
+
 const ImageCropEditor = ( ) => {
+  const realm = useRealm( );
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
   const { t } = useTranslation( );
@@ -722,7 +726,9 @@ const ImageCropEditor = ( ) => {
         ? Photo.displayCropSourcePhoto( obsPhoto.photo )
         : localImageUri;
       if ( uriToDelete ) {
-        void ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
+        // Pass realm so the saved record goes with the file: otherwise the
+        // observation keeps a photo whose file is gone and never uploads.
+        void ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
         deletePhotoFromObservation( uriToDelete );
       }
       onCropSaved?.( );
@@ -741,6 +747,7 @@ const ImageCropEditor = ( ) => {
     navigation,
     observationPhotoUuid,
     onCropSaved,
+    realm,
     setGroupCropResume,
     setGroupedPhotos,
   ] );
