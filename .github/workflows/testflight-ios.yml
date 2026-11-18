@@ -25,30 +25,37 @@
 # run, and the account soon hits Apple's certificate limit ("Choose a
 # certificate to revoke").
 #
+# Runner images: App Store Connect wants apps built with the iOS 27 SDK from
+# April 2027 (ITMS-90725), and only GitHub's xcode-27 image (Arm, macOS 27,
+# a preview as of November 2026) has Xcode 27. macos-26 and macos-26-intel
+# stop at Xcode 26.6 and the iOS 26.5 SDK: uploads from them are accepted
+# until April 2027, with that warning, and the build step warns too.
+#
 # Runner fallback: during US working hours the free macOS pools often have
-# no machine for this repo. A macos-26 runner either turns up within seconds
-# or not for 5-15 minutes, so when a macos-26 build hasn't got a runner 30
-# seconds after it was queued, the `fallback` job dispatches a new run on
-# macos-26-intel (separate hardware, same Xcode; slower, with its own caches)
-# and cancels this one. Separately, if the first attempt ends "not acquired
-# by Runner of type hosted" after ~15 minutes queued with no steps run,
-# attempt-2 tries the other image. A build that started and failed is not
-# retried, and cancelling the run stops the chain.
+# no machine for this repo. A runner either turns up within seconds or not
+# for 5-15 minutes, so when an xcode-27 or macos-26 build hasn't got a runner
+# 30 seconds after it was queued, the `fallback` job dispatches a new run on
+# the next image (xcode-27 -> macos-26 -> macos-26-intel; macos-26-intel is
+# separate, slower hardware with its own caches) and cancels this one.
+# Separately, if the first attempt ends "not acquired by Runner of type
+# hosted" after ~15 minutes queued with no steps run, attempt-2 tries the
+# next image. A build that started and failed is not retried, and cancelling
+# the run stops the chain.
 ##
 name: TestFlight iOS
 on:
   workflow_dispatch:
     inputs:
       runner:
-        description: macOS runner image to try first; the other is tried if it gets no runner.
+        description: macOS runner image to try first; the next is tried if it gets no runner.
         type: choice
-        options: [macos-26, macos-26-intel]
-        default: macos-26
+        options: [xcode-27, macos-26, macos-26-intel]
+        default: xcode-27
 
 # One run at a time per starting image, so builds on different images can
 # run side by side. Their timestamp build numbers keep uploads distinct.
 concurrency:
-  group: testflight-ios-${{ inputs.runner || 'macos-26' }}
+  group: testflight-ios-${{ inputs.runner || 'xcode-27' }}
   cancel-in-progress: false
 
 jobs:
@@ -56,12 +63,12 @@ jobs:
     uses: ./.github/workflows/testflight-ios-build.yml
     secrets: inherit
     with:
-      runner: ${{ inputs.runner || 'macos-26' }}
+      runner: ${{ inputs.runner || 'xcode-27' }}
 
-  # Watches attempt-1 on macos-26 and moves the build to macos-26-intel if no
-  # runner picks it up within 30 seconds of being queued.
+  # Watches attempt-1 on xcode-27 or macos-26 and moves the build to the next
+  # image if no runner picks it up within 30 seconds of being queued.
   fallback:
-    if: ${{ ( inputs.runner || 'macos-26' ) == 'macos-26' }}
+    if: ${{ ( inputs.runner || 'xcode-27' ) != 'macos-26-intel' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -69,8 +76,10 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
+      FROM: ${{ inputs.runner || 'xcode-27' }}
+      TO: ${{ ( inputs.runner || 'xcode-27' ) == 'xcode-27' && 'macos-26' || 'macos-26-intel' }}
     steps:
-      - name: Move to macos-26-intel if macos-26 has no runner after 30 seconds
+      - name: Move to the next image if this one has no runner after 30 seconds
         run: |
           jobs_url="repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs"
           while true; do
@@ -92,9 +101,9 @@ jobs:
             fi
             sleep 3
           done
-          echo "No macos-26 runner after 30 seconds; moving the build to macos-26-intel."
+          echo "No $FROM runner after 30 seconds; moving the build to $TO."
           gh workflow run testflight-ios.yml --ref "${{ github.ref_name }}" \
-            -f runner=macos-26-intel
+            -f runner="$TO"
           gh run cancel ${{ github.run_id }}
 
   attempt-2:
@@ -103,4 +112,6 @@ jobs:
     uses: ./.github/workflows/testflight-ios-build.yml
     secrets: inherit
     with:
-      runner: ${{ inputs.runner == 'macos-26-intel' && 'macos-26' || 'macos-26-intel' }}
+      runner: >-
+        ${{ ( inputs.runner || 'xcode-27' ) == 'xcode-27' && 'macos-26'
+        || inputs.runner == 'macos-26' && 'macos-26-intel' || 'xcode-27' }}

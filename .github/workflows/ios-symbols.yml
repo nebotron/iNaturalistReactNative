@@ -102,7 +102,11 @@ jobs:
 
   rebuild:
     needs: resolve
-    runs-on: macos-26
+    # Only the xcode-27 image has Xcode 27, and only macos-26 has Xcode 26
+    runs-on: >-
+      ${{ ( startsWith( inputs.xcode, '/Applications/Xcode_27' )
+      || ( !inputs.xcode && startsWith( needs.resolve.outputs.xcode, '27.' ) ) )
+      && 'xcode-27' || 'macos-26' }}
     # A full archive without the TestFlight workflow's caches
     timeout-minutes: 180
     env:
