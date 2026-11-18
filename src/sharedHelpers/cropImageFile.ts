@@ -59,6 +59,9 @@ const cropImageFile = async (
   // Exposure gain from the crop editor's brightness slider, baked into the
   // cropped file. 1 leaves the pixels untouched.
   brightness = 1,
+  // Longest side written. Defaults to the upload size; 0 keeps the crop's
+  // full resolution.
+  maxSide = UPLOAD_MAX_SIDE,
 ): Promise<string> => {
   if ( !ImageCropper?.cropImage ) {
     throw new Error( "ImageCropper native module is unavailable" );
@@ -72,7 +75,7 @@ const cropImageFile = async (
     crop,
     imageWidth,
     imageHeight,
-    UPLOAD_MAX_SIDE,
+    maxSide || undefined,
   );
 
   try {
@@ -84,7 +87,7 @@ const cropImageFile = async (
       pixelCrop.height,
       outputPath,
       brightness,
-      UPLOAD_MAX_SIDE,
+      maxSide,
     );
     const croppedPath = result.path;
     // A crop that turned out black reached the grid with no error behind it.

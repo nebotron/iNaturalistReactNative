@@ -18,7 +18,11 @@ import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanima
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
-import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
+import {
+  imageZoomTransformToNormalizedCrop,
+  imageZoomTransformToNormalizedRect,
+} from "sharedHelpers/imageZoomTransformToCrop";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import {
@@ -68,7 +72,8 @@ interface Props {
   onDeletePhoto: ( uri: string ) => void;
   onClose: ( ) => void;
   onDeleteSound: ( uri: string ) => void;
-  onSharePhoto?: ( uri: string ) => void;
+  // crop is the part of the photo visible on screen, when it can be read.
+  onSharePhoto?: ( uri: string, crop?: NormalizedCrop ) => void;
   photos: Omit<PhotoItem, "type">[];
   sounds?: Omit<SoundItem, "type">[];
   selectedMediaIndex: number;
@@ -93,7 +98,9 @@ const MainMediaDisplay = ( {
   const { t } = useTranslation( );
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const [zooming, setZooming] = useState( false );
-  const imageDimensionsRef = useRef<{ width: number; height: number } | null>( null );
+  // Keyed by uri: every photo the carousel has rendered reports its size, so a
+  // single slot would hold whichever neighbour loaded last.
+  const imageDimensionsRef = useRef<Map<string, { width: number; height: number }>>( new Map( ) );
   const currentZoomRefRef = useRef<SharedZoomableImageRef | null>( null );
   const items = useMemo( ( ) => ( [
     ...photos.map( photo => ( { ...photo, type: "photo" as const } ) ),
@@ -139,10 +146,6 @@ const MainMediaDisplay = ( {
   const deleteSoundLabel = t( "Delete-sound" );
   const cropPhotoLabel = t( "CROP-PHOTO" );
 
-  const handleImageDimensionsChange = useCallback( ( dims: { width: number; height: number } ) => {
-    imageDimensionsRef.current = dims;
-  }, [] );
-
   const handleInteractionEnd = useCallback( ( ) => {
     const currentIndex = selectedMediaIndex;
     if ( currentIndex >= photos.length ) return;
@@ -150,7 +153,7 @@ const MainMediaDisplay = ( {
     const photo = photos[currentIndex];
     const photoUrl = Photo.displayLocalOrRemoteOriginalPhoto( photo );
     const zoomRef = currentZoomRefRef.current;
-    const imageDims = imageDimensionsRef.current;
+    const imageDims = imageDimensionsRef.current.get( photoUrl );
 
     if ( !zoomRef || !imageDims ) return;
 
@@ -171,6 +174,29 @@ const MainMediaDisplay = ( {
       // Silently fail if we can't read the transform or save the crop
     }
   }, [photos, selectedMediaIndex, screenWidth, screenHeight] );
+
+  // Share exactly what is on screen: the part of the photo inside the zoom
+  // viewport at its current pan and zoom.
+  const handleSharePress = useCallback( ( uri: string ) => {
+    if ( !onSharePhoto ) return;
+    const zoomRef = currentZoomRefRef.current;
+    const imageDims = imageDimensionsRef.current.get( uri );
+    const viewSize = zoomRef?.readViewSize( );
+    if ( !zoomRef || !imageDims || !viewSize ) {
+      onSharePhoto( uri );
+      return;
+    }
+    const crop = imageZoomTransformToNormalizedRect(
+      imageDims.width,
+      imageDims.height,
+      viewSize.width,
+      viewSize.height,
+      viewSize.width,
+      viewSize.height,
+      zoomRef.readTransform( ),
+    );
+    onSharePhoto( uri, crop );
+  }, [onSharePhoto] );
 
   const renderPhoto = ( photo: PhotoItem, photoIndex: number ) => {
     const uri = Photo.displayLocalOrRemoteOriginalPhoto( photo );
@@ -197,7 +223,7 @@ const MainMediaDisplay = ( {
             }
           }}
           onSwipeToClose={onClose}
-          onImageDimensionsChange={handleImageDimensionsChange}
+          onImageDimensionsChange={dims => imageDimensionsRef.current.set( uri, dims )}
           onInteractionEnd={handleInteractionEnd}
           onScaleChange={isSelected
             ? handleScaleChange
@@ -250,7 +276,7 @@ const MainMediaDisplay = ( {
                 ) }
                 { onSharePhoto && (
                   <TransparentCircleButton
-                    onPress={( ) => onSharePhoto( uri )}
+                    onPress={( ) => handleSharePress( uri )}
                     icon="share"
                     accessibilityLabel={t( "Share" )}
                     testID="MediaViewer.shareButton"
@@ -262,7 +288,7 @@ const MainMediaDisplay = ( {
         { editable && onSharePhoto && (
           <View className="absolute bottom-4 left-4">
             <INatIconButton
-              onPress={( ) => onSharePhoto( uri )}
+              onPress={( ) => handleSharePress( uri )}
               icon="share"
               color={colors.white}
               className={iconBtnClass}

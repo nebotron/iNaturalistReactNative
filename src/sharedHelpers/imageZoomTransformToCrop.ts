@@ -9,12 +9,16 @@ export interface ImageZoomTransform {
   focalY: number;
 }
 
-export function imageZoomTransformToNormalizedCrop(
+// The part of the image inside a cropWidth x cropHeight frame centred in the
+// viewport, as a normalized crop. Pass the viewport's own size as the frame to
+// get exactly what is visible on screen.
+export function imageZoomTransformToNormalizedRect(
   imageWidth: number,
   imageHeight: number,
   viewportWidth: number,
   viewportHeight: number,
-  cropSize: number,
+  cropWidth: number,
+  cropHeight: number,
   transform: ImageZoomTransform,
 ): NormalizedCrop {
   "worklet";
@@ -24,7 +28,8 @@ export function imageZoomTransformToNormalizedCrop(
     || imageHeight <= 0
     || viewportWidth <= 0
     || viewportHeight <= 0
-    || cropSize <= 0
+    || cropWidth <= 0
+    || cropHeight <= 0
     || transform.scale <= 0
   ) {
     return {
@@ -42,7 +47,8 @@ export function imageZoomTransformToNormalizedCrop(
   const totalTy = transform.translateY + transform.focalY;
   const centerX = viewportWidth / 2;
   const centerY = viewportHeight / 2;
-  const half = cropSize / 2;
+  const halfW = cropWidth / 2;
+  const halfH = cropHeight / 2;
 
   const toNormalized = ( screenX: number, screenY: number ) => {
     const localX = centerX + ( screenX - centerX - totalTx ) / transform.scale;
@@ -54,10 +60,10 @@ export function imageZoomTransformToNormalizedCrop(
   };
 
   const corners = [
-    toNormalized( centerX - half, centerY - half ),
-    toNormalized( centerX + half, centerY - half ),
-    toNormalized( centerX - half, centerY + half ),
-    toNormalized( centerX + half, centerY + half ),
+    toNormalized( centerX - halfW, centerY - halfH ),
+    toNormalized( centerX + halfW, centerY - halfH ),
+    toNormalized( centerX - halfW, centerY + halfH ),
+    toNormalized( centerX + halfW, centerY + halfH ),
   ];
 
   const minX = Math.max( 0, Math.min( ...corners.map( p => p.nx ) ) );
@@ -74,4 +80,25 @@ export function imageZoomTransformToNormalizedCrop(
     w,
     h,
   } );
+}
+
+export function imageZoomTransformToNormalizedCrop(
+  imageWidth: number,
+  imageHeight: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  cropSize: number,
+  transform: ImageZoomTransform,
+): NormalizedCrop {
+  "worklet";
+
+  return imageZoomTransformToNormalizedRect(
+    imageWidth,
+    imageHeight,
+    viewportWidth,
+    viewportHeight,
+    cropSize,
+    cropSize,
+    transform,
+  );
 }

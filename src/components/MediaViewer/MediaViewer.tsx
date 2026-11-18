@@ -22,7 +22,10 @@ import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Photo from "realmModels/Photo";
 import { BREAKPOINTS } from "sharedHelpers/breakpoint";
+import cropImageFile from "sharedHelpers/cropImageFile";
 import { copyLibraryOriginal, findObservationPhoto } from "sharedHelpers/findLibraryOriginal";
+import imageFileSize from "sharedHelpers/imageFileSize";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
@@ -33,6 +36,37 @@ import MediaViewerHeader from "./MediaViewerHeader";
 import PhotoCameraInfo from "./PhotoCameraInfo";
 
 const { useRealm } = RealmContext;
+
+// A visible region at least this fraction of the photo on both sides is the
+// whole photo; share the original untouched rather than re-encode it.
+const FULL_FRAME = 0.995;
+
+// Cut the prepared share file down to the part of the photo visible on
+// screen, at full resolution. Null when the whole photo is visible or the
+// crop can't be made (e.g. Android, which has no native cropper), in which
+// case the uncropped file is shared.
+const cropShareFile = async (
+  path: string,
+  crop?: NormalizedCrop,
+): Promise<string | null> => {
+  if ( !crop || ( crop.w >= FULL_FRAME && crop.h >= FULL_FRAME ) ) return null;
+  try {
+    const size = await imageFileSize( `file://${path}` );
+    if ( !size ) return null;
+    const cropped = await cropImageFile(
+      path,
+      crop,
+      size.w,
+      size.h,
+      TemporaryDirectoryPath,
+      1,
+      0,
+    );
+    return stripFilePrefix( cropped );
+  } catch ( _e ) {
+    return null;
+  }
+};
 
 interface MediaToDelete {
   type: "sound" | "photo";
@@ -273,14 +307,18 @@ const MediaViewer = ( {
     prepareSharePhoto( currentShareUri ).catch( ( ) => undefined );
   }, [currentShareUri, prepareSharePhoto] );
 
-  const handleSharePhoto = useCallback( async ( photoUri: string ) => {
+  const handleSharePhoto = useCallback( async ( photoUri: string, crop?: NormalizedCrop ) => {
+    let croppedPath: string | null = null;
     try {
       const tempPath = await prepareSharePhoto( photoUri );
+      croppedPath = await cropShareFile( tempPath, crop );
       // Await so a share failure (e.g. Save Image failing) is actually
       // caught here instead of becoming an unhandled rejection.
-      await Share.share( { url: `file://${tempPath}` } );
+      await Share.share( { url: `file://${croppedPath ?? tempPath}` } );
     } catch ( _e ) {
       // Nothing to share if the file could not be prepared or shared
+    } finally {
+      if ( croppedPath ) unlink( croppedPath ).catch( ( ) => undefined );
     }
   }, [prepareSharePhoto] );
 

@@ -1,4 +1,7 @@
-import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
+import {
+  imageZoomTransformToNormalizedCrop,
+  imageZoomTransformToNormalizedRect,
+} from "sharedHelpers/imageZoomTransformToCrop";
 
 describe( "imageZoomTransformToNormalizedCrop", ( ) => {
   it( "returns the crop frame intersection at the default zoom level", ( ) => {
@@ -111,5 +114,50 @@ describe( "imageZoomTransformToNormalizedCrop", ( ) => {
 
     expect( atScale2.w ).toBeLessThan( atScale1.w );
     expect( atScale2.h ).toBeLessThan( atScale1.h );
+  } );
+} );
+
+describe( "imageZoomTransformToNormalizedRect", ( ) => {
+  const identity = {
+    scale: 1,
+    translateX: 0,
+    translateY: 0,
+    focalX: 0,
+    focalY: 0,
+  };
+
+  it( "returns the whole image when it is fully visible in the viewport", ( ) => {
+    const crop = imageZoomTransformToNormalizedRect( 3000, 4000, 400, 600, 400, 600, identity );
+    expect( crop.x ).toBeCloseTo( 0 );
+    expect( crop.y ).toBeCloseTo( 0 );
+    expect( crop.w ).toBeCloseTo( 1 );
+    expect( crop.h ).toBeCloseTo( 1 );
+  } );
+
+  it( "returns the visible rectangle when zoomed and panned", ( ) => {
+    // A 400x400 image fills a 400x400 viewport; at 2x the centre quarter is
+    // visible, and panning 100 screen px left reveals 50 image px more right.
+    const crop = imageZoomTransformToNormalizedRect( 1000, 1000, 400, 400, 400, 400, {
+      ...identity,
+      scale: 2,
+      translateX: -100,
+    } );
+    expect( crop.x ).toBeCloseTo( 0.375 );
+    expect( crop.y ).toBeCloseTo( 0.25 );
+    expect( crop.w ).toBeCloseTo( 0.5 );
+    expect( crop.h ).toBeCloseTo( 0.5 );
+  } );
+
+  it( "keeps the viewport aspect ratio for a non-square viewport", ( ) => {
+    // Square image in a 400x800 viewport is 400x400 at scale 1; at 4x the
+    // visible 400x800 window covers 1/4 of the width and all of the height.
+    const crop = imageZoomTransformToNormalizedRect( 1000, 1000, 400, 800, 400, 800, {
+      ...identity,
+      scale: 4,
+    } );
+    expect( crop.x ).toBeCloseTo( 0.375 );
+    expect( crop.w ).toBeCloseTo( 0.25 );
+    expect( crop.y ).toBeCloseTo( 0.25 );
+    expect( crop.h ).toBeCloseTo( 0.5 );
   } );
 } );

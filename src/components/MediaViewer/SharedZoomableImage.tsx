@@ -25,6 +25,8 @@ import { useZoomable } from "sharedHooks/imageZoom/useZoomable";
 export type SharedZoomableImageRef = ImageZoomRef & {
   readTransform: ( ) => ImageZoomTransform;
   applyTransform: ( transform: ImageZoomTransform ) => void;
+  // The laid-out size of the zoom viewport, or null before the first layout.
+  readViewSize: ( ) => { width: number; height: number } | null;
 };
 
 const styles = StyleSheet.create( {
@@ -93,6 +95,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
 ) => {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
   const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>( null );
+  const viewSizeRef = useRef<{ width: number; height: number } | null>( null );
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>( null );
 
   const {
@@ -161,6 +164,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
       }
       return readImageZoomTransform( transformRef.current );
     },
+    readViewSize: ( ) => viewSizeRef.current,
   } ), [applyTransform, reset, zoom] );
 
   // Applied as a plain (non-reanimated) style: reanimated's useAnimatedStyle
@@ -193,6 +197,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
 
   const handleLayout = ( event: LayoutChangeEvent ) => {
     const { width, height } = event.nativeEvent.layout;
+    viewSizeRef.current = { width, height };
     setViewSize( prev => (
       prev?.width === width && prev?.height === height
         ? prev
