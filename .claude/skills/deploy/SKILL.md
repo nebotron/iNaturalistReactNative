@@ -20,7 +20,9 @@ it through to the upload.
    `actions_list` / `list_workflow_runs`) and report its URL and head commit.
 
 3. **Wait.** A full run is ~20 minutes with warm caches on Arm; an Intel
-   (`macos-26-intel`) build is slower.
+   (`macos-26-intel`) build is slower. Runs start on `xcode-27`, the only image
+   with the iOS 27 SDK that App Store Connect requires from April 2027; a build
+   from a fallback image carries a "Check the iOS SDK" warning.
    Check the run's status every 5 minutes until it completes (`send_later` with
    `delay_minutes: 5`, or `ScheduleWakeup` / a background wait) rather than polling
    in a tight loop. `list_workflow_jobs` shows which step is running.
@@ -31,11 +33,11 @@ it through to the upload.
    `cancelled` with no steps ("not acquired by Runner of type hosted"). The repo
    is public, so this is free-runner capacity, not billing; it clusters in US
    working hours (15:00–22:00 UTC). The workflow handles it itself. On
-   `macos-26`, the `fallback` job waits 30 seconds for `attempt-1` to get a
-   runner; if it hasn't, it dispatches a new run with `runner=macos-26-intel`
-   and cancels the original. So when a run ends `cancelled` with `fallback`
-   having run, follow the newer run on the same commit (`list_workflow_runs`)
-   instead. Within a run, `attempt-2` tries the other image only if
+   `xcode-27` or `macos-26`, the `fallback` job waits 30 seconds for `attempt-1`
+   to get a runner; if it hasn't, it dispatches a new run on the next image
+   (`xcode-27` → `macos-26` → `macos-26-intel`) and cancels the original. So
+   when a run ends `cancelled` with `fallback` having run, follow the newer run on the same commit (`list_workflow_runs`)
+   instead. Within a run, `attempt-2` tries the next image only if
    `attempt-1` never started after ~15 minutes. Judge the run by the attempt
    that started — the run as a whole can read `failure` from an unacquired
    attempt even though a later one uploaded the build. Only if both go
