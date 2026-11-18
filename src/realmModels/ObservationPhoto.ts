@@ -1,6 +1,7 @@
 import { Realm } from "@realm/react";
+import deleteRemoteObservationPhoto from "api/observationPhotos";
 import type { ApiObservationPhoto } from "api/types";
-import inatjs, { FileUpload } from "inaturalistjs";
+import { FileUpload } from "inaturalistjs";
 import type { Asset } from "react-native-image-picker";
 import type { RealmObservation, RealmObservationPhoto, RealmPhoto } from "realmModels/types";
 import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
@@ -13,6 +14,14 @@ import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as uuid from "uuid";
 
 import Photo from "./Photo";
+
+interface DeletableObservationPhoto {
+  _synced_at?: Date | null;
+  id?: number | null;
+  originalPhotoUri?: string | null;
+  photo?: RealmPhoto | null;
+  uuid?: string;
+}
 
 class ObservationPhoto extends Realm.Object {
   _created_at?: Date;
@@ -191,25 +200,39 @@ class ObservationPhoto extends Realm.Object {
     } ),
   );
 
-  // TODO: I don't know how what the type for currentObservation is outside of this context here,
-  // in the zustand store slice that is referenced in the two places this function is called
-  // there are no types yet as far as I can see. This function is not important for my current
-  // linear ticket so I'll skip typing it
-  static async deleteRemotePhoto(
-    uri: string,
-    currentObservation?: { observationPhotos?: { photo: { url?: string }; uuid: string }[] },
-  ) {
-    const obsPhotoToDelete = currentObservation?.observationPhotos?.find(
-      p => p.photo?.url === uri,
-    );
+  // Every URI a screen might show an observation photo by: its local file, its
+  // remote URL in any size, its crop source, or the device original.
+  static matchesUri( obsPhoto: DeletableObservationPhoto | undefined, uri: string ): boolean {
+    const photo = obsPhoto?.photo;
+    if ( !photo ) return false;
+    return [
+      Photo.getLocalPhotoUri( photo.localFilePath ),
+      photo.url,
+      Photo.displayLocalOrRemoteSquarePhoto( photo ),
+      Photo.displayLocalOrRemoteMediumPhoto( photo ),
+      Photo.displayLocalOrRemoteLargePhoto( photo ),
+      Photo.displayLocalOrRemoteOriginalPhoto( photo ),
+      Photo.displayCropSourcePhoto( photo ),
+      obsPhoto?.originalPhotoUri,
+    ].some( candidateUri => !!candidateUri && candidateUri === uri );
+  }
 
-    if ( obsPhotoToDelete ) {
-      // Removing this require breaks tests, so I am leaving it here
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getJWT } = require( "components/LoginSignUp/AuthenticationService" );
-      const apiToken = await getJWT( );
-      const options = { api_token: apiToken };
-      await inatjs.observation_photos.delete( { id: obsPhotoToDelete.uuid }, options );
+  // Deletes the observation photo on the server if it ever got there. Throws
+  // when the server still has it, so the caller can keep showing the photo.
+  static async deleteRemotePhoto( obsPhoto: DeletableObservationPhoto ) {
+    const onServer = obsPhoto._synced_at != null || obsPhoto.id != null;
+    if ( !onServer || !obsPhoto.uuid ) return;
+    // Removing this require breaks tests, so I am leaving it here
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getJWT } = require( "components/LoginSignUp/AuthenticationService" );
+    const apiToken = await getJWT( );
+    try {
+      await deleteRemoteObservationPhoto( obsPhoto.uuid, { api_token: apiToken } );
+    } catch ( error ) {
+      const { status, response } = error as { status?: number; response?: { status?: number } };
+      // Already gone from the server, which is what was asked for.
+      if ( ( status ?? response?.status ) === 404 ) return;
+      throw error;
     }
   }
 
@@ -227,21 +250,24 @@ class ObservationPhoto extends Realm.Object {
     }
   }
 
-  // TODO: I don't know how what the type for currentObservation is outside of this context here,
-  // in the zustand store slice that is referenced in the two places this function is called
-  // there are no types yet as far as I can see. This function is not important for my current
-  // linear ticket so I'll skip typing it
+  // A photo can be on the server and on the device at once, and screens show
+  // it by either URI, so the URI's form doesn't say where to delete it: delete
+  // it on the server whenever it got there, then its local file and record.
   static async deletePhoto(
     uri: string,
     currentObservation?: {
-      observationPhotos?: { photo: { url?: string }; uuid: string }[];
+      observationPhotos?: DeletableObservationPhoto[];
       uuid?: string;
     },
     realm?: Realm,
   ) {
-    if ( uri.includes( "https://" ) ) {
-      await ObservationPhoto.deleteRemotePhoto( uri, currentObservation );
-    } else {
+    const obsPhoto = currentObservation?.observationPhotos?.find(
+      op => ObservationPhoto.matchesUri( op, uri ),
+    );
+    if ( obsPhoto ) {
+      await ObservationPhoto.deleteRemotePhoto( obsPhoto );
+    }
+    if ( !uri.includes( "https://" ) ) {
       await ObservationPhoto.deleteLocalPhoto( uri, realm, currentObservation?.uuid );
     }
   }

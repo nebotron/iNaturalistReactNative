@@ -195,7 +195,17 @@ const EvidenceList = ( {
   );
 
   const onDeletePhoto = useCallback( async ( uriToDelete: string ) => {
-    await ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
+    try {
+      await ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
+    } catch ( deletePhotoError ) {
+      // Still on the server: keep it here too, so the observation matches.
+      logger.error( "[EvidenceList] failed to delete photo: ", deletePhotoError );
+      Alert.alert(
+        t( "Failed-to-delete-photo" ),
+        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
+      );
+      return;
+    }
     deletePhotoFromObservation( uriToDelete );
     trackImageDeleted( uriToDelete );
     afterMediaDeleted( uriToDelete );
@@ -204,6 +214,7 @@ const EvidenceList = ( {
     currentObservation,
     deletePhotoFromObservation,
     realm,
+    t,
     trackImageDeleted,
   ] );
 

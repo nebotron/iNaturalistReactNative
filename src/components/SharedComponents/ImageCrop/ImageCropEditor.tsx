@@ -728,8 +728,16 @@ const ImageCropEditor = ( ) => {
       if ( uriToDelete ) {
         // Pass realm so the saved record goes with the file: otherwise the
         // observation keeps a photo whose file is gone and never uploads.
-        void ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
-        deletePhotoFromObservation( uriToDelete );
+        // Only drop it from the observation once the server no longer has it.
+        ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm )
+          .then( ( ) => deletePhotoFromObservation( uriToDelete ) )
+          .catch( deletePhotoError => {
+            logger.error( "Failed to delete photo", deletePhotoError );
+            Alert.alert(
+              t( "Failed-to-delete-photo" ),
+              t( "Please-try-again-when-you-are-connected-to-the-internet" ),
+            );
+          } );
       }
       onCropSaved?.( );
       navigation.goBack( );
@@ -750,6 +758,7 @@ const ImageCropEditor = ( ) => {
     realm,
     setGroupCropResume,
     setGroupedPhotos,
+    t,
   ] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop, brightness: number ) => {
