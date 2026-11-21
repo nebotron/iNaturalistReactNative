@@ -3,12 +3,14 @@ import type { FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
+import { frameUncroppedGroupPhotos } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import {
   preloadNewestPickerPhotos,
 } from "components/PhotoImporter/helpers/preloadNewestPickerPhotos";
+import { isVideoDerivedPhoto } from "components/PhotoImporter/helpers/videoImportHelpers";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
@@ -45,6 +47,7 @@ import logRawImportMetadata, {
 import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { moveSharedGroupedPhotos } from "sharedHelpers/shareExtensionFiles";
 import { useExitObservationFlow, useGridLayout, useTranslation } from "sharedHooks";
+import useStableCallback from "sharedHooks/useStableCallback";
 import type { GroupedPhoto } from "stores/createObservationFlowSlice";
 import useStore from "stores/useStore";
 
@@ -156,7 +159,7 @@ const GroupPhotosContainer = ( ) => {
     return ( ) => clearTimeout( timer );
   }, [groupedPhotos] );
 
-  const selectAllPhotos = () => {
+  const selectAllPhotos = useStableCallback( () => {
     // Cells still standing in for photos being copied can't be combined or
     // cropped yet, so they're left out of a select-all the same way a tap on
     // one is ignored.
@@ -165,9 +168,12 @@ const GroupPhotosContainer = ( ) => {
         .map( ( _obs, index ) => index )
         .filter( index => !( groupedPhotos[index].photos || [] ).some( photo => photo.pending ) ),
     );
-  };
+  } );
 
-  const selectObservationPhotos = ( isSelected: boolean, observation: GroupedPhoto ) => {
+  const selectObservationPhotos = useStableCallback( (
+    isSelected: boolean,
+    observation: GroupedPhoto,
+  ) => {
     const index = groupedPhotos.indexOf( observation );
     if ( index < 0 ) {
       return;
@@ -182,7 +188,7 @@ const GroupPhotosContainer = ( ) => {
     } else {
       setSelectedIndices( prev => prev.filter( selectedIndex => selectedIndex !== index ) );
     }
-  };
+  } );
 
   const setPendingScrollOffset = useCallback( ( targetIndex: number | null ) => {
     if ( targetIndex === null ) return;
@@ -352,7 +358,9 @@ const GroupPhotosContainer = ( ) => {
     // each import was both intrusive and unreliable. The URIs are saved
     // (see removedGroupPhotoUris.ts) so these stay hidden from the photo
     // picker and can be deleted in one pass from the imported album.
+    // A GIF made from a video is the exception: removing it keeps the video.
     const deviceUrisToDelete = orderedPhotos
+      .filter( photo => !isVideoDerivedPhoto( photo ) )
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( ( uri ): uri is string => !!uri );
     if ( deviceUrisToDelete.length > 0 ) {
@@ -412,9 +420,17 @@ const GroupPhotosContainer = ( ) => {
 
   // The separate, duplicate, and remove buttons live on each photo, so they
   // always act on the photo they're drawn on rather than on the selection.
-  const separateItem = ( item: GroupedPhoto ) => separateObservations( [item] );
-  const duplicateItem = ( item: GroupedPhoto ) => duplicateObservations( [item] );
-  const removeItem = ( item: GroupedPhoto ) => removeObservations( [item] );
+  // Stable, so the grid's cells don't all re-render each time this does
+  const separateItem = useStableCallback(
+    ( item: GroupedPhoto ) => separateObservations( [item] ),
+  );
+  const duplicateItem = useStableCallback(
+    ( item: GroupedPhoto ) => duplicateObservations( [item] ),
+  );
+  const removeItem = useStableCallback(
+    ( item: GroupedPhoto ) => removeObservations( [item] ),
+  );
+  const clearSelection = useCallback( ( ) => setSelectedIndices( [] ), [] );
 
   // Backing out of Group Photos abandons the import entirely: nothing here has
   // been saved yet, and the grouped photos are persisted (see
@@ -536,7 +552,14 @@ const GroupPhotosContainer = ( ) => {
         const batch = groupsToImport.slice( i, i + BATCH_SIZE );
         // eslint-disable-next-line no-await-in-loop
         const batchResults = await Promise.allSettled(
-          batch.map( group => createObservationFromGroupedMedia( group, createTimings ) ),
+          batch.map( async ( group, batchIndex ) => {
+            // Photos nobody framed are imported at the framing the grid drew
+            const framed = await frameUncroppedGroupPhotos(
+              group,
+              ( storedGroups[i + batchIndex]?.photos || [] ).map( photo => photo.image.uri ),
+            );
+            return createObservationFromGroupedMedia( framed, createTimings );
+          } ),
         );
         endStep( "createMs" );
         const observationsToSave: RealmObservationPojo[] = [];
@@ -684,7 +707,7 @@ const GroupPhotosContainer = ( ) => {
 
   return (
     <GroupPhotos
-      clearSelection={() => setSelectedIndices( [] )}
+      clearSelection={clearSelection}
       combinePhotos={combinePhotos}
       discardImport={discardImport}
       duplicateItem={duplicateItem}

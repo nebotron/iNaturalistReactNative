@@ -1,5 +1,5 @@
 diff --git a/node_modules/@candlefinance/faster-image/android/src/main/java/com/candlefinance/fasterimage/FasterImageViewManager.kt b/node_modules/@candlefinance/faster-image/android/src/main/java/com/candlefinance/fasterimage/FasterImageViewManager.kt
-index 5cf4dba..f75e080 100644
+index 5cf4dba..c15b1a5 100644
 --- a/node_modules/@candlefinance/faster-image/android/src/main/java/com/candlefinance/fasterimage/FasterImageViewManager.kt
 +++ b/node_modules/@candlefinance/faster-image/android/src/main/java/com/candlefinance/fasterimage/FasterImageViewManager.kt
 @@ -21,6 +21,7 @@ import coil.annotation.ExperimentalCoilApi
@@ -35,9 +35,26 @@ index 5cf4dba..f75e080 100644
    override fun createViewInstance(reactContext: ThemedReactContext): AppCompatImageView {
      return AppCompatImageView(reactContext)
    }
-@@ -171,12 +183,16 @@ class FasterImageViewManager : SimpleViewManager<AppCompatImageView>() {
+@@ -114,6 +126,9 @@ class FasterImageViewManager : SimpleViewManager<AppCompatImageView>() {
+     val headers = options.getMap("headers")
+     val ignoreQueryParamsForCacheKey =
+       if (options.hasKey("ignoreQueryParamsForCacheKey")) options.getBoolean("ignoreQueryParamsForCacheKey") else false
++    // Decode at most this many pixels on the long side instead of the full image
++    val maxPixelSize =
++      if (options.hasKey("maxPixelSize")) options.getDouble("maxPixelSize").toInt() else 0
+ 
+     val borderRadii = BorderRadii(
+       uniform = if (options.hasKey("borderRadius")) options.getDouble("borderRadius") else 0.0,
+@@ -170,13 +185,23 @@ class FasterImageViewManager : SimpleViewManager<AppCompatImageView>() {
+       }
      }
  
++    if (maxPixelSize > 0) {
++      requestBuilder = requestBuilder
++        .size(coil.size.Size(maxPixelSize, maxPixelSize))
++        .scale(Scale.FIT)
++    }
++
      val imageLoader = view.context.imageLoader;
 +    requests.remove(view)?.dispose()
 +    var disposable: Disposable? = null
@@ -54,7 +71,7 @@ index 5cf4dba..f75e080 100644
            val event = Arguments.createMap()
            event.putString("source", url)
            event.putString("height", result.intrinsicHeight.toString())
-@@ -215,7 +231,8 @@ class FasterImageViewManager : SimpleViewManager<AppCompatImageView>() {
+@@ -215,7 +240,8 @@ class FasterImageViewManager : SimpleViewManager<AppCompatImageView>() {
              view.setImageDrawable(result)
            }
          },
@@ -64,7 +81,7 @@ index 5cf4dba..f75e080 100644
            val event = Arguments.createMap()
            event.putString("error", "failed to load image")
            val reactContext = view.context as ReactContext
-@@ -244,7 +261,8 @@ class FasterImageViewManager : SimpleViewManager<AppCompatImageView>() {
+@@ -244,7 +270,8 @@ class FasterImageViewManager : SimpleViewManager<AppCompatImageView>() {
        .allowHardware(allowHardware)
        .build()
  
@@ -78,12 +95,10 @@ diff --git a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift b/no
 index e1cb690..a7a2235 100644
 --- a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
-@@ -1,17 +1,35 @@
- /// How aggressively the cache should be used.
+@@ -2,16 +2,34 @@
  enum CachePolicy: String {
      case memory, discWithCacheControl, discNoCacheControl, memoryAndDisc
--    
-+
+ 
 +    // Pipelines are shared instead of being rebuilt per view. Every
 +    // ImagePipeline owns its own operation queues and in-flight task pool, so
 +    // constructing one per mounted image (the upstream behavior) both
@@ -120,20 +135,22 @@ index e1cb690..a7a2235 100644
      }
  }
 diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
-index a8401df..3ccf6a2 100644
+index a8401df..4856de2 100644
 --- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
 +++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
-@@ -12,4 +12,8 @@ RCT_EXTERN_METHOD(clearCache:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromis
+@@ -12,4 +12,10 @@ RCT_EXTERN_METHOD(clearCache:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromis
  
  RCT_EXTERN_METHOD(prefetch:(NSArray *)sources withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
  
++RCT_EXTERN_METHOD(prefetchData:(NSArray *)sources withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
++
 +RCT_EXTERN_METHOD(cachedSources:(NSArray *)sources withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
 +
 +RCT_EXTERN_METHOD(seedCache:(NSArray *)sources fromPath:(NSString *)path withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
 +
  @end
 diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
-index d653e1c..cfbee83 100644
+index d653e1c..b4ca78d 100644
 --- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 @@ -15,6 +15,9 @@ final class FasterImageViewManager: RCTViewManager {
@@ -146,7 +163,7 @@ index d653e1c..cfbee83 100644
        DataLoader.sharedUrlCache.removeAllCachedResponses()
        URLSession.shared.invalidateAndCancel()
        DispatchQueue.main.async {
-@@ -23,14 +26,55 @@ final class FasterImageViewManager: RCTViewManager {
+@@ -23,14 +26,72 @@ final class FasterImageViewManager: RCTViewManager {
      }
    }
    
@@ -164,6 +181,23 @@ index d653e1c..cfbee83 100644
 -    let prefetcher = ImagePrefetcher()
 -    prefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
 +    Self.prefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
++    resolve(true)
++  }
++
++  // Downloads into the disk cache only, without decoding. For lists whose
++  // cells decode at their own size (maxPixelSize): a decoded full-size image
++  // in the memory cache is keyed apart from the cells' thumbnails, so
++  // prefetching into memory decoded every upcoming photo for nothing.
++  private static let dataPrefetcher = ImagePrefetcher(
++    pipeline: CachePolicy.dataCachePipeline,
++    destination: .diskCache
++  )
++
++  @objc(prefetchData:withResolver:withRejecter:)
++  func prefetchData(sources: [String],
++                    resolve: @escaping RCTPromiseResolveBlock,
++                    reject: @escaping RCTPromiseRejectBlock) {
++    Self.dataPrefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
      resolve(true)
    }
 +
@@ -204,3 +238,70 @@ index d653e1c..cfbee83 100644
  }
  
  struct ImageOptions: Decodable {
+@@ -55,6 +116,11 @@ struct ImageOptions: Decodable {
+   let colorMatrix: [[Double]]?
+   let ignoreQueryParamsForCacheKey: Bool?
+   let priority: String?
++  // Decode at most this many pixels on the long side (ImageIO thumbnail)
++  // instead of the full image. Only the decoded image is smaller: the original
++  // bytes stay in the disk cache under the plain URL, shared with full-size
++  // requests.
++  let maxPixelSize: Double?
+ }
+ 
+ struct BorderRadii {
+@@ -176,6 +242,7 @@ final class FasterImageView: UIView {
+         grayscale = options.grayscale ?? 0.0
+         colorMatrix = options.colorMatrix ?? [[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0]]
+         ignoreQueryParamsForCacheKey = options.ignoreQueryParamsForCacheKey ?? false
++        maxPixelSize = options.maxPixelSize
+         
+         if let url = URL(string: options.url) {
+           var urlRequestFromOptions = URLRequest(url: url)
+@@ -424,9 +491,21 @@ final class FasterImageView: UIView {
+     }
+   }
+   
++  var maxPixelSize: Double? = nil
++
+   var urlRequest: URLRequest? = nil {
+     didSet {
+-      lazyImageView.request = ImageRequest(urlRequest: urlRequest!, priority: priority)
++      var userInfo: [ImageRequest.UserInfoKey: Any]? = nil
++      if let maxPixelSize, maxPixelSize > 0 {
++        userInfo = [
++          .thumbnailKey: ImageRequest.ThumbnailOptions(maxPixelSize: Float(maxPixelSize)),
++        ]
++      }
++      lazyImageView.request = ImageRequest(
++        urlRequest: urlRequest!,
++        priority: priority,
++        userInfo: userInfo
++      )
+     }
+   }
+   
+diff --git a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts b/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
+index 445d872..fb8eec4 100644
+--- a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
++++ b/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
+@@ -26,6 +26,7 @@ export type ImageOptions = {
+     allowHardware?: boolean;
+     ignoreQueryParamsForCacheKey?: boolean;
+     priority?: 'veryLow' | 'low' | 'normal' | 'high' | 'veryHigh';
++    maxPixelSize?: number;
+ };
+ /**
+  * FasterImageProps
+diff --git a/node_modules/@candlefinance/faster-image/src/index.tsx b/node_modules/@candlefinance/faster-image/src/index.tsx
+index aeafc34..5ee3352 100644
+--- a/node_modules/@candlefinance/faster-image/src/index.tsx
++++ b/node_modules/@candlefinance/faster-image/src/index.tsx
+@@ -80,6 +80,7 @@ export type ImageOptions = {
+   allowHardware?: boolean;
+   ignoreQueryParamsForCacheKey?: boolean;
+   priority?: 'veryLow' | 'low' | 'normal' | 'high' | 'veryHigh';
++  maxPixelSize?: number;
+ };
+ 
+ /**

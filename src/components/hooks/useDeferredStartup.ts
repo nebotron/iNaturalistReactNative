@@ -9,7 +9,7 @@
  * Uses requestIdleCallback to schedule each task in its own callback so the
  * runtime can interleave user interactions between them.
  */
-import { expireOldClips } from "components/AudioId/audioIdHistory";
+import { expireOldClips, retryLabelUploads } from "components/AudioId/audioIdHistory";
 import { cleanupLogFiles } from "components/Developer/logManagementHelpers";
 import { isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { navigationRef } from "navigation/navigationUtils";
@@ -158,7 +158,10 @@ const useDeferredStartup = ( ) => {
     const id16 = deferTask( "clearVideoLibrary", clearVideoLibrary );
     const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
     const id18 = deferTask( "trimRemoteImageCache", trimRemoteImageCache );
-    const idClips = deferTask( "expireOldAudioIdClips", async ( ) => expireOldClips( ) );
+    const idClips = deferTask( "expireOldAudioIdClips", async ( ) => {
+      expireOldClips( );
+      await retryLabelUploads( );
+    } );
     // MMKV files never shrink on their own, and data has moved out of this one
     const idLogs = deferTask( "maintainFirebaseLogs", async ( ) => {
       await Promise.all( [maintainAnimalCropLog( ), maintainBrightnessLog( )] );

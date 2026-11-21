@@ -38,7 +38,8 @@ export const lifeListCacheKey = ( queryParams: Record<string, unknown> ): string
     .filter( key => !NON_FILTER_PARAMS.includes( key ) && queryParams[key] !== undefined )
     .sort( )
     .map( key => [key, queryParams[key]] );
-  return `exploreLifeList-v2-${JSON.stringify( filters )}`;
+  // v3: rebuilt so hybrids a v2 sync dropped as above species level come back.
+  return `exploreLifeList-v3-${JSON.stringify( filters )}`;
 };
 
 const readCache = ( key: string ): LifeListCache => {
@@ -171,11 +172,7 @@ export const syncLifeList = async (
       const earliest = earliestBySpecies( entries );
       results.forEach( obs => {
         const lifer = toLifer( obs );
-        // Genus hybrids are ranked above species, but are each one kind of organism
-        const speciesId = lifer?.speciesId
-          ?? ( lifer?.taxon.rank === "genushybrid"
-            ? lifer.taxon.id
-            : null );
+        const speciesId = lifer?.speciesId;
         if ( !lifer || !speciesId ) {
           // Re-identified above species level
           entries.delete( obs.uuid );

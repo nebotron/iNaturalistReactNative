@@ -44,6 +44,14 @@ export function deviceVideoUriFromNode( node: PhotoNode ): string | null {
   return node.image.uri ?? null;
 }
 
+// Whether a Group Photos photo is a GIF the app made from a library video.
+// Removing one drops only the GIF (and its sound) from the import: the video
+// it came from stays in the library and in the picker, never staged for
+// deletion, since the user removed a derivative, not the video itself.
+export const isVideoDerivedPhoto = ( photo: { image?: { uri?: string } } ): boolean => Boolean(
+  photo.image?.uri?.includes( videoLibraryPath ),
+);
+
 // PhotoKit is asked for the video with network access allowed, so an asset
 // iCloud has offloaded is downloaded first -- and requestAVAssetForVideo has
 // no deadline of its own: when that download wedges, the result handler is

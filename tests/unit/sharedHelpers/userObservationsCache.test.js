@@ -266,6 +266,21 @@ describe( "speciesIdFromTaxon", ( ) => {
     expect( speciesIdFromTaxon( { id: 3017, rank_level: 10 } ) ).toEqual( 3017 );
   } );
 
+  it( "is the hybrid itself for a hybrid or genus hybrid", ( ) => {
+    expect( speciesIdFromTaxon( {
+      id: 326092,
+      rank: "hybrid",
+      rank_level: 10,
+      ancestor_ids: [48460, 1, 6912, 545975, 326092],
+    } ) ).toEqual( 326092 );
+    expect( speciesIdFromTaxon( {
+      id: 545975,
+      rank: "genushybrid",
+      rank_level: 20,
+      ancestor_ids: [48460, 1, 6912, 545975],
+    } ) ).toEqual( 545975 );
+  } );
+
   it( "is the parent species for a subspecies, variety, or form", ( ) => {
     expect( speciesIdFromTaxon( {
       id: 122767,

@@ -1,5 +1,6 @@
 import { StackActions } from "@react-navigation/native";
 import { fireEvent, screen } from "@testing-library/react-native";
+import { videoLibraryPath } from "appConstants/paths";
 import GroupPhotosContainer from "components/PhotoImporter/GroupPhotosContainer";
 import initI18next from "i18n/initI18next";
 import React from "react";
@@ -65,6 +66,30 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
 
     expect( useStore.getState( ).pendingGroupPhotoDeletionUris ).toContain( "ph://DEVICE-1" );
     expect( getRemovedGroupPhotoUris( ) ).toContain( "ph://DEVICE-1" );
+  } );
+
+  // A GIF made from a library video is only a derivative: removing it (and
+  // with it the video's sound) must leave the video itself alone.
+  it( "does not stage the source video when its GIF is removed", async ( ) => {
+    const gifUri = `file://${videoLibraryPath}/gif-1.gif`;
+    useStore.setState( {
+      groupedPhotos: [
+        {
+          photos: [{
+            image: { uri: gifUri, type: "image/gif" },
+            originalDevicePhotoUri: "ph://VIDEO-1",
+          }],
+          soundUri: "file:///video_audio_1.m4a",
+        },
+        { photos: [{ image: { uri: "file:///local_2.jpg" } }] },
+      ],
+    } );
+    renderComponent( <GroupPhotosContainer /> );
+
+    fireEvent.press( screen.getByTestId( `GroupPhotos.remove.${gifUri}` ) );
+
+    expect( useStore.getState( ).pendingGroupPhotoDeletionUris ).not.toContain( "ph://VIDEO-1" );
+    expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://VIDEO-1" );
   } );
 
   // With nothing left to group, the user is taken straight back to the picker
