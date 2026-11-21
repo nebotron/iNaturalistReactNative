@@ -644,24 +644,30 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, NSMutableArray<NSN
 
 // ─── Brightness adjustment (linear multiply) ─────────────────────────────────
 
-// Brightness: multiplies each channel's encoded value by the gain k and clamps
-// to [0, 255], the same operation the CSS brightness() filter applies to the
-// live slider preview — so the baked result matches what the slider showed. The
-// gain is identical for every pixel, so precompute the 256 possible outputs
-// once and apply them with a single table lookup per channel.
+// Brightness: multiplies each channel's encoded value by the gain k, as the CSS
+// brightness() filter on the live slider preview does. Clamping each channel
+// on its own would shift a pixel's hue once its brightest channel hit 255 while
+// the others kept rising, so a pixel's gain is capped at the point where its
+// brightest channel reaches 255: past that the whole pixel stops changing and
+// its R:G:B ratio is kept. Darkening never clips, so it scales every pixel by k.
+// The cap depends only on the brightest channel, so precompute the gain for
+// each of the 256 possible maxima once.
 static void applyBrightnessMultiplyBuffer( unsigned char *raw, int pixelCount, float k )
 {
-  unsigned char lut[256];
-  for ( int i = 0; i < 256; i++ ) {
-    float v = roundf( i * k );
-    lut[i] = v <= 0.0f ? 0 : ( v >= 255.0f ? 255 : (unsigned char)v );
+  float gainForMax[256];
+  gainForMax[0] = k;
+  for ( int m = 1; m < 256; m++ ) {
+    gainForMax[m] = MIN( k, 255.0f / m );
   }
 
   for ( int i = 0; i < pixelCount; i++ ) {
     unsigned char *px = raw + i * 4;
-    px[0] = lut[px[0]];
-    px[1] = lut[px[1]];
-    px[2] = lut[px[2]];
+    unsigned char m = MAX( px[0], MAX( px[1], px[2] ) );
+    float g = gainForMax[m];
+    for ( int c = 0; c < 3; c++ ) {
+      float v = roundf( px[c] * g );
+      px[c] = v <= 0.0f ? 0 : ( v >= 255.0f ? 255 : (unsigned char)v );
+    }
   }
 }
 
