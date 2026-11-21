@@ -14,6 +14,7 @@ import React, { memo, useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { getBrightness } from "sharedHelpers/brightnessLog";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
@@ -42,6 +43,75 @@ interface Props {
   separateItem: ( item: Item ) => void;
   style?: ViewStyle;
 }
+
+interface CellProps {
+  photo: PhotoItem;
+  cellWidth: number;
+  style?: ViewStyle;
+  mediaCount: number;
+  onPress: ( ) => void;
+  duplicateLabel: string;
+}
+
+// One photo in a cell. A photo the user hasn't framed in the crop editor (or
+// by pinching) is framed on its subject by the AI subject detector, for
+// display only: the file isn't cropped until the user frames it themselves.
+const GroupPhotoCell = ( {
+  photo,
+  cellWidth,
+  style,
+  mediaCount,
+  onPress,
+  duplicateLabel,
+}: CellProps ) => {
+  const { uri, crop, cropOriginalUri } = photo.image;
+  const needsDetection = !crop && !cropOriginalUri;
+  // Once pinched, the cell's framing is the user's; a detection resolving
+  // afterwards mustn't reframe it.
+  const [pinchedUri, setPinchedUri] = useState<string | null>( null );
+  const detection = useSubjectDetectionForUri( needsDetection
+    ? uri
+    : undefined );
+  const zoomCrop = crop ?? ( pinchedUri === uri
+    ? undefined
+    : detection?.crop );
+
+  const handleZoomCropChange = useCallback( ( newCrop: NormalizedCrop ) => {
+    setPinchedUri( uri );
+    applyGroupPhotosPinchCrop( uri, newCrop );
+  }, [uri] );
+
+  return (
+    <DevicePhotoImage
+      uri={uri}
+      cellWidth={cellWidth}
+      fitImage
+      style={style}
+      obsPhotosCount={mediaCount}
+      onPress={onPress}
+      // Two fingers pinch and pan the photo; the framing it's left at becomes
+      // its crop, exactly as if it had been saved in the crop editor.
+      zoomSourceUri={cropOriginalUri || uri}
+      zoomCrop={zoomCrop}
+      // The crop editor bakes its brightness into the cropped file, but the
+      // cell draws the untouched original, so the adjustment is redrawn here.
+      zoomBrightness={cropOriginalUri
+        ? getBrightness( uri ) ?? 1
+        : 1}
+      onZoomCropChange={handleZoomCropChange}
+      testID={`GroupPhotos.${uri}`}
+    >
+      {photo.isDuplicateUpload && (
+        <DuplicateUploadBadge
+          accessibilityLabel={duplicateLabel}
+          className="absolute top-2 left-2 z-10"
+          size={20}
+          testID={`GroupPhotos.duplicateUpload.${uri}`}
+        />
+      )}
+    </DevicePhotoImage>
+  );
+};
 
 const GroupPhotoImage = ( {
   duplicateItem,
@@ -142,34 +212,14 @@ const GroupPhotoImage = ( {
     : 0;
 
   const renderPhoto = useCallback( ( photo: PhotoItem ) => (
-    <DevicePhotoImage
-      uri={photo.image.uri}
+    <GroupPhotoCell
+      photo={photo}
       cellWidth={cellWidth}
-      fitImage
       style={style}
-      obsPhotosCount={mediaCount}
+      mediaCount={mediaCount}
       onPress={handlePress}
-      // Two fingers pinch and pan the photo; the framing it's left at becomes
-      // its crop, exactly as if it had been saved in the crop editor.
-      zoomSourceUri={photo.image.cropOriginalUri || photo.image.uri}
-      zoomCrop={photo.image.crop}
-      // The crop editor bakes its brightness into the cropped file, but the
-      // cell draws the untouched original, so the adjustment is redrawn here.
-      zoomBrightness={photo.image.cropOriginalUri
-        ? getBrightness( photo.image.uri ) ?? 1
-        : 1}
-      onZoomCropChange={crop => applyGroupPhotosPinchCrop( photo.image.uri, crop )}
-      testID={`GroupPhotos.${photo.image.uri}`}
-    >
-      {photo.isDuplicateUpload && (
-        <DuplicateUploadBadge
-          accessibilityLabel={t( "Duplicate-photo-indicator" )}
-          className="absolute top-2 left-2 z-10"
-          size={20}
-          testID={`GroupPhotos.duplicateUpload.${photo.image.uri}`}
-        />
-      )}
-    </DevicePhotoImage>
+      duplicateLabel={t( "Duplicate-photo-indicator" )}
+    />
   ), [cellWidth, handlePress, mediaCount, style, t] );
 
   const renderCarouselItem = useCallback(

@@ -2,6 +2,7 @@ import {
   applyGroupPhotosCrop,
   applyGroupPhotosPinchCrop,
 } from "components/PhotoImporter/helpers/groupPhotoCrops";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrops";
 import useStore from "stores/useStore";
@@ -127,5 +128,9 @@ describe( "applyGroupPhotosPinchCrop", ( ) => {
 
     expect( cropImageFile ).not.toHaveBeenCalled( );
     expect( firstPhotoImage( ).uri ).toBe( "file://whole.jpg" );
+    // Logged so the subject detector doesn't reframe it next time it's drawn
+    expect( saveAnimalCrop ).toHaveBeenCalledWith( "file://whole.jpg", {
+      x: 0, y: 0, w: 1, h: 1,
+    } );
   } );
 } );

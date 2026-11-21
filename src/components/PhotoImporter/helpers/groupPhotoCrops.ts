@@ -147,6 +147,10 @@ export function applyGroupPhotosPinchCrop(
     if ( existingCrop
       ? isSameCrop( existingCrop, crop )
       : isWholeFrame( crop ) ) {
+      // An uncropped photo is drawn framed on its detected subject; logging the
+      // whole frame keeps it whole when its cell is drawn again, rather than
+      // the detector reframing it.
+      if ( !existingCrop ) saveAnimalCrop( currentUri, crop );
       return;
     }
     const sourceUri = await ensureLocalImageForCrop(
