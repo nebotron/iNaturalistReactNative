@@ -6,7 +6,9 @@ import {
   OBSERVATIONS_SORT,
   observationSortToRealmSort,
 } from "sharedHelpers/observationsSort";
+import { sortByTaxonomy } from "sharedHelpers/taxonomicSort";
 import useSubjectDistances, { sortBySubjectDistance } from "sharedHooks/useSubjectDistances";
+import useTaxonomicLineages from "sharedHooks/useTaxonomicLineages";
 
 const { useQuery } = RealmContext;
 
@@ -30,13 +32,15 @@ const useLocalObservationIds = ( sortBy?: MyObservationsSort ) => {
 
   const bySubjectDistance = sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;
   const subjectDistances = useSubjectDistances( bySubjectDistance );
+  const byTaxonomy = sortBy === OBSERVATIONS_SORT.TAXONOMY;
+  const taxonomicLineages = useTaxonomicLineages( byTaxonomy );
 
   return useMemo( ( ) => {
     const ids = unsyncedObs.map( ( { uuid }: { uuid: string } ) => ( { uuid } ) );
-    return bySubjectDistance
-      ? sortBySubjectDistance( ids, subjectDistances )
-      : ids;
-  }, [unsyncedObs, bySubjectDistance, subjectDistances] );
+    if ( bySubjectDistance ) return sortBySubjectDistance( ids, subjectDistances );
+    if ( byTaxonomy ) return sortByTaxonomy( ids, taxonomicLineages );
+    return ids;
+  }, [unsyncedObs, bySubjectDistance, subjectDistances, byTaxonomy, taxonomicLineages] );
 };
 
 export default useLocalObservationIds;

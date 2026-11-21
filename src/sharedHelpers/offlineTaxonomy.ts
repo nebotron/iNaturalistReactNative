@@ -87,7 +87,7 @@ async function buildTaxonomyCache(): Promise<Map<number, OfflineTaxonEntry>> {
   return map;
 }
 
-async function loadTaxonomyCache(): Promise<Map<number, OfflineTaxonEntry>> {
+export async function loadTaxonomyCache(): Promise<Map<number, OfflineTaxonEntry>> {
   if ( taxonomyCache ) return taxonomyCache;
   if ( !loadingPromise ) {
     loadingPromise = buildTaxonomyCache().then( cache => {
