@@ -48,6 +48,9 @@ export const speciesIdFromTaxon = (
 ): number | null => {
   const rankLevel = taxon?.rank_level;
   if ( !taxon?.id || typeof rankLevel !== "number" ) return null;
+  // A genus hybrid (Anas × Cairina) is ranked at genus level, but like any
+  // other hybrid it's one kind of organism, so it counts as its own species.
+  if ( taxon.rank === "genushybrid" ) return taxon.id;
   if ( rankLevel > Taxon.SPECIES_LEVEL ) return null;
   if ( rankLevel === Taxon.SPECIES_LEVEL ) return taxon.id;
   const ancestorIds = ( taxon.ancestor_ids ?? [] ).filter( id => id !== taxon.id );
