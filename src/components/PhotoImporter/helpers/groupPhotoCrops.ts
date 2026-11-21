@@ -10,6 +10,7 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { isSameCrop } from "sharedHelpers/normalizedCropTypes";
 import { trackGroupPhotoCrop } from "sharedHelpers/pendingGroupPhotoCrops";
 import { recordStagedImportCrop } from "sharedHelpers/usbStaging";
+import { resolveSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 import useStore from "stores/useStore";
 
 export interface GroupedPhotoImage {
@@ -20,6 +21,8 @@ export interface GroupedPhotoImage {
 
 interface GroupedPhotoItem {
   image: GroupedPhotoImage;
+  croppable?: boolean;
+  originalDevicePhotoUri?: string | null;
 }
 
 interface GroupedPhotoGroup {
@@ -175,4 +178,47 @@ export function applyGroupPhotosPinchCrop(
   pinchCropQueue = job.catch( ( ) => undefined );
   // Importing waits on this like any other crop
   trackGroupPhotoCrop( job );
+}
+
+const detectedCrop = async ( uri: string ): Promise<NormalizedCrop | null> => {
+  try {
+    return ( await resolveSubjectDetectionForUri( uri ) )?.crop ?? null;
+  } catch {
+    return null;
+  }
+};
+
+// The Group Photos grid draws a photo nobody framed on its detected subject
+// (see GroupPhotoImage), so importing it as it was shown means cropping it to
+// that framing. detectionUris are the uris the grid knew the photos by, which
+// differ from the files being imported when a shared photo was moved out of
+// the share extension's container; the detection the grid ran is cached under
+// them. A photo that can't be framed is imported as it is.
+export async function frameUncroppedGroupPhotos<T extends GroupedPhotoGroup>(
+  group: T,
+  detectionUris: ( string | undefined )[] = [],
+): Promise<T> {
+  if ( !group.photos?.length ) return group;
+  const photos = await Promise.all( group.photos.map( async ( photo, index ) => {
+    const { uri, crop: existingCrop, cropOriginalUri } = photo.image;
+    if ( existingCrop || cropOriginalUri || photo.croppable === false ) return photo;
+    try {
+      const detectionUri = detectionUris[index];
+      const crop = ( detectionUri && detectionUri !== uri
+        ? await detectedCrop( detectionUri )
+        : null ) ?? await detectedCrop( uri );
+      if ( !crop || isWholeFrame( crop ) ) return photo;
+      const sourceUri = await ensureLocalImageForCrop( uri, "original" );
+      const size = await imageFileSize( sourceUri );
+      if ( !size ) return photo;
+      const update = await cropGroupPhotoFile( crop, uri, sourceUri, size );
+      if ( photo.originalDevicePhotoUri ) {
+        recordStagedImportCrop( photo.originalDevicePhotoUri, crop );
+      }
+      return { ...photo, image: { ...photo.image, ...update } };
+    } catch {
+      return photo;
+    }
+  } ) );
+  return { ...group, photos };
 }

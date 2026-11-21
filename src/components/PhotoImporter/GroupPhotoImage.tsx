@@ -26,6 +26,8 @@ interface PhotoItem {
   };
   isDuplicateUpload?: boolean;
   pending?: boolean;
+  // False for media that is never cropped (a GIF), so never framed either
+  croppable?: boolean;
 }
 
 interface Item {
@@ -65,7 +67,7 @@ const GroupPhotoCell = ( {
   duplicateLabel,
 }: CellProps ) => {
   const { uri, crop, cropOriginalUri } = photo.image;
-  const needsDetection = !crop && !cropOriginalUri;
+  const needsDetection = !crop && !cropOriginalUri && photo.croppable !== false;
   // Once pinched, the cell's framing is the user's; a detection resolving
   // afterwards mustn't reframe it.
   const [pinchedUri, setPinchedUri] = useState<string | null>( null );

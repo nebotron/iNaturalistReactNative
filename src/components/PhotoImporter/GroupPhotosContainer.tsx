@@ -3,6 +3,7 @@ import type { FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
+import { frameUncroppedGroupPhotos } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
@@ -551,7 +552,14 @@ const GroupPhotosContainer = ( ) => {
         const batch = groupsToImport.slice( i, i + BATCH_SIZE );
         // eslint-disable-next-line no-await-in-loop
         const batchResults = await Promise.allSettled(
-          batch.map( group => createObservationFromGroupedMedia( group, createTimings ) ),
+          batch.map( async ( group, batchIndex ) => {
+            // Photos nobody framed are imported at the framing the grid drew
+            const framed = await frameUncroppedGroupPhotos(
+              group,
+              ( storedGroups[i + batchIndex]?.photos || [] ).map( photo => photo.image.uri ),
+            );
+            return createObservationFromGroupedMedia( framed, createTimings );
+          } ),
         );
         endStep( "createMs" );
         const observationsToSave: RealmObservationPojo[] = [];
