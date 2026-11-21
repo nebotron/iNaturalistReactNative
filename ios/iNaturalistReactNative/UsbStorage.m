@@ -1,3 +1,4 @@
+#import <BackgroundTasks/BackgroundTasks.h>
 #import <ImageIO/ImageIO.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTUtils.h>
@@ -22,11 +23,177 @@ static NSString *const kBookmarkKey = @"UsbStorageFolderBookmark";
 
 @implementation UsbStorage {
   RCTPromiseResolveBlock _pickResolve;
+  // The continued-processing task keeping an import running in the background
+  // (see beginContinuedImport). Touched only on _continuedQueue, which is also
+  // the queue BGTaskScheduler calls the launch handler on.
+  dispatch_queue_t _continuedQueue;
+  BGTask *_continuedTask;
+  // The run the task belongs to, so a launch handler or expiry arriving after
+  // that run ended can't attach to, or cancel, the next one.
+  NSString *_continuedIdentifier;
+  int64_t _continuedCompleted;
+  NSString *_continuedSubtitle;
+  BOOL _continuedExpired;
 }
 
 RCT_EXPORT_MODULE( );
 
 + (BOOL)requiresMainQueueSetup { return NO; }
+
+- (instancetype)init
+{
+  if ( ( self = [super init] ) ) {
+    _continuedQueue = dispatch_queue_create( "org.inaturalist.usbimport.continued",
+                                             DISPATCH_QUEUE_SERIAL );
+  }
+  return self;
+}
+
+// The queue the copies run on. User-initiated, not utility: an app in the
+// background has utility work throttled hard, disk I/O included, and a copy
+// off a card reader is almost all disk I/O — which is what made an import
+// crawl the moment the app left the screen. Serial, since JS copies one file
+// at a time anyway and two copies racing each other off a card are slower.
+static dispatch_queue_t copyQueue( void )
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    queue = dispatch_queue_create( "org.inaturalist.usbimport.copy",
+      dispatch_queue_attr_make_with_qos_class( DISPATCH_QUEUE_SERIAL,
+                                               QOS_CLASS_USER_INITIATED, 0 ) );
+  } );
+  return queue;
+}
+
+// ─── Background execution ───────────────────────────────────────────────────
+//
+// A plain beginBackgroundTask buys about 30 seconds, after which iOS suspends
+// the process and an import of hundreds of photos stops dead until the user
+// comes back. iOS 26's BGContinuedProcessingTask is the system's answer for
+// exactly this — work the user started in the foreground and expects to
+// finish — and keeps the app running, unthrottled, for as long as it reports
+// progress, with the progress shown in system UI the user can cancel from.
+//
+// The identifier has to match the wildcard in Info.plist's
+// BGTaskSchedulerPermittedIdentifiers; a fresh suffix per run is what lets the
+// handler be registered now rather than at launch, since an identifier can be
+// registered only once per process.
+
+static NSString *continuedIdentifierPrefix( void )
+{
+  return [NSString stringWithFormat:@"%@.usbimport.", NSBundle.mainBundle.bundleIdentifier];
+}
+
+// Call on _continuedQueue.
+- (void)applyContinuedProgress API_AVAILABLE( ios( 26.0 ) )
+{
+  if ( ![_continuedTask isKindOfClass:BGContinuedProcessingTask.class] ) return;
+  BGContinuedProcessingTask *task = (BGContinuedProcessingTask *)_continuedTask;
+  task.progress.completedUnitCount = _continuedCompleted;
+  if ( _continuedSubtitle ) [task updateTitle:task.title subtitle:_continuedSubtitle];
+}
+
+// Resolves YES when the system accepted the request. Must be called while the
+// app is in the foreground: the request is refused otherwise.
+RCT_EXPORT_METHOD(beginContinuedImport:(NSString *)title
+                              subtitle:(NSString *)subtitle
+                                 total:(double)total
+                               resolve:(RCTPromiseResolveBlock)resolve
+                                reject:(__unused RCTPromiseRejectBlock)reject)
+{
+  if ( @available( iOS 26.0, * ) ) {
+    dispatch_async( _continuedQueue, ^{
+      if ( self->_continuedIdentifier ) {
+        resolve( @YES );
+        return;
+      }
+      NSString *identifier = [continuedIdentifierPrefix( )
+        stringByAppendingString:NSUUID.UUID.UUIDString];
+      self->_continuedCompleted = 0;
+      self->_continuedSubtitle = subtitle;
+      self->_continuedExpired = NO;
+      __weak UsbStorage *weakSelf = self;
+      BOOL registered = [BGTaskScheduler.sharedScheduler
+        registerForTaskWithIdentifier:identifier
+                           usingQueue:self->_continuedQueue
+                        launchHandler:^( BGTask *task ) {
+        UsbStorage *strongSelf = weakSelf;
+        // The run already ended (or the module is gone): nothing to keep alive.
+        if ( !strongSelf || ![strongSelf->_continuedIdentifier isEqualToString:identifier] ) {
+          [task setTaskCompletedWithSuccess:YES];
+          return;
+        }
+        BGContinuedProcessingTask *continued = (BGContinuedProcessingTask *)task;
+        continued.progress.totalUnitCount = (int64_t)total;
+        task.expirationHandler = ^{
+          UsbStorage *s = weakSelf;
+          if ( s && [s->_continuedIdentifier isEqualToString:identifier] ) {
+            s->_continuedExpired = YES;
+            s->_continuedTask = nil;
+          }
+          [task setTaskCompletedWithSuccess:NO];
+        };
+        strongSelf->_continuedTask = task;
+        [strongSelf applyContinuedProgress];
+      }];
+      if ( !registered ) {
+        resolve( @NO );
+        return;
+      }
+      BGContinuedProcessingTaskRequest *request = [[BGContinuedProcessingTaskRequest alloc]
+        initWithIdentifier:identifier title:title subtitle:subtitle];
+      // Start now or not at all: the user is watching the banner, and a run
+      // queued for later would start long after this one finished without it.
+      request.strategy = BGContinuedProcessingTaskRequestSubmissionStrategyFail;
+      NSError *error = nil;
+      BOOL submitted = [BGTaskScheduler.sharedScheduler submitTaskRequest:request error:&error];
+      if ( submitted ) self->_continuedIdentifier = identifier;
+      resolve( @( submitted ) );
+    } );
+  } else {
+    resolve( @NO );
+  }
+}
+
+// Reports how far the run has got; a continued task that stops reporting is
+// expired by the system. Resolves whether the task has ended — expired by the
+// system or cancelled by the user from its progress UI — so the run can stop.
+RCT_EXPORT_METHOD(updateContinuedImport:(double)completed
+                               subtitle:(NSString *)subtitle
+                                resolve:(RCTPromiseResolveBlock)resolve
+                                 reject:(__unused RCTPromiseRejectBlock)reject)
+{
+  if ( @available( iOS 26.0, * ) ) {
+    dispatch_async( _continuedQueue, ^{
+      self->_continuedCompleted = (int64_t)completed;
+      self->_continuedSubtitle = subtitle;
+      [self applyContinuedProgress];
+      resolve( @{ @"expired": @( self->_continuedIdentifier && self->_continuedExpired ) } );
+    } );
+  } else {
+    resolve( @{ @"expired": @NO } );
+  }
+}
+
+RCT_EXPORT_METHOD(endContinuedImport:(BOOL)success)
+{
+  if ( @available( iOS 26.0, * ) ) {
+    dispatch_async( _continuedQueue, ^{
+      BGTask *task = self->_continuedTask;
+      self->_continuedTask = nil;
+      self->_continuedIdentifier = nil;
+      self->_continuedSubtitle = nil;
+      self->_continuedExpired = NO;
+      if ( !task ) return;
+      if ( [task isKindOfClass:BGContinuedProcessingTask.class] ) {
+        NSProgress *progress = ( (BGContinuedProcessingTask *)task ).progress;
+        progress.completedUnitCount = progress.totalUnitCount;
+      }
+      [task setTaskCompletedWithSuccess:success];
+    } );
+  }
+}
 
 // A device with no room left is not a per-file problem: every remaining file in
 // the run will fail the same way, instantly. JS abandons the run on this code
@@ -327,7 +494,7 @@ RCT_EXPORT_METHOD(copyImageToFile:(NSString *)relativePath
                           resolve:(RCTPromiseResolveBlock)resolve
                            reject:(RCTPromiseRejectBlock)reject)
 {
-  dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
+  dispatch_async( copyQueue( ), ^{
     NSURL *folder = resolveSavedFolder( );
     if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
       reject( @"unavailable", @"USB folder is not available", nil );

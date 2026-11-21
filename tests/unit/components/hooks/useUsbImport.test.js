@@ -13,6 +13,9 @@ const mockTakeUnfinishedUsbOffload = jest.fn( ( ) => null );
 const mockUpdateUsbOffloadProgress = jest.fn( );
 const mockGetUsbFolderDiagnostics = jest.fn( );
 const mockRefreshUsbCardState = jest.fn( async ( ) => undefined );
+const mockBeginContinuedUsbImport = jest.fn( async ( ) => false );
+const mockUpdateContinuedUsbImport = jest.fn( async ( ) => false );
+const mockEndContinuedUsbImport = jest.fn( );
 
 let mockPendingDeletes = [];
 const mockBeginBackgroundTask = jest.fn( ( ) => true );
@@ -20,6 +23,9 @@ const mockEndBackgroundTask = jest.fn( ( ) => undefined );
 
 jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   availableMemoryMb: ( ) => 512,
+  beginContinuedUsbImport: ( ...args ) => mockBeginContinuedUsbImport( ...args ),
+  updateContinuedUsbImport: ( ...args ) => mockUpdateContinuedUsbImport( ...args ),
+  endContinuedUsbImport: ( ...args ) => mockEndContinuedUsbImport( ...args ),
   refreshAvailableMemory: ( ) => undefined,
   clearUsbOffloadMarker: ( ) => mockClearUsbOffloadMarker( ),
   deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
@@ -29,6 +35,7 @@ jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
   markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
   markUsbOffloadStarted: ( ...args ) => mockMarkUsbOffloadStarted( ...args ),
+  notifyUsbImportFinished: jest.fn( ),
   // The real pending-delete list is MMKV-backed and outlives the run; an
   // in-memory array behaves the same way within a test, and the tests that
   // care about it reset it in beforeEach.
@@ -183,6 +190,51 @@ describe( "useUsbImport", ( ) => {
     // The run that did finish clears its own marker rather than leaving one
     // for the next scan to report.
     expect( mockClearUsbOffloadMarker ).toHaveBeenCalled( );
+  } );
+
+  // iOS suspends a backgrounded app after ~30s unless a continued-processing
+  // task holds it open, and that task is expired if it stops reporting.
+  it( "holds a continued-processing task for the run and reports each file", async ( ) => {
+    mockBeginContinuedUsbImport.mockResolvedValueOnce( true );
+    mockCopyUsbImageToFile.mockResolvedValue( { copied: true } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockBeginContinuedUsbImport ).toHaveBeenCalledWith(
+      expect.any( String ),
+      expect.any( String ),
+      40,
+    );
+    expect( mockUpdateContinuedUsbImport ).toHaveBeenCalledTimes( 40 );
+    expect( mockUpdateContinuedUsbImport ).toHaveBeenLastCalledWith( 40, expect.any( String ) );
+    expect( mockEndContinuedUsbImport ).toHaveBeenCalledWith( true );
+  } );
+
+  // The user cancelling from the system's progress UI (or the system
+  // expiring the task) stops the run, leaving the rest for the next import.
+  it( "stops without a cooldown when the continued-processing task ends", async ( ) => {
+    mockBeginContinuedUsbImport.mockResolvedValueOnce( true );
+    mockUpdateContinuedUsbImport
+      .mockResolvedValueOnce( false )
+      .mockResolvedValueOnce( true );
+    mockCopyUsbImageToFile.mockResolvedValue( { copied: true } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 2 );
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalled( );
+    expect( useUsbImportProgress.getState( ).phase ).toBe( "done" );
+    // Already ended by the system, so not ended again.
+    expect( mockEndContinuedUsbImport ).not.toHaveBeenCalled( );
+
+    // No cooldown: the next press imports straight away.
+    mockCopyUsbImageToFile.mockClear( );
+    await jest.advanceTimersByTimeAsync( 5_000 );
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalled( );
   } );
 
   it( "says nothing when the previous offload finished", async ( ) => {

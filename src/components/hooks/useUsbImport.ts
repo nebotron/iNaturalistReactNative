@@ -19,10 +19,12 @@ import { stagedPathFor } from "sharedHelpers/usbStaging";
 import {
   addPendingUsbDeletes,
   availableMemoryMb,
+  beginContinuedUsbImport,
   clearPendingUsbDeletes,
   clearUsbOffloadMarker,
   copyUsbImageToFile,
   deleteUsbSourceImages,
+  endContinuedUsbImport,
   getPendingUsbDeletes,
   getUsbFolderDiagnostics,
   isCameraSubfolder,
@@ -34,6 +36,7 @@ import {
   refreshAvailableMemory,
   refreshUsbCardState,
   takeUnfinishedUsbOffload,
+  updateContinuedUsbImport,
   updateUsbOffloadProgress,
 } from "sharedHelpers/usbStorage";
 import { saveUsbVideoToLibrary, usbVideoTimeoutMs } from "sharedHelpers/usbVideoImport";
@@ -178,6 +181,10 @@ const useUsbImport = ( ) => {
     // Whether this run is holding the shared background task, so the release in
     // `finally` matches the acquisition exactly once.
     let heldBackgroundTask = false;
+    // Likewise for the continued-processing task, which is what actually keeps
+    // a long run going in the background on iOS 26+.
+    let heldContinuedTask = false;
+    let continuedTaskSucceeded = false;
     const progress = useUsbImportProgress.getState( );
     // An offload the app never came back from. Reported here rather than at
     // launch because a run that died left its files unimported, so the next
@@ -266,6 +273,20 @@ const useUsbImport = ( ) => {
       // racing the suspension it exists to survive, and often loses.
       // Reference-counted, so this nests harmlessly inside other holds.
       heldBackgroundTask = await beginBackgroundUsbImportTask( );
+      // The shared task above buys iOS's usual ~30 seconds, after which the
+      // process is suspended and a long import stalls until the app is
+      // reopened. This one lasts the whole run, for as long as it keeps
+      // reporting progress. Same timing constraint: it can only be started
+      // from the foreground.
+      const progressSubtitle = ( saved: number ) => i18next.t( "Saved-X-of-Y", {
+        saved,
+        total: images.length,
+      } );
+      heldContinuedTask = await beginContinuedUsbImport(
+        i18next.t( "Importing-photos-to-your-library" ),
+        progressSubtitle( 0 ),
+        images.length,
+      );
 
       // Copy each image to staging, one at a time so memory stays flat and the
       // progress count is accurate. Track successes for the batch delete.
@@ -276,7 +297,9 @@ const useUsbImport = ( ) => {
       let abandoned = 0;
       // Which condition ended the run early, and so which marker reports it and
       // what the banner tells the user.
-      let abandonReason: "timeouts" | "failures" | "" = "";
+      // "cancelled" is the system or the user ending the continued-processing
+      // task (from its progress UI): not a fault, so no marker and no cooldown.
+      let abandonReason: "timeouts" | "failures" | "cancelled" | "" = "";
       let lastError = "";
       // When this run started waiting for space, so the wait is logged once
       // when it starts and once when it ends rather than every second.
@@ -447,9 +470,24 @@ const useUsbImport = ( ) => {
         }
         progress.setCounts( savedPaths.length, failed );
         updateUsbOffloadProgress( savedPaths.length, failed );
+        if ( heldContinuedTask ) {
+          // eslint-disable-next-line no-await-in-loop
+          const ended = await updateContinuedUsbImport(
+            savedPaths.length + failed,
+            progressSubtitle( savedPaths.length ),
+          );
+          if ( ended ) {
+            heldContinuedTask = false;
+            if ( !abandonReason && i < images.length - 1 ) abandonReason = "cancelled";
+          }
+        }
       }
 
-      if ( abandonReason ) {
+      if ( abandonReason === "cancelled" ) {
+        // The rest stay unimported for the next run to pick up.
+        logger.info( `USB offload: background task ended, stopping with ${abandoned} `
+          + `of ${images.length} file(s) left (appState=${AppState.currentState})` );
+      } else if ( abandonReason ) {
         // A card pulled mid-run fails every remaining copy instantly, which
         // trips the consecutive-failure counter like a full disk does — but
         // it is not a condition of the device, and it is over the moment the
@@ -528,7 +566,7 @@ const useUsbImport = ( ) => {
       // Reported even when nothing saved, since a run where every file failed
       // most needs an outcome. Skipped only when the wedged line above already
       // carries the same counts.
-      if ( !abandonReason ) {
+      if ( !abandonReason || abandonReason === "cancelled" ) {
         const driveNote = driveGoneOnDelete
           ? "; drive no longer available"
           : "";
@@ -540,7 +578,9 @@ const useUsbImport = ( ) => {
       }
       // An abandoned run can have no failures — the free-space check stops it
       // before any save — and must not read as "Import complete".
-      progress.setPhase( failed > 0 || abandonReason
+      const runFailed = failed > 0 || ( !!abandonReason && abandonReason !== "cancelled" );
+      continuedTaskSucceeded = !runFailed;
+      progress.setPhase( runFailed
         ? "error"
         : "done" );
       notifyUsbImportFinished(
@@ -557,6 +597,10 @@ const useUsbImport = ( ) => {
       // that vanish with the process.
       clearUsbOffloadMarker( );
       offloading.current = false;
+      if ( heldContinuedTask ) {
+        heldContinuedTask = false;
+        endContinuedUsbImport( continuedTaskSucceeded );
+      }
       if ( heldBackgroundTask ) {
         heldBackgroundTask = false;
         endBackgroundUsbImportTask( );

@@ -86,6 +86,9 @@ interface UsbStorageModule {
   copyImageToFile: ( relativePath: string, destPath: string ) => Promise<{ copied: boolean }>;
   deleteSourceImages: ( relativePaths: string[] ) => Promise<UsbDeleteResult>;
   notify: ( title: string, body: string ) => void;
+  beginContinuedImport: ( title: string, subtitle: string, total: number ) => Promise<boolean>;
+  updateContinuedImport: ( completed: number, subtitle: string ) => Promise<{ expired: boolean }>;
+  endContinuedImport: ( success: boolean ) => void;
 }
 
 const usbStorage = Platform.OS === "ios"
@@ -122,6 +125,32 @@ const getImportedNames = ( ): string[] => JSON.parse(
 );
 
 export const isUsbImportSupported = ( ) => !!usbStorage;
+
+// Keeps an import running at full speed while the app is in the background
+// (iOS 26's continued-processing task; see UsbStorage.m), with its progress in
+// system UI. Resolves false where that isn't available, leaving the run on the
+// shared background task alone. Must be called while the app is foregrounded.
+export const beginContinuedUsbImport = (
+  title: string,
+  subtitle: string,
+  total: number,
+): Promise<boolean> => usbStorage?.beginContinuedImport?.( title, subtitle, total )
+  .catch( ( ) => false ) ?? Promise.resolve( false );
+
+// Resolves true once the system or the user has ended the task, and the run
+// should stop.
+export const updateContinuedUsbImport = async (
+  completed: number,
+  subtitle: string,
+): Promise<boolean> => {
+  const result = await usbStorage?.updateContinuedImport?.( completed, subtitle )
+    .catch( ( ) => null );
+  return result?.expired === true;
+};
+
+export const endContinuedUsbImport = ( success: boolean ) => {
+  usbStorage?.endContinuedImport?.( success );
+};
 
 export const pickUsbFolder = ( ) => usbStorage?.pickFolder( ) ?? Promise.resolve( null );
 
