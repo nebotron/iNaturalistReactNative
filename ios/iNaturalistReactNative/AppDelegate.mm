@@ -33,6 +33,10 @@ class INatFeatureFlags : public facebook::react::ReactNativeFeatureFlagsOverride
 };
 
 @interface AppDelegate () <MXMetricManagerSubscriber>
+@property (nonatomic, copy, nullable) NSDictionary *appLaunchOptions;
+// Kept so a scene that reconnects after iOS discarded the last one shows the
+// same React Native root instead of starting a second one
+@property (nonatomic, strong, nullable) UIViewController *reactRootViewController;
 @end
 
 // MetricKit's stack JSON names frames only by binary UUID and nests one level per
@@ -179,26 +183,6 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
 
 @implementation AppDelegate
 
-// https://reactnative.dev/docs/linking#get-the-deep-link
-- (BOOL)application:(UIApplication *)app
-            openURL:(NSURL *)url
-            options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options
-{
-  BOOL handledByShareMenu = [ShareMenuManager application:app openURL:url options:options];
-  BOOL handledByLinkingManager = [RCTLinkingManager application:app openURL:url options:options];
-
-  // Return YES if either of the managers can handle the URL
-  return handledByShareMenu || handledByLinkingManager;
-}
-
-- (BOOL)application:(UIApplication *)application continueUserActivity:(nonnull NSUserActivity *)userActivity
- restorationHandler:(nonnull void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler
-{
-  return [RCTLinkingManager application:application
-                   continueUserActivity:userActivity
-                     restorationHandler:restorationHandler];
-}
-
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
   // Required for react-native-firebase: https://rnfirebase.io/#configure-firebase-with-ios-credentials-react-native--077
@@ -211,13 +195,9 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
   facebook::react::ReactNativeFeatureFlags::dangerouslyForceOverride(
     std::make_unique<INatFeatureFlags>() );
   self.dependencyProvider = [RCTAppDependencyProvider new];
-
-  self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-
-  [self.reactNativeFactory startReactNativeWithModuleName:@"iNaturalistReactNative"
-                                                 inWindow:self.window
-                                        initialProperties:@{}
-                                            launchOptions:launchOptions];
+  // React Native starts when the scene connects (SceneDelegate), since a
+  // window needs a scene to show in
+  self.appLaunchOptions = launchOptions;
 
   // Resume location monitoring when the user had location history tracking
   // enabled, or when iOS relaunched us because of a location event. Starting
@@ -386,6 +366,27 @@ static NSNumber *histogramSeconds( MXHistogram<NSUnitDuration *> *histogram )
   return names;
 }
 
+- (void)showReactNativeInWindow:(UIWindow *)window
+             sceneLaunchOptions:(NSDictionary *)sceneLaunchOptions
+{
+  self.window = window;
+  if ( self.reactRootViewController ) {
+    // The previous window is gone with its scene; free the controller for this one
+    self.reactRootViewController.view.window.rootViewController = nil;
+    window.rootViewController = self.reactRootViewController;
+    [window makeKeyAndVisible];
+    return;
+  }
+  NSMutableDictionary *options =
+    [NSMutableDictionary dictionaryWithDictionary:self.appLaunchOptions ?: @{}];
+  [options addEntriesFromDictionary:sceneLaunchOptions];
+  [self.reactNativeFactory startReactNativeWithModuleName:@"iNaturalistReactNative"
+                                                 inWindow:window
+                                        initialProperties:@{}
+                                            launchOptions:options];
+  self.reactRootViewController = window.rootViewController;
+}
+
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
 {
   return [self bundleURL];
@@ -398,6 +399,82 @@ static NSNumber *histogramSeconds( MXHistogram<NSUnitDuration *> *histogram )
 #else
   return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
 #endif
+}
+
+@end
+
+// With the scene lifecycle, UIKit sends opened URLs and user activities to the
+// scene rather than to the app delegate, and the ones a cold launch was opened
+// with arrive in the connection options instead of the app's launch options.
+static NSDictionary<UIApplicationOpenURLOptionsKey, id> *openURLOptions( UIOpenURLContext *context )
+{
+  NSMutableDictionary *options = [NSMutableDictionary new];
+  if ( context.options.sourceApplication ) {
+    options[UIApplicationOpenURLOptionsSourceApplicationKey] = context.options.sourceApplication;
+  }
+  if ( context.options.annotation ) {
+    options[UIApplicationOpenURLOptionsAnnotationKey] = context.options.annotation;
+  }
+  options[UIApplicationOpenURLOptionsOpenInPlaceKey] = @( context.options.openInPlace );
+  return options;
+}
+
+// https://reactnative.dev/docs/linking#get-the-deep-link
+static void openURLContexts( NSSet<UIOpenURLContext *> *contexts )
+{
+  UIApplication *app = [UIApplication sharedApplication];
+  for ( UIOpenURLContext *context in contexts ) {
+    // Hands the URL to both the share extension's handler and RN's Linking;
+    // ShareMenu holds a share that arrives before its module exists
+    [ShareMenuManager application:app openURL:context.URL options:openURLOptions( context )];
+  }
+}
+
+static void continueUserActivity( NSUserActivity *userActivity )
+{
+  [RCTLinkingManager application:[UIApplication sharedApplication]
+            continueUserActivity:userActivity
+              restorationHandler:^( NSArray<id<UIUserActivityRestoring>> *_Nullable objects ) {}];
+}
+
+@implementation SceneDelegate
+
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)connectionOptions
+{
+  if ( ![scene isKindOfClass:[UIWindowScene class]] ) return;
+  self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+
+  // RN's Linking.getInitialURL reads these from the launch options, and a
+  // URL event sent now would arrive before JS listens for it
+  NSMutableDictionary *sceneLaunchOptions = [NSMutableDictionary new];
+  NSURL *url = connectionOptions.URLContexts.anyObject.URL;
+  if ( url ) sceneLaunchOptions[UIApplicationLaunchOptionsURLKey] = url;
+  NSUserActivity *activity = connectionOptions.userActivities.anyObject;
+  if ( activity ) {
+    sceneLaunchOptions[UIApplicationLaunchOptionsUserActivityDictionaryKey] = @{
+      UIApplicationLaunchOptionsUserActivityTypeKey: activity.activityType,
+      @"UIApplicationLaunchOptionsUserActivityKey": activity,
+    };
+  }
+
+  AppDelegate *appDelegate = (AppDelegate *) [UIApplication sharedApplication].delegate;
+  [appDelegate showReactNativeInWindow:self.window sceneLaunchOptions:sceneLaunchOptions];
+
+  // Shared photos come in by URL: ShareMenu keeps one that arrives before
+  // its module exists and hands it to getInitialShare
+  openURLContexts( connectionOptions.URLContexts );
+}
+
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts
+{
+  openURLContexts( URLContexts );
+}
+
+- (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity
+{
+  continueUserActivity( userActivity );
 }
 
 @end
