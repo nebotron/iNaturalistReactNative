@@ -110,7 +110,14 @@ const ObsImagePreview = ( {
   hideGradientOverlay = false,
   squareCorners = false,
 }: Props ) => {
-  const [containerWidth, setContainerWidth] = useState<number | null>( null );
+  // Start from the width the caller sized the tile to, when it gave one, so
+  // the photo is drawn at its final size on the first render instead of only
+  // after layout (which swapped the image out and made the grid flicker).
+  const [containerWidth, setContainerWidth] = useState<number | null>(
+    typeof style?.width === "number"
+      ? Math.round( style.width )
+      : null,
+  );
   const currentIndexRef = useRef( 0 );
   const flatListRef = useRef<FlatList<{ uri: string } | null>>( null );
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
@@ -174,7 +181,10 @@ const ObsImagePreview = ( {
   );
 
   const handleContainerLayout = useCallback( ( e: LayoutChangeEvent ) => {
-    setContainerWidth( Math.round( e.nativeEvent.layout.width ) );
+    const width = Math.round( e.nativeEvent.layout.width );
+    setContainerWidth( prev => ( prev === width
+      ? prev
+      : width ) );
   }, [] );
 
   const imageClassNames: ArgumentArray = [
@@ -422,6 +432,7 @@ const ObsImagePreview = ( {
         <ObsImage
           autoDetectSubject={autoDetectSubject}
           fitImage={fitImage}
+          initialContainerSize={containerWidth ?? undefined}
           uri={source}
           zoomable={zoomable}
           zoomCrop={zoomCrop}

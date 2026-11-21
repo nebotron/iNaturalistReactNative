@@ -40,6 +40,8 @@ interface Props {
     crop: NormalizedCrop,
     dims: { width: number; height: number },
   ) => void;
+  // Called once the photo has been drawn
+  onLoad?: ( ) => void;
   testID?: string;
 }
 
@@ -91,6 +93,7 @@ const ObsImageZoomable = ( {
   size,
   brightness,
   onCropChange,
+  onLoad,
   testID = "ObsList.photo",
 }: Props ) => {
   const zoomRef = useRef<SharedZoomableImageRef | null>( null );
@@ -198,6 +201,7 @@ const ObsImageZoomable = ( {
       cropPanContext={cropPanContext}
       onInteractionEnd={handleInteractionEnd}
       onImageDimensionsChange={handleImageDimensionsChange}
+      onLoad={onLoad}
       testID={testID}
     />
   );
