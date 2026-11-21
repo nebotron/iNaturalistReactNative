@@ -15,7 +15,8 @@ const gainToStops = ( gain: number ) => Math.min(
 
 // Computes the display brightness for the current photo. The exposure slider
 // starts at the neutral default; dragging it sets a manual adjustment for
-// that photo, applied live as a flat CSS brightness filter.
+// that photo, applied live by the native BrightenedImage view with the same
+// per-pixel policy the crop editor bakes into the saved file.
 const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   const [manualStops, setManualStops] = useState<number | null>( null );
 

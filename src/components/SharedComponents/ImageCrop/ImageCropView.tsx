@@ -273,7 +273,7 @@ const ImageCropView = ( {
     zoomAroundCentre( img, scale, windowWidth / 2, cropAreaHeight / 2 );
   }, [cropAreaHeight, windowWidth] );
 
-  // Zoom slider plus exposure. Brightness drives the CSS filter live, is
+  // Zoom slider plus exposure. Brightness drives the preview live, is
   // recorded to the brightness log on release, and is baked into the cropped
   // file on confirm. Zoom
   // never resets on a new photo here — the initialCrop effect below frames each

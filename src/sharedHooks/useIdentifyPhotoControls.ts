@@ -64,7 +64,7 @@ const useIdentifyPhotoControls = ( {
   }, [] );
 
   // Update the exposure override live; the image re-renders with the new
-  // brightness filter each tick.
+  // brightness each tick.
   const handleBrightnessChange = useCallback( ( value: number ) => {
     setBrightnessStops( value );
   }, [setBrightnessStops] );

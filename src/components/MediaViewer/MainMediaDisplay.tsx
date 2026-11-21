@@ -110,7 +110,7 @@ const MainMediaDisplay = ( {
   const selectedPhoto = photos[selectedMediaIndex];
 
   // The same zoom + exposure sliders as the crop editor: brightness drives the
-  // CSS filter live and is recorded to the brightness log on release.
+  // preview live and is recorded to the brightness log on release.
   const {
     brightness,
     brightnessStops,

@@ -9,6 +9,7 @@
 #import <Photos/Photos.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <React/RCTBridgeModule.h>
+#import <React/RCTViewManager.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
 #include <mach/mach.h>
@@ -644,31 +645,38 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, NSMutableArray<NSN
 
 // ─── Brightness adjustment (linear multiply) ─────────────────────────────────
 
-// Brightness: multiplies each channel's encoded value by the gain k, as the CSS
-// brightness() filter on the live slider preview does. Clamping each channel
-// on its own would shift a pixel's hue once its brightest channel hit 255 while
-// the others kept rising, so a pixel's gain is capped at the point where its
-// brightest channel reaches 255: past that the whole pixel stops changing and
-// its R:G:B ratio is kept. Darkening never clips, so it scales every pixel by k.
-// The cap depends only on the brightest channel, so precompute the gain for
-// each of the 256 possible maxima once.
+// Brightness: multiplies each channel's encoded value by the gain k. Clamping
+// each channel on its own would shift a pixel's hue once its brightest channel
+// hit 255 while the others kept rising, so a pixel's gain is capped at the
+// point where its brightest channel reaches 255: past that the whole pixel
+// stops changing and its R:G:B ratio is kept. Darkening never clips, so it
+// scales every pixel by k. Both the file written on crop and the live slider
+// preview (BrightenedImageView below) go through this one function, so what
+// the slider shows is what is saved.
+// A pixel's output depends only on its brightest channel and the channel's own
+// value, so precompute all 256 x 256 outputs once and apply them with one
+// table lookup per channel.
 static void applyBrightnessMultiplyBuffer( unsigned char *raw, int pixelCount, float k )
 {
-  float gainForMax[256];
-  gainForMax[0] = k;
-  for ( int m = 1; m < 256; m++ ) {
-    gainForMax[m] = MIN( k, 255.0f / m );
+  if ( k == 1.0f ) return;
+  unsigned char *lut = malloc( 256 * 256 );
+  if ( !lut ) return;
+  for ( int m = 0; m < 256; m++ ) {
+    float g = m == 0 ? k : MIN( k, 255.0f / m );
+    for ( int i = 0; i < 256; i++ ) {
+      float v = roundf( i * g );
+      lut[m * 256 + i] = v <= 0.0f ? 0 : ( v >= 255.0f ? 255 : (unsigned char)v );
+    }
   }
 
   for ( int i = 0; i < pixelCount; i++ ) {
     unsigned char *px = raw + i * 4;
-    unsigned char m = MAX( px[0], MAX( px[1], px[2] ) );
-    float g = gainForMax[m];
-    for ( int c = 0; c < 3; c++ ) {
-      float v = roundf( px[c] * g );
-      px[c] = v <= 0.0f ? 0 : ( v >= 255.0f ? 255 : (unsigned char)v );
-    }
+    const unsigned char *row = lut + MAX( px[0], MAX( px[1], px[2] ) ) * 256;
+    px[0] = row[px[0]];
+    px[1] = row[px[1]];
+    px[2] = row[px[2]];
   }
+  free( lut );
 }
 
 // ─── Public detection entry point ────────────────────────────────────────────
@@ -3932,5 +3940,241 @@ RCT_EXPORT_METHOD( saveCroppedAsset
     } );
   } );
 }
+
+@end
+
+// ─── Live brightness preview ─────────────────────────────────────────────────
+
+// Longest side of the preview's decode. Large enough to stay sharp on screen
+// and moderately zoomed in, small enough that re-applying the gain on every
+// slider tick keeps up.
+static const CGFloat kBrightnessPreviewMaxPixel = 2560;
+
+// An 8-bit RGBX copy of the image in src, orientation applied, at most
+// kBrightnessPreviewMaxPixel on its longest side, in the colour space
+// croppedJpegData's brightening draws in. NULL on failure.
+static NSData *brightnessPreviewPixels( CGImageSourceRef src, size_t *outW, size_t *outH,
+                                        CGColorSpaceRef *outSpace )
+{
+  if ( !src || CGImageSourceGetCount( src ) == 0 ) return nil;
+  NSDictionary *options = @{
+    (id)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+    (id)kCGImageSourceCreateThumbnailWithTransform: @YES,
+    (id)kCGImageSourceThumbnailMaxPixelSize: @( kBrightnessPreviewMaxPixel ),
+    (id)kCGImageSourceShouldCacheImmediately: @YES,
+  };
+  CGImageRef image = CGImageSourceCreateThumbnailAtIndex(
+    src, primaryImageIndex( src ), (__bridge CFDictionaryRef)options );
+  if ( !image ) return nil;
+  size_t W = CGImageGetWidth( image );
+  size_t H = CGImageGetHeight( image );
+  CGColorSpaceRef space = drawingColorSpaceFor( image );
+  NSMutableData *pixels = [NSMutableData dataWithLength:W * H * 4];
+  CGContextRef bmp = pixels ? CGBitmapContextCreate(
+    pixels.mutableBytes, W, H, 8, 4 * W, space,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast ) : NULL;
+  if ( !bmp ) {
+    CGImageRelease( image );
+    CGColorSpaceRelease( space );
+    return nil;
+  }
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), image );
+  CGContextRelease( bmp );
+  CGImageRelease( image );
+  *outW = W;
+  *outH = H;
+  *outSpace = space;
+  return pixels;
+}
+
+static dispatch_queue_t brightnessPreviewQueue( void )
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    queue = dispatch_queue_create( "org.inaturalist.brightnessPreview",
+      dispatch_queue_attr_make_with_qos_class( DISPATCH_QUEUE_SERIAL,
+                                               QOS_CLASS_USER_INTERACTIVE, 0 ) );
+  } );
+  return queue;
+}
+
+// Draws the photo at `uri` (file path or file://, http(s), or ph://) aspect-fit
+// in its bounds with `brightness` applied by applyBrightnessMultiplyBuffer --
+// the same per-pixel policy the cropped file is written with -- in place of the
+// CSS brightness() filter, which clamps each channel on its own. Transparent
+// until the first render, so whatever is drawn beneath shows meanwhile.
+@interface BrightenedImageView : UIView
+@property ( nonatomic, copy ) NSString *uri;
+@property ( nonatomic, assign ) float brightness;
+@end
+
+@implementation BrightenedImageView
+{
+  NSData         *_pixels;
+  size_t          _pixelsW;
+  size_t          _pixelsH;
+  CGColorSpaceRef _space;
+  BOOL            _rendering;
+  BOOL            _renderAgain;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame
+{
+  if ( ( self = [super initWithFrame:frame] ) ) {
+    _brightness = 1.0f;
+    self.userInteractionEnabled = NO;
+    self.layer.contentsGravity = kCAGravityResizeAspect;
+    self.layer.magnificationFilter = kCAFilterTrilinear;
+    self.layer.minificationFilter = kCAFilterTrilinear;
+  }
+  return self;
+}
+
+- (void)dealloc
+{
+  CGColorSpaceRelease( _space );
+}
+
+- (void)setBrightness:(float)brightness
+{
+  if ( brightness == _brightness ) return;
+  _brightness = brightness;
+  [self scheduleRender];
+}
+
+- (void)setUri:(NSString *)uri
+{
+  if ( [uri isEqualToString:_uri] ) return;
+  _uri = [uri copy];
+  _pixels = nil;
+  CGColorSpaceRelease( _space );
+  _space = NULL;
+  self.layer.contents = nil;
+  if ( uri.length == 0 ) return;
+
+  __weak BrightenedImageView *weakSelf = self;
+  void ( ^decode )( CGImageSourceRef ) = ^( CGImageSourceRef src ) {
+    size_t          W = 0, H = 0;
+    CGColorSpaceRef space = NULL;
+    NSData         *pixels = brightnessPreviewPixels( src, &W, &H, &space );
+    if ( src ) CFRelease( src );
+    dispatch_async( dispatch_get_main_queue( ), ^{
+      BrightenedImageView *view = weakSelf;
+      if ( view && pixels && [view.uri isEqualToString:uri] ) {
+        view->_pixels = pixels;
+        view->_pixelsW = W;
+        view->_pixelsH = H;
+        CGColorSpaceRelease( view->_space );
+        view->_space = CGColorSpaceRetain( space );
+        [view scheduleRender];
+      }
+      CGColorSpaceRelease( space );
+    } );
+  };
+  void ( ^decodeData )( NSData * ) = ^( NSData *data ) {
+    if ( !data ) return;
+    dispatch_async( brightnessPreviewQueue( ), ^{
+      decode( CGImageSourceCreateWithData( (__bridge CFDataRef)data, NULL ) );
+    } );
+  };
+
+  if ( [uri hasPrefix:@"ph://"] ) {
+    NSString *localId = [uri substringFromIndex:5];
+    PHAsset  *asset = [PHAsset fetchAssetsWithLocalIdentifiers:@[localId] options:nil].firstObject;
+    if ( !asset ) return;
+    PHImageRequestOptions *options = [PHImageRequestOptions new];
+    options.networkAccessAllowed = YES;
+    options.version = PHImageRequestOptionsVersionCurrent;
+    [[PHImageManager defaultManager]
+      requestImageDataAndOrientationForAsset:asset
+                                     options:options
+                               resultHandler:^( NSData *data, NSString *uti,
+                                                CGImagePropertyOrientation orientation,
+                                                NSDictionary *info ) {
+        decodeData( data );
+      }];
+    return;
+  }
+
+  NSURL *url = [NSURL URLWithString:uri];
+  if ( url.scheme == nil ) url = [NSURL fileURLWithPath:uri];
+  if ( url.isFileURL ) {
+    dispatch_async( brightnessPreviewQueue( ), ^{
+      decode( CGImageSourceCreateWithURL( (__bridge CFURLRef)url, NULL ) );
+    } );
+    return;
+  }
+  NSURLRequest *request = [NSURLRequest requestWithURL:url
+                                           cachePolicy:NSURLRequestReturnCacheDataElseLoad
+                                       timeoutInterval:60];
+  [[[NSURLSession sharedSession] dataTaskWithRequest:request
+                                   completionHandler:^( NSData *data, NSURLResponse *response,
+                                                        NSError *error ) {
+    NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
+      ? ( (NSHTTPURLResponse *)response ).statusCode
+      : 200;
+    if ( !error && status < 400 ) decodeData( data );
+  }] resume];
+}
+
+// Re-applies the gain off the main thread. Slider ticks that arrive while a
+// render is running collapse into one more render with the latest value.
+- (void)scheduleRender
+{
+  if ( !_pixels ) return;
+  if ( _rendering ) {
+    _renderAgain = YES;
+    return;
+  }
+  _rendering = YES;
+  NSData         *base = _pixels;
+  size_t          W = _pixelsW, H = _pixelsH;
+  CGColorSpaceRef space = CGColorSpaceRetain( _space );
+  float           k = _brightness;
+  NSString       *uri = _uri;
+  __weak BrightenedImageView *weakSelf = self;
+  dispatch_async( brightnessPreviewQueue( ), ^{
+    NSMutableData *pixels = [base mutableCopy];
+    applyBrightnessMultiplyBuffer( pixels.mutableBytes, (int)( W * H ), k );
+    CGDataProviderRef provider = CGDataProviderCreateWithCFData( (__bridge CFDataRef)pixels );
+    CGImageRef image = provider ? CGImageCreate(
+      W, H, 8, 32, 4 * W, space, kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast,
+      provider, NULL, false, kCGRenderingIntentDefault ) : NULL;
+    CGDataProviderRelease( provider );
+    CGColorSpaceRelease( space );
+    dispatch_async( dispatch_get_main_queue( ), ^{
+      BrightenedImageView *view = weakSelf;
+      if ( view ) {
+        view->_rendering = NO;
+        if ( image && [view.uri isEqualToString:uri] ) {
+          [CATransaction begin];
+          [CATransaction setDisableActions:YES];
+          view.layer.contents = (__bridge id)image;
+          [CATransaction commit];
+        }
+        if ( view->_renderAgain ) {
+          view->_renderAgain = NO;
+          [view scheduleRender];
+        }
+      }
+      CGImageRelease( image );
+    } );
+  } );
+}
+
+@end
+
+@interface BrightenedImageManager : RCTViewManager
+@end
+
+@implementation BrightenedImageManager
+
+RCT_EXPORT_MODULE( )
+
+RCT_EXPORT_VIEW_PROPERTY( uri, NSString )
+RCT_EXPORT_VIEW_PROPERTY( brightness, float )
+
+- (UIView *)view { return [BrightenedImageView new]; }
 
 @end
