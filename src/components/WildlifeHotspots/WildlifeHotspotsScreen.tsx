@@ -412,10 +412,11 @@ const WildlifeHotspotsScreen = ( {
 
   // The viewport only moves on its own when the set of waypoints or hotspots
   // changes, not when the same route is refetched or a hotspot is selected.
-  // Once hotspots are chosen it covers them as well as the route.
+  // It waits until the search finishes, so it moves once, to the route and its
+  // hotspots together, rather than to the route first and again for hotspots.
   const fittedWaypointsKeyRef = useRef<string | null>( null );
   useEffect( () => {
-    if ( !mapReady || routeCoords.length === 0 || !mapRef.current ) return;
+    if ( !mapReady || loading || routeCoords.length === 0 || !mapRef.current ) return;
     const waypointsKey = JSON.stringify( [confirmedStopPoints, hotspots.map( h => h.id )] );
     if ( fittedWaypointsKeyRef.current === waypointsKey ) return;
     fittedWaypointsKeyRef.current = waypointsKey;
@@ -429,7 +430,7 @@ const WildlifeHotspotsScreen = ( {
       animated: true,
     } );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, routeCoords, hotspots] );
+  }, [mapReady, loading, routeCoords, hotspots] );
 
   // When a newly selected hotspot's route arrives and part of it is off
   // screen, the viewport moves to show the whole route; otherwise it stays put.
