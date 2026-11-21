@@ -1,3 +1,4 @@
+import { prefetch } from "@candlefinance/faster-image";
 import classnames from "classnames";
 import { FasterImageView, Image, View } from "components/styledComponents";
 import React, { useCallback, useEffect, useState } from "react";
@@ -32,6 +33,12 @@ interface Props {
   // Decode a local file at full resolution, rather than at the view's size as
   // <Image> does, so it stays sharp when zoomed in.
   fullResolution?: boolean;
+  // Decode at most this many pixels on the long side rather than the whole
+  // file. Applies wherever the image goes through FasterImageView (remote
+  // images, and local files with fullResolution). A grid cell drawing an
+  // original-size photo otherwise decodes tens of megabytes to show a few
+  // hundred pixels, for every cell on screen.
+  maxPixelSize?: number;
   onError?: ( ) => void;
   onLoad?: ( dimensions: { width: number; height: number } ) => void;
   // React Native's <Image> defaults to "cover" while FasterImageView defaults
@@ -55,6 +62,24 @@ const remoteUriFor = ( source: Props["source"] ): string | null => {
     ? uri
     : null;
 };
+
+// Downloads images into the disk cache without decoding them, for lists whose
+// cells draw at their own size (maxPixelSize): prefetch( ) decodes each one at
+// full size into a memory cache the cells' smaller decodes never read. Where
+// the native side has no data-only prefetch, falls back to prefetch( ).
+export const prefetchImageData = ( urls: string[] ) => {
+  const prefetchData = NativeModules.FasterImageViewManager?.prefetchData;
+  const promise: Promise<unknown> = prefetchData
+    ? prefetchData( urls )
+    : prefetch( urls );
+  return promise.catch( ( ) => null );
+};
+
+// Whether CachedImage draws this uri with FasterImageView, i.e. whether
+// maxPixelSize applies to it
+export const decodesWithFasterImage = ( uri: string, fullResolution = false ) => (
+  !!remoteUriFor( { uri } ) || ( fullResolution && uri.startsWith( "file://" ) )
+);
 
 // iNaturalist photo sizes, smallest first. They share a URL apart from the
 // size segment, e.g. .../photos/123/large.jpg.
@@ -114,6 +139,7 @@ const CachedImage = ( {
   children,
   className,
   fullResolution = false,
+  maxPixelSize,
   onError,
   onLoad,
   resizeMode = "cover",
@@ -185,6 +211,10 @@ const CachedImage = ( {
                 : "memory",
               resizeMode,
               transitionDuration,
+              // Left out rather than sent as null, which Android can't read
+              ...( maxPixelSize
+                ? { maxPixelSize }
+                : {} ),
             }}
             onSuccess={onLoad || placeholderUri
               ? handleFasterImageSuccess

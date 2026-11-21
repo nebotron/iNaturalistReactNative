@@ -1,5 +1,4 @@
 /* eslint-disable react/no-unused-prop-types */
-import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation } from "@react-navigation/native";
 import type { FlashListRef, ViewToken } from "@shopify/flash-list";
 import { isEbirdObservation } from "api/ebird";
@@ -10,6 +9,7 @@ import {
   CustomRefreshControl,
   InfiniteScrollLoadingWheel,
 } from "components/SharedComponents";
+import { prefetchImageData } from "components/SharedComponents/CachedImage";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -362,7 +362,7 @@ const ObservationsFlashList = ( {
 
       const allUrls = [...nextItemUrls, ...carouselUrls];
       if ( allUrls.length > 0 ) {
-        prefetch( allUrls );
+        prefetchImageData( allUrls );
       }
     },
     [explore],

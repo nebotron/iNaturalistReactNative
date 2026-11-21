@@ -46,6 +46,7 @@ import logRawImportMetadata, {
 import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { moveSharedGroupedPhotos } from "sharedHelpers/shareExtensionFiles";
 import { useExitObservationFlow, useGridLayout, useTranslation } from "sharedHooks";
+import useStableCallback from "sharedHooks/useStableCallback";
 import type { GroupedPhoto } from "stores/createObservationFlowSlice";
 import useStore from "stores/useStore";
 
@@ -157,7 +158,7 @@ const GroupPhotosContainer = ( ) => {
     return ( ) => clearTimeout( timer );
   }, [groupedPhotos] );
 
-  const selectAllPhotos = () => {
+  const selectAllPhotos = useStableCallback( () => {
     // Cells still standing in for photos being copied can't be combined or
     // cropped yet, so they're left out of a select-all the same way a tap on
     // one is ignored.
@@ -166,9 +167,12 @@ const GroupPhotosContainer = ( ) => {
         .map( ( _obs, index ) => index )
         .filter( index => !( groupedPhotos[index].photos || [] ).some( photo => photo.pending ) ),
     );
-  };
+  } );
 
-  const selectObservationPhotos = ( isSelected: boolean, observation: GroupedPhoto ) => {
+  const selectObservationPhotos = useStableCallback( (
+    isSelected: boolean,
+    observation: GroupedPhoto,
+  ) => {
     const index = groupedPhotos.indexOf( observation );
     if ( index < 0 ) {
       return;
@@ -183,7 +187,7 @@ const GroupPhotosContainer = ( ) => {
     } else {
       setSelectedIndices( prev => prev.filter( selectedIndex => selectedIndex !== index ) );
     }
-  };
+  } );
 
   const setPendingScrollOffset = useCallback( ( targetIndex: number | null ) => {
     if ( targetIndex === null ) return;
@@ -415,9 +419,17 @@ const GroupPhotosContainer = ( ) => {
 
   // The separate, duplicate, and remove buttons live on each photo, so they
   // always act on the photo they're drawn on rather than on the selection.
-  const separateItem = ( item: GroupedPhoto ) => separateObservations( [item] );
-  const duplicateItem = ( item: GroupedPhoto ) => duplicateObservations( [item] );
-  const removeItem = ( item: GroupedPhoto ) => removeObservations( [item] );
+  // Stable, so the grid's cells don't all re-render each time this does
+  const separateItem = useStableCallback(
+    ( item: GroupedPhoto ) => separateObservations( [item] ),
+  );
+  const duplicateItem = useStableCallback(
+    ( item: GroupedPhoto ) => duplicateObservations( [item] ),
+  );
+  const removeItem = useStableCallback(
+    ( item: GroupedPhoto ) => removeObservations( [item] ),
+  );
+  const clearSelection = useCallback( ( ) => setSelectedIndices( [] ), [] );
 
   // Backing out of Group Photos abandons the import entirely: nothing here has
   // been saved yet, and the grouped photos are persisted (see
@@ -687,7 +699,7 @@ const GroupPhotosContainer = ( ) => {
 
   return (
     <GroupPhotos
-      clearSelection={() => setSelectedIndices( [] )}
+      clearSelection={clearSelection}
       combinePhotos={combinePhotos}
       discardImport={discardImport}
       duplicateItem={duplicateItem}

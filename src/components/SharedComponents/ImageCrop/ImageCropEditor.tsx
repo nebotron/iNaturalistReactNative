@@ -675,6 +675,15 @@ const ImageCropEditor = ( ) => {
     setGroupCropResume,
   ] );
 
+  // Filing a removed photo in the imported album walks every device photo in
+  // Realm and writes to the Photos library. Asked for on each delete, it ran
+  // two seconds later -- while the user was on the next photo of a bulk crop
+  // -- and stalled it; as in Group Photos, it waits until the editor closes.
+  const deletedDevicePhotos = useRef( false );
+  useEffect( ( ) => ( ) => {
+    if ( deletedDevicePhotos.current ) requestQueuedDeletionAlbumSync( );
+  }, [] );
+
   const handleDelete = useCallback( ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
       const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
@@ -686,7 +695,7 @@ const ImageCropEditor = ( ) => {
           // deleting it, so the photo stays hidden from the photo picker and
           // lands in the imported album (removedGroupPhotoUris.ts).
           addRemovedGroupPhotoUris( [deviceUri] );
-          requestQueuedDeletionAlbumSync( );
+          deletedDevicePhotos.current = true;
         }
       }
       const remainingGroups = groupedPhotos

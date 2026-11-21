@@ -10,7 +10,7 @@ import {
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import { Pressable, View } from "components/styledComponents";
-import React, { useCallback, useState } from "react";
+import React, { memo, useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { getBrightness } from "sharedHelpers/brightnessLog";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -35,9 +35,9 @@ interface Item {
 interface Props {
   duplicateItem: ( item: Item ) => void;
   isDuplicatingPhotos?: boolean;
+  isSelected: boolean;
   item: Item;
   removeItem: ( item: Item ) => void;
-  selectedObservations: Item[];
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
   separateItem: ( item: Item ) => void;
   style?: ViewStyle;
@@ -46,9 +46,9 @@ interface Props {
 const GroupPhotoImage = ( {
   duplicateItem,
   isDuplicatingPhotos,
+  isSelected,
   item,
   removeItem,
-  selectedObservations,
   selectObservationPhotos,
   separateItem,
   style,
@@ -70,7 +70,6 @@ const GroupPhotoImage = ( {
   // file the import hasn't written yet (see PhotoLibrary).
   const isPending = photos.length > 0 && photos.every( photo => photo.pending );
 
-  const isSelected = selectedObservations.includes( item );
   const handlePress = useCallback(
     ( ) => selectObservationPhotos( isSelected, item ),
     [isSelected, item, selectObservationPhotos],
@@ -256,4 +255,7 @@ const GroupPhotoImage = ( {
   );
 };
 
-export default GroupPhotoImage;
+// Memoized: the grid re-renders whenever Group Photos changes (a photo
+// landing, a crop saved, a photo removed), and a cell whose group, selection
+// and handlers are unchanged has nothing new to draw.
+export default memo( GroupPhotoImage );

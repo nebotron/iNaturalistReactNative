@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { PixelRatio } from "react-native";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
@@ -14,6 +15,10 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect, isSameCrop } from "sharedHelpers/normalizedCropTypes";
 
 const MAX_SCALE = 100;
+// A framed photo is drawn sharper than the tile once it's this much larger
+const DETAIL_OVER_TILE = 1.25;
+// Past this a capped decode saves little over the whole file
+const DETAIL_FULL_PX = 4096;
 
 interface Props {
   uri: string;
@@ -183,11 +188,35 @@ const ObsImageZoomable = ( {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uri, size, imageWidth, imageHeight, initialCrop, followCrop] );
 
+  // Decode the photo at the tile's size: a grid of originals otherwise holds a
+  // full-resolution bitmap per visible cell, hundreds of megabytes for photos
+  // shown a few hundred pixels across. A photo framed tighter than the whole
+  // image, or pinched, gets a sharper copy on top. Scale is at most one over
+  // the crop's shorter side (the photo's long side fills the tile at scale 1),
+  // so that bounds the pixels the framing needs without knowing the
+  // photo's dimensions.
+  const [pinched, setPinched] = useState( false );
+  const handleInteractionStart = useCallback( ( ) => setPinched( true ), [] );
+  const tilePx = Math.ceil( size * PixelRatio.get( ) );
+  const framedPx = initialCrop
+    ? tilePx / Math.max( 0.01, Math.min( initialCrop.w, initialCrop.h ) )
+    : tilePx;
+  let detail: boolean | number = false;
+  if ( pinched || framedPx >= DETAIL_FULL_PX ) {
+    detail = true;
+  } else if ( framedPx > tilePx * DETAIL_OVER_TILE ) {
+    // Bucketed so a reframing doesn't re-decode for a few pixels' difference
+    detail = Math.ceil( framedPx / 256 ) * 256;
+  }
+
   return (
     <SharedZoomableImage
       ref={zoomRef}
       uri={uri}
       fullResolution={fullResolution}
+      maxPixelSize={tilePx}
+      detail={detail}
+      onInteractionStart={handleInteractionStart}
       brightness={brightness}
       style={{ width: size, height: size }}
       // scale 1 renders the whole image contained (letterboxed) in the square, so

@@ -1,4 +1,4 @@
-import CachedImage from "components/SharedComponents/CachedImage";
+import CachedImage, { decodesWithFasterImage } from "components/SharedComponents/CachedImage";
 import type { ForwardRefRenderFunction, ReactNode } from "react";
 import React, {
   forwardRef,
@@ -39,6 +39,14 @@ const styles = StyleSheet.create( {
 type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
   fullResolution?: boolean;
+  // Decode the photo at most this many pixels on the long side (see
+  // CachedImage), e.g. a grid tile at its own size
+  maxPixelSize?: number;
+  // A sharper copy drawn over a maxPixelSize photo, for when it's shown (or
+  // pinched) larger than that: true decodes the whole file, a number caps it.
+  // A layer of its own so the photo underneath stays up while it decodes,
+  // rather than the view blanking as it would on a new source.
+  detail?: boolean | number;
   onLongPress?: () => void;
   onScaleChange?: ( scale: number ) => void;
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
@@ -84,6 +92,8 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     allowLetterboxPan,
     brightness = 1,
     fullResolution,
+    maxPixelSize,
+    detail = false,
     onLongPress,
     onScaleChange,
     onImageDimensionsChange,
@@ -195,6 +205,8 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     }
     : StyleSheet.absoluteFill;
 
+  const showDetail = !!detail && !!maxPixelSize && decodesWithFasterImage( uri, fullResolution );
+
   const handleLayout = ( event: LayoutChangeEvent ) => {
     const { width, height } = event.nativeEvent.layout;
     viewSizeRef.current = { width, height };
@@ -256,8 +268,21 @@ const SharedZoomableImage: ForwardRefRenderFunction<
                   onImageDimensionsChange?.( { width, height } );
                   onLoad?.( );
                 }}
+                maxPixelSize={maxPixelSize}
                 onError={onError}
               />
+              {showDetail && (
+                <CachedImage
+                  key={String( detail )}
+                  className="absolute inset-0"
+                  source={{ uri }}
+                  fullResolution={fullResolution}
+                  maxPixelSize={detail === true
+                    ? undefined
+                    : detail || undefined}
+                  resizeMode="contain"
+                />
+              )}
             </Animated.View>
           )}
       </View>
