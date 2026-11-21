@@ -8,6 +8,7 @@ export enum OBSERVATIONS_SORT {
   DATE_OBSERVED_OLDEST = "DATE_OBSERVED_OLDEST",
   MOST_FAVED = "MOST_FAVED",
   SUBJECT_DISTANCE_NEAREST = "SUBJECT_DISTANCE_NEAREST",
+  TAXONOMY = "TAXONOMY",
 }
 
 export type MyObservationsSort = OBSERVATIONS_SORT;
@@ -30,6 +31,8 @@ const OBSERVATIONS_SORT_TO_API_PARAMS: Record<OBSERVATIONS_SORT, ObservationSort
   [OBSERVATIONS_SORT.MOST_FAVED]: { order_by: "votes", order: "desc" },
   // Subject distance only exists in local photo EXIF, so results are sorted on device
   [OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST]: { order_by: "created_at", order: "desc" },
+  // The API can't order by taxonomy, so results are sorted on device
+  [OBSERVATIONS_SORT.TAXONOMY]: { order_by: "created_at", order: "desc" },
 };
 
 export const MY_OBSERVATIONS_SORT_OPTIONS: MyObservationsSort[] = [
@@ -39,6 +42,7 @@ export const MY_OBSERVATIONS_SORT_OPTIONS: MyObservationsSort[] = [
   OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
   OBSERVATIONS_SORT.MOST_FAVED,
   OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST,
+  OBSERVATIONS_SORT.TAXONOMY,
 ];
 
 export const EXPLORE_OBSERVATIONS_SORT_OPTIONS: OBSERVATIONS_SORT[] = [
@@ -69,6 +73,8 @@ const OBSERVATIONS_SORT_TO_REALM_SORT: Record<MyObservationsSort, ObservationRea
   [OBSERVATIONS_SORT.MOST_FAVED]: ["_created_at", true],
   // then re-sorted by subject distance in useLocalObservationIds
   [OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST]: ["_created_at", true],
+  // then re-sorted by taxonomy in useLocalObservationIds
+  [OBSERVATIONS_SORT.TAXONOMY]: ["_created_at", true],
 };
 
 // For sorting local, unsynced observations directly in a Realm query -- used for logged-out
@@ -103,6 +109,10 @@ export function useObservationsSortLabels( ): Record<OBSERVATIONS_SORT, Observat
     [OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST]: {
       label: t( "Subject-distance-Nearest" ),
       text: t( "Observations-with-the-nearest-subject-appear-first" ),
+    },
+    [OBSERVATIONS_SORT.TAXONOMY]: {
+      label: t( "Taxonomic-order" ),
+      text: t( "Observations-are-grouped-by-species-then-genus-family-and-so-on" ),
     },
   };
 }

@@ -1434,6 +1434,8 @@ Observations = Observations
 Observations-added-least-recently-appear-first = Observations added least recently appear first
 # Description for observations sort order
 Observations-added-recently-appear-first = Observations added recently appear first
+# Description for the taxonomic observations sort order
+Observations-are-grouped-by-species-then-genus-family-and-so-on = Observations are grouped by species, then by genus, family, and so on
 Observations-need-location-date--warning = iNaturalist observations need a location and date to be useful to scientists. Please check observations with this icon before uploading.
 Observations-View = Observations View
 # Description for observations sort order
@@ -2081,6 +2083,8 @@ Taxa = Taxa
 TAXON = TAXON
 # Settings screen
 TAXON-NAMES-DISPLAY = TAXON NAMES DISPLAY
+# Sort option: observations in taxonomic order, i.e. sorted by their full scientific classification
+Taxonomic-order = Taxonomic order
 TAXONOMIC-RANKS = TAXONOMIC RANKS
 # Header for a block of text describing a taxon's taxonomy
 TAXONOMY-header = TAXONOMY

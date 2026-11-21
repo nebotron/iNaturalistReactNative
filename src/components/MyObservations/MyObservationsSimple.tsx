@@ -43,6 +43,7 @@ import type { UserPojo } from "realmModels/User";
 import type { MyObservationsSort } from "sharedHelpers/observationsSort";
 import {
   MY_OBSERVATIONS_SORT_OPTIONS,
+  OBSERVATIONS_SORT,
   useObservationsSortLabels,
 } from "sharedHelpers/observationsSort";
 import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
@@ -471,8 +472,9 @@ const MyObservationsSimple = ( {
     if ( isConnected === false ) {
       return renderOfflineFallback( ( ) => refresh( ) );
     }
-    // searching while in small grid view should show a flat grid
-    if ( hasActiveSearch ) {
+    // searching while in small grid view should show a flat grid, as should taxonomic order,
+    // which already groups observations more finely than iconic taxa do
+    if ( hasActiveSearch || observationsSortOptionId === OBSERVATIONS_SORT.TAXONOMY ) {
       return (
         <MyObservationsSmallGridSearchResults
           handlePullToRefresh={handlePullToRefresh}
