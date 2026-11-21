@@ -2971,14 +2971,40 @@ RCT_EXPORT_METHOD( availableMemoryBytes
 // The app's footprint (what iOS's memory limit is measured on) and what it may
 // still allocate, for memoryWatermark.ts to say which screen the memory went to
 // before an out-of-memory kill, which leaves nothing in the log itself.
+//
+// Also what the footprint is made of. Two Nov 20 kills, one with Audio ID
+// listening in the background and one a minute into the camera, climbed
+// ~25 MB/s to the limit with nothing to say what was growing: malloc
+// (internalMB, decoded images and heap), IOSurfaces and GPU buffers
+// (graphicsMB: camera frames, CoreML on the GPU), media buffers (mediaMB:
+// the capture and audio pipelines), Neural Engine buffers (neuralMB), or
+// memory iOS has compressed (compressedMB, counted in internalMB too).
 RCT_EXPORT_METHOD( memoryStats
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  resolve( @{
+  NSMutableDictionary *stats = [@{
     @"footprintMB": @( footprintMB( ) ),
     @"freeMB":      @( freeMB( ) ),
-  } );
+  } mutableCopy];
+  task_vm_info_data_t    vm;
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  if ( task_info( mach_task_self( ), TASK_VM_INFO, (task_info_t)&vm, &count ) == KERN_SUCCESS ) {
+    stats[@"internalMB"]   = @( vm.internal >> 20 );
+    stats[@"compressedMB"] = @( vm.compressed >> 20 );
+    // The ledger tags are only filled in by kernels that know them
+    size_t filled = count * sizeof( natural_t );
+    if ( filled >= offsetof( task_vm_info_data_t, ledger_tag_neural_footprint_compressed )
+                   + sizeof( vm.ledger_tag_neural_footprint_compressed ) ) {
+      stats[@"graphicsMB"] = @( ( vm.ledger_tag_graphics_footprint
+                                  + vm.ledger_tag_graphics_footprint_compressed ) >> 20 );
+      stats[@"mediaMB"]    = @( ( vm.ledger_tag_media_footprint
+                                  + vm.ledger_tag_media_footprint_compressed ) >> 20 );
+      stats[@"neuralMB"]   = @( ( vm.ledger_tag_neural_footprint
+                                  + vm.ledger_tag_neural_footprint_compressed ) >> 20 );
+    }
+  }
+  resolve( stats );
 }
 
 // Decodes a camera raw through Core Image's RAW pipeline and writes it as a

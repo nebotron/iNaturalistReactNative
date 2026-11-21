@@ -15,7 +15,17 @@ const STEP_MB = 512;
 const SAMPLE_MS = 10_000;
 const TRAIL_LENGTH = 10;
 
-interface MemoryStats { footprintMB: number; freeMB: number }
+interface MemoryStats {
+  footprintMB: number;
+  freeMB: number;
+  // What the footprint is made of (see ImageCropper.memoryStats), so a kill
+  // says what grew: malloc, GPU/IOSurface, capture/audio media, Neural Engine
+  internalMB?: number;
+  compressedMB?: number;
+  graphicsMB?: number;
+  mediaMB?: number;
+  neuralMB?: number;
+}
 
 // iOS only; elsewhere there is nothing to sample and this all does nothing.
 const { ImageCropper } = NativeModules as {
@@ -32,15 +42,17 @@ let started = false;
 const sample = async ( ) => {
   const stats = await memoryStats( )?.catch( ( ) => null );
   if ( !stats || stats.footprintMB < 0 ) return;
-  const { footprintMB, freeMB } = stats;
+  const { footprintMB } = stats;
   const step = footprintMB < FIRST_STEP_MB
     ? 0
     : FIRST_STEP_MB + Math.floor( ( footprintMB - FIRST_STEP_MB ) / STEP_MB ) * STEP_MB;
   if ( step <= highestStepLogged ) return;
   highestStepLogged = step;
   logger.warnWithExtra( "memory_high_water", {
-    footprintMB,
-    freeMB,
+    ...stats,
+    // Audio ID keeps the app running in the background, where nothing else
+    // on the trail is on screen
+    appState: AppState.currentState,
     screen,
     trail: trail.join( " > " ),
   } );
@@ -58,7 +70,8 @@ export const noteScreenMemory = ( screenName?: string ) => {
 export const startMemoryWatermark = ( ) => {
   if ( started || !ImageCropper?.memoryStats ) return;
   started = true;
-  setInterval( ( ) => {
-    if ( AppState.currentState === "active" ) sample( );
-  }, SAMPLE_MS );
+  // In the background too: timers only run there while Audio ID keeps the app
+  // awake, and the Nov 20 kill climbed to the limit with it listening in the
+  // background, unsampled until the app was reopened seconds before it died.
+  setInterval( sample, SAMPLE_MS );
 };
