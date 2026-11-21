@@ -9,6 +9,7 @@ import {
 import {
   preloadNewestPickerPhotos,
 } from "components/PhotoImporter/helpers/preloadNewestPickerPhotos";
+import { isVideoDerivedPhoto } from "components/PhotoImporter/helpers/videoImportHelpers";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
@@ -352,7 +353,9 @@ const GroupPhotosContainer = ( ) => {
     // each import was both intrusive and unreliable. The URIs are saved
     // (see removedGroupPhotoUris.ts) so these stay hidden from the photo
     // picker and can be deleted in one pass from the imported album.
+    // A GIF made from a video is the exception: removing it keeps the video.
     const deviceUrisToDelete = orderedPhotos
+      .filter( photo => !isVideoDerivedPhoto( photo ) )
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( ( uri ): uri is string => !!uri );
     if ( deviceUrisToDelete.length > 0 ) {
