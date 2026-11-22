@@ -10,6 +10,7 @@ import {
 } from "sharedHelpers/persistedPreloads";
 import type { PreparedSourceFile } from "sharedHelpers/prepareCropSource";
 import prepareCropSource from "sharedHelpers/prepareCropSource";
+import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { getTunable } from "sharedHelpers/tunableParams";
 import { unlink } from "sharedHelpers/util";
@@ -84,6 +85,9 @@ export const preloadCache = new PersistedPreloadCache( );
 // Track in-flight loads by their promise so callers can await (and dedupe)
 // an ongoing preload instead of kicking off duplicate, contending work.
 const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
+// Bumped by clearCropSources, so a preload that was running when its files
+// were deleted doesn't then cache a result pointing at them.
+let cropSourceGeneration = 0;
 
 // Writes the file a preload decodes, where the default export
 // (ensureLocalImageForCrop) isn't the one wanted.
@@ -174,6 +178,7 @@ function preloadImage(
   if ( inFlight ) {
     return inFlight;
   }
+  const generation = cropSourceGeneration;
   const promise = loadImageData(
     imageUri,
     cropSourceUri,
@@ -182,6 +187,11 @@ function preloadImage(
     exportSource,
   )
     .then( result => {
+      if ( result && generation !== cropSourceGeneration ) {
+        // eslint-disable-next-line no-use-before-define
+        releaseCropSource( imageUri, [result.localUri, result.displayUri] );
+        return null;
+      }
       if ( result ) {
         preloadCache.set( imageUri, result );
       }
@@ -353,6 +363,20 @@ export function releaseCropSource( imageUri: string, uris: ( string | null )[] )
     .map( uri => uri && stripFilePrefix( uri ) )
     .filter( path => path?.startsWith( `${cropSourcesPath}/` ) )
     .forEach( path => { unlink( path ).catch( ( ) => {} ); } );
+}
+
+// Every export and display file, kept or queued: nothing in cropSourcesPath
+// is an original, so once an import has finished the next crop just prepares
+// its photo again. Only for when no crop is under way, since a cropper open on
+// one of these files would lose it.
+export async function clearCropSources( ) {
+  cropSourceGeneration += 1;
+  preloadQueue.splice( 0 ).forEach( request => {
+    preloadQueued.delete( request.imageUri );
+    request.resolve( null );
+  } );
+  preloadCache.clear( );
+  await removeAllFilesFromDirectory( cropSourcesPath );
 }
 
 // When the user asked for a bulk crop (Done in the photo picker, or crop in

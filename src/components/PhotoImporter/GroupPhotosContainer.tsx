@@ -7,9 +7,6 @@ import { frameUncroppedGroupPhotos } from "components/PhotoImporter/helpers/grou
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
-import {
-  preloadNewestPickerPhotos,
-} from "components/PhotoImporter/helpers/preloadNewestPickerPhotos";
 import { isVideoDerivedPhoto } from "components/PhotoImporter/helpers/videoImportHelpers";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -34,6 +31,7 @@ import {
   forgetUploadedDevicePhotoUris,
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
+import { clearCropSources } from "sharedHelpers/imageCropPreload";
 import { log } from "sharedHelpers/logger";
 import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrops";
 import type { PrefetchTimings } from "sharedHelpers/prefetchObservationSuggestions";
@@ -670,9 +668,15 @@ const GroupPhotosContainer = ( ) => {
       sumExifMs: createTimings.exifMs,
       sumResizeMs: createTimings.resizeMs,
     } );
-    // The picker's next photos, so the next batch's cropper doesn't open on a
-    // photo it has to prepare from scratch.
-    preloadNewestPickerPhotos( realm );
+    // The crop sources have served their purpose. Not while another import
+    // is under way, started while this one finished in the background: its
+    // cropper may be drawing from them.
+    const nextImport = useStore.getState( );
+    if ( nextImport.groupedPhotos.length === 0 && nextImport.photoLibraryUris.length === 0 ) {
+      clearCropSources( ).catch( error => {
+        logger.error( "Could not delete crop sources after an import", error );
+      } );
+    }
     Promise.all( prefetches ).then( results => {
       const sum = results.reduce( ( total, r ) => ( {
         count: total.count + r.count,

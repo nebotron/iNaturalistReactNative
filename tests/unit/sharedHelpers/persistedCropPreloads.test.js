@@ -19,6 +19,12 @@ jest.mock( "sharedHelpers/util", ( ) => ( {
   unlink: ( ...args ) => mockUnlink( ...args ),
 } ) );
 
+const mockRemoveAll = jest.fn( async ( ) => {} );
+jest.mock( "sharedHelpers/removeAllFilesFromDirectory", ( ) => ( {
+  __esModule: true,
+  default: ( ...args ) => mockRemoveAll( ...args ),
+} ) );
+
 const mockPrepare = jest.fn( );
 jest.mock( "sharedHelpers/prepareCropSource", ( ) => ( {
   __esModule: true,
@@ -110,5 +116,50 @@ describe( "crop preloads across restarts", ( ) => {
     await first.enqueuePreload( SOURCE, SOURCE, null );
     first.releaseCropSource( SOURCE, [SOURCE, DISPLAY] );
     expect( mockStore.has( SOURCE ) ).toBe( false );
+  } );
+} );
+
+describe( "clearCropSources", ( ) => {
+  beforeEach( ( ) => {
+    mockStore.clear( );
+    mockUnlink.mockClear( );
+    mockRemoveAll.mockClear( );
+    mockPrepare.mockReset( ).mockResolvedValue( {
+      displayUri: DISPLAY,
+      size: { w: 6000, h: 4000 },
+      crop: {
+        x: 0.1, y: 0.1, w: 0.5, h: 0.5,
+      },
+    } );
+  } );
+
+  it( "deletes every crop source, so the next crop prepares its photo again", async ( ) => {
+    const preload = await launch( );
+    await preload.enqueuePreload( SOURCE, SOURCE, null );
+    await preload.clearCropSources( );
+    expect( mockRemoveAll ).toHaveBeenCalledWith( cropSourcesPath );
+    expect( mockStore.size ).toBe( 0 );
+
+    await preload.enqueuePreload( SOURCE, SOURCE, null );
+    expect( mockPrepare ).toHaveBeenCalledTimes( 2 );
+  } );
+
+  it( "doesn't keep a preload that was running when its files were deleted", async ( ) => {
+    let finish;
+    mockPrepare.mockReturnValueOnce( new Promise( resolve => { finish = resolve; } ) );
+    const preload = await launch( );
+    const running = preload.enqueuePreload( SOURCE, SOURCE, null );
+    await flush( );
+    await preload.clearCropSources( );
+    finish( {
+      displayUri: DISPLAY,
+      size: { w: 6000, h: 4000 },
+      crop: {
+        x: 0, y: 0, w: 1, h: 1,
+      },
+    } );
+    expect( await running ).toBeNull( );
+    expect( mockStore.size ).toBe( 0 );
+    expect( mockUnlink ).toHaveBeenCalledWith( `${cropSourcesPath}/display_1.jpg` );
   } );
 } );
