@@ -1,4 +1,3 @@
-import EbirdMapMarkers from "components/Explore/EbirdMapMarkers";
 import {
   ActivityIndicator,
   Button,
@@ -84,7 +83,6 @@ const MapView = ( {
   const isFirstRender = useRef( true );
   const lastExploreMapRegion = useStore( state => state.layout.lastExploreMapRegion );
   const setLastExploreMapRegion = useStore( state => state.layout.setLastExploreMapRegion );
-  const ebirdOnly = useStore( state => state.layout.observationSource === "ebird" );
 
   const mapRef = useRef<RNMapView | null>( null );
 
@@ -221,7 +219,6 @@ const MapView = ( {
         onPanDrag={handlePanDrag}
         onRegionChangeComplete={handleRegionChangeComplete}
         initialRegion={initialRegion}
-        mapChildren={<EbirdMapMarkers params={queryParams} />}
         regionToAnimate={regionToAnimate}
         showCurrentLocationButton
         showSwitchMapTypeButton
@@ -229,7 +226,7 @@ const MapView = ( {
         switchMapTypeButtonClassName="left-20 bottom-20"
         showsUserLocation
         tileMapParams={tileMapParams}
-        withPressableObsTiles={tileMapParams !== null && !ebirdOnly}
+        withPressableObsTiles={tileMapParams !== null}
       />
       {showRedoSearchButton && (
         <View

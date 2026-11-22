@@ -3,9 +3,7 @@
 import {
   useNetInfo,
 } from "@react-native-community/netinfo";
-import EbirdNotice from "components/Explore/EbirdNotice";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
-import useObservationsWithEbird from "components/Explore/hooks/useObservationsWithEbird";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
@@ -38,19 +36,13 @@ const ObservationsView = ( {
 }: Props ): Node => {
   const {
     fetchNextPage,
-    hasNextPage,
     isFetchingNextPage,
     handlePullToRefresh,
-    observations: inatObservations,
+    observations,
     totalBounds,
     totalResults,
     isLoading,
   } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
-  const { ebird, observations } = useObservationsWithEbird(
-    inatObservations,
-    queryParams,
-    { enabled: !!canFetch, complete: !isLoading && !hasNextPage },
-  );
 
   const {
     isLandscapeMode,
@@ -105,10 +97,9 @@ const ObservationsView = ( {
         isFetchingNextPage={isFetchingNextPage}
         isConnected={isConnected}
         layout={layout}
-        listHeaderContent={<EbirdNotice ebird={ebird} />}
         obsListKey="ExploreObservations"
         onEndReached={fetchNextPage}
-        showNoResults={!canFetch || ( totalResults === 0 && observations.length === 0 )}
+        showNoResults={!canFetch || totalResults === 0}
         hideObsUploadStatus={layout === "grid"}
         testID="ExploreObservationsAnimatedList"
       />

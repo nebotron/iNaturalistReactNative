@@ -1,7 +1,6 @@
 /* eslint-disable react/no-unused-prop-types */
 import { useNavigation } from "@react-navigation/native";
 import type { FlashListRef, ViewToken } from "@shopify/flash-list";
-import { isEbirdObservation } from "api/ebird";
 import {
   ActivityIndicator,
   Body3,
@@ -22,7 +21,7 @@ import React, {
 import type {
   LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle,
 } from "react-native";
-import { Animated, Linking } from "react-native";
+import { Animated } from "react-native";
 import RealmObservation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
 import {
@@ -163,9 +162,7 @@ const ObservationsFlashList = ( {
     const queued = uploadQueue.includes( uuid );
 
     const onItemPress = ( ) => {
-      if ( isEbirdObservation( item ) ) {
-        Linking.openURL( item.ebirdChecklistUrl );
-      } else if ( obsNeedsSync && !isDefaultMode ) {
+      if ( obsNeedsSync && !isDefaultMode ) {
         const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
         navigateToObsEdit( realmObservation );
       } else {
@@ -214,7 +211,7 @@ const ObservationsFlashList = ( {
         squareCorners={squareCorners}
         // Explore shows other people's observations too; only the user's own can be selected
         selectable={selectable && ( !explore || (
-          !!currentUser && item.user?.id === currentUser.id && !isEbirdObservation( item )
+          !!currentUser && item.user?.id === currentUser.id
         ) )}
       />
     );

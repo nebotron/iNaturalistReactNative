@@ -2,7 +2,6 @@ import { useNavigation } from "@react-navigation/native";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import HotspotSettingsSheet
   from "components/Explore/ExploreV2/components/HotspotSettingsSheet";
-import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import {
   ActivityIndicator,
   Body2,
@@ -724,11 +723,7 @@ const WildlifeHotspotsScreen = ( {
   const selectedHotspotIndex = hotspots.findIndex( h => h.id === selectedHotspotId );
 
   const handleObservationPress = useCallback( ( obs: HotspotObservation ) => {
-    if ( obs.ebirdChecklistUrl ) {
-      Linking.openURL( obs.ebirdChecklistUrl );
-    } else {
-      navigation.push( "ObsDetails", { uuid: obs.uuid } );
-    }
+    navigation.push( "ObsDetails", { uuid: obs.uuid } );
   }, [navigation] );
 
   // Opens the observations map in Explore with the current filters, zoomed
@@ -1062,7 +1057,6 @@ const WildlifeHotspotsScreen = ( {
               )}
             </>
           )}
-        <ObservationSourceToggle className="mt-1 self-start" />
       </View>
 
       {/* Map */}
@@ -1149,15 +1143,7 @@ const WildlifeHotspotsScreen = ( {
                     anchor={{ x: 0.5, y: 0.5 }}
                     onPress={() => handleObservationPress( obs )}
                   >
-                    <View
-                      className="w-2.5 h-2.5 rounded-full border border-white"
-                      // eBird sightings match the color of eBird pins in Explore
-                      style={{
-                        backgroundColor: obs.ebirdChecklistUrl
-                          ? colors.blue
-                          : colors.inatGreen,
-                      }}
-                    />
+                    <View className="w-2.5 h-2.5 rounded-full border border-white bg-inatGreen" />
                   </Marker>
                 ) )}
             </>

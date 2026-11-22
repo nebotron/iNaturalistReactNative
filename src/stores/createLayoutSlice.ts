@@ -21,8 +21,6 @@ export enum MAP_TYPES {
   HYBRID = "hybrid",
 }
 
-export type ObservationSource = "inaturalist" | "ebird" | "both";
-
 export interface HotspotSettings {
   hotspotClusterRadiusKm: number;
   hotspotMaxDetourCandidates: number;
@@ -123,8 +121,6 @@ export interface LayoutSlice {
     setMapType: ( mapType: MAP_TYPES ) => void;
     usbDeleteAfterImport: boolean;
     setUsbDeleteAfterImport: ( usbDeleteAfterImport: boolean ) => void;
-    observationSource: ObservationSource;
-    setObservationSource: ( observationSource: ObservationSource ) => void;
     gearNicknames: GearNicknames;
     setGearNickname: ( kind: GearKind, name: string, nickname: string ) => void;
     hotspotSettings: HotspotSettings;
@@ -285,14 +281,6 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         usbDeleteAfterImport: newValue,
-      },
-    } ) ),
-    // Whether Explore and Hotspots show iNaturalist, eBird, or both
-    observationSource: "inaturalist",
-    setObservationSource: newValue => set( state => ( {
-      layout: {
-        ...state.layout,
-        observationSource: newValue,
       },
     } ) ),
     // Nicknames for cameras and lenses, keyed by their EXIF names. An empty
