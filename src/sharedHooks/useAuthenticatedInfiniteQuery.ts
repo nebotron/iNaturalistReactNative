@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import i18n from "i18next";
 import { useCallback, useEffect, useRef } from "react";
+import { preferCachedResponse } from "sharedHelpers/httpCache";
 import {
   createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
 } from "sharedHelpers/logging";
@@ -20,9 +21,14 @@ import { useCurrentUser } from "sharedHooks";
 // With `persist: true` the results are saved to disk and shown again after a
 // restart, and are only fetched again after PERSISTED_QUERY_TTL_MS or when
 // refreshFirstPage is called.
+//
+// With `cacheFirst` (on by default with `persist`) a page fetched in the last
+// HTTP_CACHE_FRESH_MS comes from the HTTP cache rather than the network.
+// refreshFirstPage always goes to the network.
 interface AuthenticatedInfiniteQueryOptions {
   allowAnonymousJWT?: boolean;
   persist?: boolean;
+  cacheFirst?: boolean;
   [option: string]: unknown;
 }
 
@@ -35,7 +41,7 @@ const useAuthenticatedInfiniteQuery = (
   const route = useRoute( );
   const currentUser = useCurrentUser( );
   const queryClient = useQueryClient( );
-  const { persist, ...infiniteQueryOptions } = queryOptions;
+  const { persist, cacheFirst = persist, ...infiniteQueryOptions } = queryOptions;
 
   // Use locale in case there is no user session
   const locale = i18n?.language ?? "en";
@@ -54,7 +60,10 @@ const useAuthenticatedInfiniteQuery = (
     : currentUser;
   const fullQueryKey = [...queryKey, queryOptions.allowAnonymousJWT, userKey];
 
-  const queryFn = async ( params: Record<string, unknown> ) => {
+  const queryFn = async (
+    params: Record<string, unknown>,
+    { fromNetwork = false }: { fromNetwork?: boolean } = {},
+  ) => {
     if ( !currentUser ) {
       params.locale = locale;
     }
@@ -66,7 +75,9 @@ const useAuthenticatedInfiniteQuery = (
     const { signal, clear } = createRequestTimeoutSignal( );
     const options = {
       api_token: apiToken,
-      signal,
+      signal: cacheFirst && !fromNetwork
+        ? preferCachedResponse( signal )
+        : signal,
     };
     try {
       return await queryFunction( params, options );
@@ -109,7 +120,10 @@ const useAuthenticatedInfiniteQuery = (
   } );
   const refreshFirstPage = useCallback( async ( ) => {
     const { queryFn: fetchPage, fullQueryKey: key } = latestRef.current;
-    const firstPage = await fetchPage( { queryKey: key, pageParam: undefined } );
+    const firstPage = await fetchPage(
+      { queryKey: key, pageParam: undefined },
+      { fromNetwork: true },
+    );
     if ( firstPage == null ) {
       throw new Error( "No results from refreshing the first page" );
     }
