@@ -73,8 +73,9 @@ const OBSERVATIONS_SORT_TO_REALM_SORT: Record<MyObservationsSort, ObservationRea
   [OBSERVATIONS_SORT.MOST_FAVED]: ["_created_at", true],
   // then re-sorted by subject distance in useLocalObservationIds
   [OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST]: ["_created_at", true],
-  // then re-sorted by taxonomy in useLocalObservationIds
-  [OBSERVATIONS_SORT.TAXONOMY]: ["_created_at", true],
+  // then re-sorted by taxonomy in useLocalObservationIds, which is stable, so observations of
+  // the same taxon stay in this order: most recently observed first
+  [OBSERVATIONS_SORT.TAXONOMY]: ["observed_on_string", true],
 };
 
 // For sorting local, unsynced observations directly in a Realm query -- used for logged-out
