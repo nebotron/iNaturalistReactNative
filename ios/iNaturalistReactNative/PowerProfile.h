@@ -18,3 +18,5 @@
 // Safe to call from any thread.
 void INatPowerSetScreen( NSString *_Nullable screen );
 void INatPowerSetActivity( NSString *_Nonnull activity, BOOL active );
+// The screen interval open now: the screen in front, or "Background"
+NSString *_Nullable INatPowerCurrentScreen( void );

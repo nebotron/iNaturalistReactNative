@@ -69,6 +69,14 @@ void INatPowerSetScreen( NSString *screen )
   os_unfair_lock_unlock( &ppLock );
 }
 
+NSString *INatPowerCurrentScreen( void )
+{
+  os_unfair_lock_lock( &ppLock );
+  NSString *screen = ppOpenScreen;
+  os_unfair_lock_unlock( &ppLock );
+  return screen;
+}
+
 void INatPowerSetActivity( NSString *activity, BOOL active )
 {
   os_unfair_lock_lock( &ppLock );

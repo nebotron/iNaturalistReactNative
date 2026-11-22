@@ -51,7 +51,11 @@ const useMultiObsSaveAndAdvance = ( {
     }
     const savedObservationIndex = useStore.getState( ).currentObservationIndex;
     const numObservations = useStore.getState( ).observations.length;
-    const savedObservation = await saveObservation( observation, cameraRollUris, realm );
+    // The location is written to the device's photos after the next
+    // observation is up; the uploader waits for it.
+    const savedObservation = await saveObservation( observation, cameraRollUris, realm, {
+      locationInBackground: true,
+    } );
     if ( !savedObservation ) {
       return false;
     }

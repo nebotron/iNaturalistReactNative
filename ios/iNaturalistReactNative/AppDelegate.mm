@@ -1,4 +1,5 @@
 #import "AppDelegate.h"
+#import "CpuProfiler.h"
 #import "LocationRelaunch.h"
 
 #import <Firebase.h>
@@ -12,6 +13,8 @@
 #import <objc/runtime.h>
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
+#include <algorithm>
+#include <vector>
 #import <react/featureflags/ReactNativeFeatureFlags.h>
 #import <react/featureflags/ReactNativeFeatureFlagsOverridesOSSStable.h>
 #if __has_include(<react_native_config/RNCConfig.h>)
@@ -63,11 +66,39 @@ static NSDictionary<NSString *, NSValue *> *loadedImagesByUUID( void )
   return images;
 }
 
-static NSString *describeStack( MXCallStackTree *stack )
+// One frame as "image symbol+offset (+0xoffset)", or "image+0xoffset" where
+// dladdr knows no symbol (the app's own frames in a build without symbols,
+// which scripts/symbolicate.py names from the offset).
+static NSString *describeFrame( NSDictionary *f, NSDictionary *images )
+{
+  NSString *uuid = f[@"binaryUUID"];
+  uint64_t offset = [f[@"offsetIntoBinaryTextSegment"] unsignedLongLongValue];
+  const char *address = (const char *) [images[uuid] pointerValue];
+  NSString *where = [NSString stringWithFormat:@"%@+0x%llx",
+    f[@"binaryName"] ?: [uuid substringToIndex:MIN( uuid.length, 8 )], offset];
+  Dl_info info;
+  if ( address && dladdr( address + offset, &info ) ) {
+    NSString *image = [@( info.dli_fname ?: "" ) lastPathComponent];
+    where = info.dli_sname
+      ? [NSString stringWithFormat:@"%@ %s+%ld (+0x%llx)", image, info.dli_sname,
+          (long) ( address + offset - (const char *) info.dli_saddr ), offset]
+      : [NSString stringWithFormat:@"%@+0x%llx", image, offset];
+  }
+  return where;
+}
+
+static NSDictionary *parseStackTree( MXCallStackTree *stack )
 {
   NSDictionary *tree = [NSJSONSerialization JSONObjectWithData:[stack JSONRepresentation]
                                                        options:0 error:nil];
-  if ( ![tree isKindOfClass:[NSDictionary class]] ) return nil;
+  return [tree isKindOfClass:[NSDictionary class]] ? tree : nil;
+}
+
+// A crash or hang: one stack per thread, leaf first.
+static NSString *describeStack( MXCallStackTree *stack )
+{
+  NSDictionary *tree = parseStackTree( stack );
+  if ( !tree ) return nil;
   NSDictionary *images = loadedImagesByUUID();
   NSMutableString *out = [NSMutableString new];
   NSInteger threadIndex = 0;
@@ -90,20 +121,115 @@ static NSString *describeStack( MXCallStackTree *stack )
     NSInteger shown = 0;
     for ( NSDictionary *f in frames.reverseObjectEnumerator ) {
       if ( shown++ >= 40 ) break;
-      NSString *uuid = f[@"binaryUUID"];
-      uint64_t offset = [f[@"offsetIntoBinaryTextSegment"] unsignedLongLongValue];
-      const char *address = (const char *) [images[uuid] pointerValue];
-      NSString *where = [NSString stringWithFormat:@"%@+0x%llx",
-        f[@"binaryName"] ?: [uuid substringToIndex:MIN( uuid.length, 8 )], offset];
-      Dl_info info;
-      if ( address && dladdr( address + offset, &info ) ) {
-        NSString *image = [@( info.dli_fname ?: "" ) lastPathComponent];
-        where = info.dli_sname
-          ? [NSString stringWithFormat:@"%@ %s+%ld (+0x%llx)", image, info.dli_sname,
-              (long) ( address + offset - (const char *) info.dli_saddr ), offset]
-          : [NSString stringWithFormat:@"%@+0x%llx", image, offset];
+      [out appendFormat:@"  %@\n", describeFrame( f, images )];
+    }
+  }
+  return out;
+}
+
+// What a sampled stack spent its samples on. CPU and disk-write exceptions
+// are a tree of samples, and following only the heaviest branch (as for a
+// crash) showed one path of many, cut off 40 frames from the leaf, before
+// the callers that say which feature it was. This reports every thread's
+// share, the functions with the most samples of their own (self) and under
+// them (inclusive), and the heaviest distinct stacks whole, with the root end
+// kept when the middle is elided.
+namespace {
+struct SampledPath {
+  NSInteger count;
+  NSArray<NSString *> *frames; // root first
+  NSInteger thread;
+};
+}
+
+static void walkSampled( NSDictionary *frame, NSDictionary *images, NSInteger thread,
+                         NSMutableArray<NSString *> *path,
+                         NSCountedSet *pathLabels,
+                         NSMutableDictionary<NSString *, NSNumber *> *selfCounts,
+                         NSMutableDictionary<NSString *, NSNumber *> *totalCounts,
+                         std::vector<SampledPath> &paths )
+{
+  NSString *label = describeFrame( frame, images );
+  NSInteger count = [frame[@"sampleCount"] integerValue];
+  NSInteger inChildren = 0;
+  for ( NSDictionary *sub in frame[@"subFrames"] ) inChildren += [sub[@"sampleCount"] integerValue];
+  // Recursion would count a function's samples once per level
+  if ( [pathLabels countForObject:label] == 0 ) {
+    totalCounts[label] = @( totalCounts[label].integerValue + count );
+  }
+  [path addObject:label];
+  [pathLabels addObject:label];
+  NSInteger own = MAX( 0, count - inChildren );
+  if ( own > 0 ) {
+    selfCounts[label] = @( selfCounts[label].integerValue + own );
+    paths.push_back( { own, [path copy], thread } );
+  }
+  for ( NSDictionary *sub in frame[@"subFrames"] ) {
+    walkSampled( sub, images, thread, path, pathLabels, selfCounts, totalCounts, paths );
+  }
+  [path removeLastObject];
+  [pathLabels removeObject:label];
+}
+
+static void appendTop( NSMutableString *out, NSString *title,
+                       NSDictionary<NSString *, NSNumber *> *counts, NSInteger total,
+                       NSUInteger limit )
+{
+  NSArray *labels = [counts keysSortedByValueUsingComparator:^( NSNumber *a, NSNumber *b ) {
+    return [b compare:a];
+  }];
+  [out appendFormat:@"%@:\n", title];
+  for ( NSUInteger i = 0; i < MIN( limit, labels.count ); i++ ) {
+    NSInteger n = counts[labels[i]].integerValue;
+    [out appendFormat:@"  %5ld %4.1f%%  %@\n", (long) n,
+      total ? 100.0 * n / total : 0.0, labels[i]];
+  }
+}
+
+static NSString *describeSampledStack( MXCallStackTree *stack )
+{
+  NSDictionary *tree = parseStackTree( stack );
+  if ( !tree ) return nil;
+  NSDictionary *images = loadedImagesByUUID();
+  NSMutableDictionary *selfCounts = [NSMutableDictionary new];
+  NSMutableDictionary *totalCounts = [NSMutableDictionary new];
+  std::vector<SampledPath> paths;
+  NSMutableString *threads = [NSMutableString new];
+  NSInteger total = 0;
+  NSInteger threadIndex = 0;
+  for ( NSDictionary *thread in tree[@"callStacks"] ) {
+    NSInteger threadSamples = 0;
+    for ( NSDictionary *root in thread[@"callStackRootFrames"] ) {
+      threadSamples += [root[@"sampleCount"] integerValue];
+      walkSampled( root, images, threadIndex, [NSMutableArray new], [NSCountedSet new],
+                   selfCounts, totalCounts, paths );
+    }
+    total += threadSamples;
+    [threads appendFormat:@"  thread %ld%@: %ld samples\n", (long) threadIndex,
+      [thread[@"threadAttributed"] boolValue] ? @" (attributed)" : @"", (long) threadSamples];
+    threadIndex++;
+  }
+  NSMutableString *out = [NSMutableString new];
+  [out appendFormat:@"samples: %ld\n%@", (long) total, threads];
+  appendTop( out, @"top self", selfCounts, total, 25 );
+  appendTop( out, @"top inclusive", totalCounts, total, 25 );
+  std::sort( paths.begin(), paths.end(), []( const SampledPath &a, const SampledPath &b ) {
+    return a.count > b.count;
+  } );
+  [out appendString:@"heaviest stacks (leaf first):\n"];
+  for ( size_t i = 0; i < MIN( (size_t) 8, paths.size() ); i++ ) {
+    const SampledPath &p = paths[i];
+    [out appendFormat:@"  [%ld samples, %.1f%%, thread %ld]\n", (long) p.count,
+      total ? 100.0 * p.count / total : 0.0, (long) p.thread];
+    NSArray *leafFirst = p.frames.reverseObjectEnumerator.allObjects;
+    const NSUInteger leafKept = 24, rootKept = 12;
+    for ( NSUInteger j = 0; j < leafFirst.count; j++ ) {
+      if ( leafFirst.count > leafKept + rootKept && j == leafKept ) {
+        [out appendFormat:@"    ... %lu frames ...\n",
+          (unsigned long) ( leafFirst.count - leafKept - rootKept )];
+        j = leafFirst.count - rootKept;
       }
-      [out appendFormat:@"  %@\n", where];
+      [out appendFormat:@"    %@\n", leafFirst[j]];
     }
   }
   return out;
@@ -115,7 +241,7 @@ static NSString *describeStack( MXCallStackTree *stack )
 // straight to the app log from here, so a launch that dies before JS logs
 // anything is still on the record.
 static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStackTree *stack,
-                            NSString *level = @"error" )
+                            NSString *level = @"error", BOOL sampled = NO )
 {
   NSString *base = [RNCConfig envFor:@"CROP_LOG_FIREBASE_URL"];
   if ( base.length == 0 ) return;
@@ -128,8 +254,9 @@ static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStack
   entry[@"commit"] = [NSString stringWithFormat:@"build-%@",
     [NSBundle mainBundle].infoDictionary[@"CFBundleVersion"]];
   entry[@"message"] = message;
-  NSString *stackText = stack ? describeStack( stack ) : nil;
-  if ( stackText.length > 30000 ) stackText = [stackText substringToIndex:30000];
+  NSString *stackText = nil;
+  if ( stack ) stackText = sampled ? describeSampledStack( stack ) : describeStack( stack );
+  if ( stackText.length > 60000 ) stackText = [stackText substringToIndex:60000];
   if ( stackText ) entry[@"stack"] = stackText;
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
     [NSURL URLWithString:[base stringByAppendingString:@"/app_log.json"]]];
@@ -211,6 +338,9 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
   }
 
   [[MXMetricManager sharedManager] addSubscriber:self];
+  INatStartCpuWatchdog( ^( NSString *message, NSDictionary *fields ) {
+    postDiagnostic( message, fields, nil, @"warn" );
+  } );
 
   return YES;
 }
@@ -247,7 +377,7 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
         @"sampledSeconds": measure( cpu.totalSampledTime, NSUnitDuration.seconds ),
         @"from": describe( payload.timeStampBegin ),
         @"to": describe( payload.timeStampEnd ),
-      }, cpu.callStackTree, @"warn" );
+      }, cpu.callStackTree, @"warn", YES );
     }
     // iOS reports these when the app writes more than 1 GB to disk in a day;
     // the stack shows which code did the writing.
@@ -257,7 +387,7 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
         @"writesMB": measure( disk.totalWritesCaused, NSUnitInformationStorage.megabytes ),
         @"from": describe( payload.timeStampBegin ),
         @"to": describe( payload.timeStampEnd ),
-      }, disk.callStackTree, @"warn" );
+      }, disk.callStackTree, @"warn", YES );
     }
   }
 }

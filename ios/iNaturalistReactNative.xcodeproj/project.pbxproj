@@ -38,6 +38,7 @@
 		IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */ = {isa = PBXBuildFile; fileRef = IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */; };
 		LR1B2C3D4E5F60718293A4B5 /* LocationRelaunch.m in Sources */ = {isa = PBXBuildFile; fileRef = LR1B2C3D4E5F60718293A4B6 /* LocationRelaunch.m */; };
 		PP1B2C3D4E5F60718293A4B5 /* PowerProfile.m in Sources */ = {isa = PBXBuildFile; fileRef = PP1B2C3D4E5F60718293A4B6 /* PowerProfile.m */; };
+		CF1B2C3D4E5F60718293A4B5 /* CpuProfiler.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF1B2C3D4E5F60718293A4B6 /* CpuProfiler.mm */; };
 		PS1B2C3D4E5F60718293A4B5 /* PlaceSearch.m in Sources */ = {isa = PBXBuildFile; fileRef = PS1B2C3D4E5F60718293A4B6 /* PlaceSearch.m */; };
 		US1B2C3D4E5F60718293A4B5 /* UsbStorage.m in Sources */ = {isa = PBXBuildFile; fileRef = US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */; };
 		VS1B2C3D4E5F60718293A4B5 /* VideoStabilizer.m in Sources */ = {isa = PBXBuildFile; fileRef = VS1B2C3D4E5F60718293A4B6 /* VideoStabilizer.m */; };
@@ -119,6 +120,8 @@
 		LR1B2C3D4E5F60718293A4B7 /* LocationRelaunch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = LocationRelaunch.h; path = iNaturalistReactNative/LocationRelaunch.h; sourceTree = "<group>"; };
 		PP1B2C3D4E5F60718293A4B6 /* PowerProfile.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = PowerProfile.m; path = iNaturalistReactNative/PowerProfile.m; sourceTree = "<group>"; };
 		PP1B2C3D4E5F60718293A4B7 /* PowerProfile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PowerProfile.h; path = iNaturalistReactNative/PowerProfile.h; sourceTree = "<group>"; };
+		CF1B2C3D4E5F60718293A4B6 /* CpuProfiler.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CpuProfiler.mm; path = iNaturalistReactNative/CpuProfiler.mm; sourceTree = "<group>"; };
+		CF1B2C3D4E5F60718293A4B7 /* CpuProfiler.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CpuProfiler.h; path = iNaturalistReactNative/CpuProfiler.h; sourceTree = "<group>"; };
 		PS1B2C3D4E5F60718293A4B6 /* PlaceSearch.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = PlaceSearch.m; path = iNaturalistReactNative/PlaceSearch.m; sourceTree = "<group>"; };
 		US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = UsbStorage.m; path = iNaturalistReactNative/UsbStorage.m; sourceTree = "<group>"; };
 		VS1B2C3D4E5F60718293A4B6 /* VideoStabilizer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = VideoStabilizer.m; path = iNaturalistReactNative/VideoStabilizer.m; sourceTree = "<group>"; };
@@ -182,6 +185,8 @@
 				LR1B2C3D4E5F60718293A4B6 /* LocationRelaunch.m */,
 				PP1B2C3D4E5F60718293A4B7 /* PowerProfile.h */,
 				PP1B2C3D4E5F60718293A4B6 /* PowerProfile.m */,
+				CF1B2C3D4E5F60718293A4B7 /* CpuProfiler.h */,
+				CF1B2C3D4E5F60718293A4B6 /* CpuProfiler.mm */,
 				YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */,
 			);
 			name = iNaturalistReactNative;
@@ -562,6 +567,7 @@
 				AB1B2C3D4E5F60718293A4B5 /* AudioBirdId.m in Sources */,
 				LR1B2C3D4E5F60718293A4B5 /* LocationRelaunch.m in Sources */,
 				PP1B2C3D4E5F60718293A4B5 /* PowerProfile.m in Sources */,
+				CF1B2C3D4E5F60718293A4B5 /* CpuProfiler.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

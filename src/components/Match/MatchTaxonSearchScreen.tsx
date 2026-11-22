@@ -42,7 +42,9 @@ const MatchTaxonSearchScreen = ( ) => {
       taxon: selectedTaxon,
     } );
 
-    saveObservation( getCurrentObservation(), cameraRollUris, realm )
+    saveObservation( getCurrentObservation(), cameraRollUris, realm, {
+      locationInBackground: true,
+    } )
       .then( ( ) => navigation.navigate( "TabNavigator", {
         screen: "ObservationsTab",
         params: {

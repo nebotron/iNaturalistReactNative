@@ -61,29 +61,73 @@ const writeExifToCameraRollPhotos = async (
     .forEach( r => logger.error( "Failed to write EXIF to camera roll photo:", r.reason ) );
 };
 
-const saveObservation = async (
+// Saves still filling in their location, by observation uuid
+const finishingSaves = new Map<string, Promise<void>>( );
+
+// Resolves once the location work of any save of this observation is done.
+// The uploader waits on it, so an observation saved a moment ago doesn't go
+// up before its tracked location is filled in.
+export const awaitObservationSaveFinished = (
+  uuid: string | undefined,
+): Promise<void> => ( uuid && finishingSaves.get( uuid ) ) || Promise.resolve( );
+
+// The location half of a save: written to the device photos the camera took,
+// and filled in from tracked location history for an observation that has
+// none. Never rejects.
+const finishSave = async (
   observation: RealmObservation,
   cameraRollUris: string[],
   realm: Realm,
+  savedObservation: RealmObservation | null | undefined,
 ) => {
-  await writeExifToCameraRollPhotos( observation, cameraRollUris, {
-    latitude: observation.latitude,
-    longitude: observation.longitude,
-    positional_accuracy: observation.positional_accuracy,
-  } );
-  const savedObservation = await Observation.saveLocalObservationForUpload( observation, realm );
-
+  try {
+    await writeExifToCameraRollPhotos( observation, cameraRollUris, {
+      latitude: observation.latitude,
+      longitude: observation.longitude,
+      positional_accuracy: observation.positional_accuracy,
+    } );
+  } catch ( error ) {
+    logger.error( "Failed to write location to camera roll photos on save", error );
+  }
   // If the observation has no location (no GPS EXIF on its photos), auto-fill
   // it from tracked location history, applying the match to both the
   // observation and the originating Photos library assets.
-  if ( savedObservation ) {
+  if ( savedObservation && !realm.isClosed && savedObservation.isValid?.( ) !== false ) {
     try {
-      await autoApplyTrackedLocationIfMissing( realm, savedObservation as RealmObservation );
+      await autoApplyTrackedLocationIfMissing( realm, savedObservation );
     } catch ( error ) {
       logger.error( "Failed to auto-apply tracked location on save", error );
     }
   }
+};
 
+interface SaveOptions {
+  // Return once the observation is in Realm, and write its location to the
+  // device's photos (and fill it in from tracked location) afterwards. Those
+  // are Photos library writes, slow enough that waiting on them made picking
+  // a species stall before the next observation or screen came up.
+  locationInBackground?: boolean;
+}
+
+const saveObservation = async (
+  observation: RealmObservation,
+  cameraRollUris: string[],
+  realm: Realm,
+  { locationInBackground = false }: SaveOptions = {},
+) => {
+  const savedObservation = await Observation.saveLocalObservationForUpload(
+    observation,
+    realm,
+  ) as RealmObservation | null | undefined;
+  const { uuid } = observation;
+  const finished = finishSave( observation, cameraRollUris, realm, savedObservation );
+  if ( uuid ) {
+    finishingSaves.set( uuid, finished );
+    finished.then( ( ) => {
+      if ( finishingSaves.get( uuid ) === finished ) finishingSaves.delete( uuid );
+    } );
+  }
+  if ( !locationInBackground ) await finished;
   return savedObservation;
 };
 

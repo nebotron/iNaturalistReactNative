@@ -324,7 +324,9 @@ const TaxonDetails = ( ) => {
     // We need the updated currentObservation immediately to pass to saveObservation
     const currentObservation = getCurrentObservation( );
     const isNewObs = !currentObservation?._created_at;
-    await saveObservation( currentObservation, cameraRollUris, realm );
+    await saveObservation( currentObservation, cameraRollUris, realm, {
+      locationInBackground: true,
+    } );
     // If we are saving a new observations, reset the stored my obs offset to
     // restore b/c we want MyObs rendered in its default state with this new
     // observation visible at the top

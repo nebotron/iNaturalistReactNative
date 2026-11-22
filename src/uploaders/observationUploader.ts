@@ -11,6 +11,7 @@ import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
 import { recordUploadedDevicePhotoUrisFromObservation } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
+import { awaitObservationSaveFinished } from "sharedHelpers/saveObservation";
 import prepareObservationForUpload from "uploaders/dataTransformation/prepareObservationForUpload";
 import {
   attachMediaToObservation,
@@ -134,6 +135,9 @@ async function uploadObservation(
   const uploadStartTime = Date.now( );
   const obsProgress = trackObservationUpload( observation.uuid );
   obsProgress.start( );
+
+  // A save made moments ago may still be filling in the location
+  await awaitObservationSaveFinished( observation.uuid );
 
   clearObservationUploadError( realm, observation );
 

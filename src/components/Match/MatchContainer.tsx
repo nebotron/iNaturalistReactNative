@@ -487,7 +487,9 @@ const MatchContainer = ( ) => {
           owners_identification_from_vision: identificationFromVision,
         } );
       }
-      await saveObservation( getCurrentObservation( ), cameraRollUris, realm );
+      await saveObservation( getCurrentObservation( ), cameraRollUris, realm, {
+        locationInBackground: true,
+      } );
     }
     exitObservationFlow( {
       promptDeleteOriginalPhotos: action === "save" && shouldPromptDeleteOriginalPhotos( ),
