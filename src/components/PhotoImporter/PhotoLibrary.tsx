@@ -35,11 +35,14 @@ import {
 } from "react-native";
 import { toDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
 import {
-  getPreviouslyUploadedDevicePhotoUrisSet,
+  findSavedDevicePhotoUris,
   markDuplicatePhotoFromLibrary,
   markDuplicatePhotosFromLibrary,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
-import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
+import {
+  getGalleryAssetDevicePhotoUri,
+  getOriginalDevicePhotoUrisFromAssets,
+} from "sharedHelpers/getOriginalDevicePhotoUri";
 import { aliasPreload, enqueuePreload } from "sharedHelpers/imageCropPreload";
 import {
   fileExtension,
@@ -363,9 +366,11 @@ const PhotoLibrary = ( ) => {
       } );
     }, 30000 );
 
-    // Read once for the whole import: the set walks every saved observation,
-    // and marking each photo as it lands would otherwise walk them per photo.
-    const previouslyUploadedUris = getPreviouslyUploadedDevicePhotoUrisSet( realm );
+    // Looked up once for the whole import, for just the photos picked
+    const previouslyUploadedUris = findSavedDevicePhotoUris(
+      realm,
+      photoNodes.map( node => getGalleryAssetDevicePhotoUri( nodeToSourceAsset( node ) ) ),
+    );
     const importedUris: string[] = [];
     const unsettled = new Set<PhotoNode>( [...photoNodes, ...videoNodes] );
 

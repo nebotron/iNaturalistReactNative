@@ -35,8 +35,8 @@ import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
 import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
 import {
+  findSavedDevicePhotoUris,
   getDevicePhotoUrisFromObservation,
-  getPreviouslyUploadedDevicePhotoUrisSet,
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
@@ -55,7 +55,8 @@ import {
 import { preloadPickerPhoto } from "sharedHelpers/pickerCropPreload";
 import {
   addRemovedGroupPhotoUris,
-  getRemovedGroupPhotoUris,
+  hasRemovedGroupPhotoUris,
+  isRemovedDevicePhotoKey,
 } from "sharedHelpers/removedGroupPhotoUris";
 import { devicePhotoKey, listStagedPhotoNodes } from "sharedHelpers/usbStaging";
 import { useGridLayout, useTranslation } from "sharedHooks";
@@ -91,10 +92,6 @@ const GALLERY_INCLUDE: GalleryInclude = Platform.OS === "android"
   : ["filename", "fileSize", "imageSize", "location"];
 
 const getSelectionKey = ( node: PhotoNode ) => node.image.uri;
-
-const readRemovedGroupPhotoUris = ( ) => new Set(
-  getRemovedGroupPhotoUris( ).map( devicePhotoKey ),
-);
 
 const PhotoGallery = ( {
   maxPhotos,
@@ -160,10 +157,11 @@ const PhotoGallery = ( {
   // removedGroupPhotoUris.ts) — the device deletion may have silently failed
   // (iOS 26's PHPhotoLibrary confirmation bug), so they count as saved and are
   // hidden along with them unless the user taps Show all photos. Re-read on
-  // focus, since Group Photos is opened on top of this screen.
-  const [removedGroupPhotoUris, setRemovedGroupPhotoUris] = useState( readRemovedGroupPhotoUris );
+  // focus, since Group Photos is opened on top of this screen. The list lives
+  // in removedGroupPhotoUris.ts; this only says when to look at it again.
+  const [removedVersion, setRemovedVersion] = useState( 0 );
   useFocusEffect( useCallback( ( ) => {
-    setRemovedGroupPhotoUris( readRemovedGroupPhotoUris( ) );
+    setRemovedVersion( version => version + 1 );
   }, [] ) );
 
   // Kept up to date while the screen is open rather than read once on mount:
@@ -171,22 +169,31 @@ const PhotoGallery = ( {
   // already back on My Observations (see GroupPhotosContainer), and an upload
   // indexes its photos later still, so photos can become "saved" with this
   // screen sitting open in the tab stack. Additions are folded in one change
-  // at a time, since recomputing the whole set means walking every saved
-  // observation.
+  // at a time. Only the photos loaded are ever looked up, a page at a time as
+  // it arrives: reading every saved observation and upload record instead
+  // held up opening this screen.
+  const addUris = useCallback( ( uris: ( string | null )[] ) => {
+    const newUris = uris.filter( ( uri ): uri is string => !!uri ).map( devicePhotoKey );
+    if ( newUris.length === 0 ) return;
+    setImportedUris( prev => {
+      if ( newUris.every( uri => prev.has( uri ) ) ) return prev;
+      return new Set( [...prev, ...newUris] );
+    } );
+  }, [] );
+
+  // Loaded photos already looked up, by devicePhotoKey
+  const lookedUpRef = useRef( new Set<string>( ) );
   useEffect( ( ) => {
-    setImportedUris( new Set(
-      [...getPreviouslyUploadedDevicePhotoUrisSet( realm )].map( devicePhotoKey ),
+    if ( realm.isClosed ) return;
+    const unseen = photos.map( getDeviceUriFromNode ).filter( ( uri ): uri is string => (
+      !!uri && !lookedUpRef.current.has( devicePhotoKey( uri ) )
     ) );
+    if ( unseen.length === 0 ) return;
+    unseen.forEach( uri => lookedUpRef.current.add( devicePhotoKey( uri ) ) );
+    addUris( [...findSavedDevicePhotoUris( realm, unseen )] );
+  }, [photos, realm, addUris] );
 
-    const addUris = ( uris: ( string | null )[] ) => {
-      const newUris = uris.filter( ( uri ): uri is string => !!uri ).map( devicePhotoKey );
-      if ( newUris.length === 0 ) return;
-      setImportedUris( prev => {
-        if ( newUris.every( uri => prev.has( uri ) ) ) return prev;
-        return new Set( [...prev, ...newUris] );
-      } );
-    };
-
+  useEffect( ( ) => {
     const uploadedRecords = realm.objects( "UploadedDevicePhotoUri" );
     const observations = realm.objects<RealmObservation>( "Observation" );
     const uploadedListener: Realm.CollectionChangeCallback<
@@ -213,7 +220,7 @@ const PhotoGallery = ( {
       uploadedRecords.removeListener( uploadedListener );
       observations.removeListener( observationListener );
     };
-  }, [realm] );
+  }, [realm, addUris] );
 
   const loadPhotos = useCallback( async ( after?: string ) => {
     if ( isFetchingRef.current ) {
@@ -430,12 +437,14 @@ const PhotoGallery = ( {
       return false;
     }
     const key = devicePhotoKey( uri );
-    return importedUris.has( key ) || removedGroupPhotoUris.has( key );
-  }, [importedUris, removedGroupPhotoUris] );
+    return importedUris.has( key ) || isRemovedDevicePhotoKey( key );
+  // removedVersion: removed photos are looked up afresh after a removal
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importedUris, removedVersion] );
 
   const hasHiddenPhotos = importedUris.size > 0
     || deletedUris.size > 0
-    || removedGroupPhotoUris.size > 0;
+    || hasRemovedGroupPhotoUris( );
 
   const visiblePhotos = useMemo(
     ( ) => photos.filter( node => {

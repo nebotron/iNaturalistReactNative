@@ -7,7 +7,7 @@ import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers
 import { Platform } from "react-native";
 import type Realm from "realm";
 import {
-  getPreviouslyUploadedDevicePhotoUrisSet,
+  findSavedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { PRELOAD_LOOKAHEAD } from "sharedHelpers/imageCropPreload";
@@ -16,7 +16,7 @@ import {
   canPreloadPickerPhoto,
   preloadPickerPhoto,
 } from "sharedHelpers/pickerCropPreload";
-import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import { isRemovedDevicePhotoKey } from "sharedHelpers/removedGroupPhotoUris";
 import { devicePhotoKey, listStagedPhotoNodes } from "sharedHelpers/usbStaging";
 
 type PhotoNode = PhotoIdentifier["node"];
@@ -63,13 +63,16 @@ export async function preloadNewestPickerPhotos( realm: Realm ): Promise<void> {
       : [];
     const staged = await listStagedPhotoNodes( );
     if ( realm.isClosed ) return;
-    const hidden = new Set( [
-      ...getPreviouslyUploadedDevicePhotoUrisSet( realm ),
-      ...getRemovedGroupPhotoUris( ),
-    ].map( devicePhotoKey ) );
+    // Only these photos are looked up, not every saved one
+    const saved = new Set( [...findSavedDevicePhotoUris(
+      realm,
+      [...library, ...staged].map( getDeviceUriFromNode ),
+    )].map( devicePhotoKey ) );
     const isHidden = ( node: PhotoNode ) => {
       const uri = getDeviceUriFromNode( node );
-      return !!uri && hidden.has( devicePhotoKey( uri ) );
+      if ( !uri ) return false;
+      const key = devicePhotoKey( uri );
+      return saved.has( key ) || isRemovedDevicePhotoKey( key );
     };
     [...library, ...staged]
       .sort( ( a, b ) => b.timestamp - a.timestamp )

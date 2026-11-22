@@ -15,12 +15,14 @@ jest.mock( "sharedHelpers/pickerCropPreload", ( ) => ( {
 
 const mockUploaded = new Set( );
 jest.mock( "sharedHelpers/duplicateUploadedDevicePhotos", ( ) => ( {
-  getPreviouslyUploadedDevicePhotoUrisSet: ( ) => mockUploaded,
+  findSavedDevicePhotoUris: ( _realm, uris ) => new Set(
+    uris.filter( uri => mockUploaded.has( uri ) ),
+  ),
 } ) );
 
 const mockRemoved = [];
 jest.mock( "sharedHelpers/removedGroupPhotoUris", ( ) => ( {
-  getRemovedGroupPhotoUris: ( ) => mockRemoved,
+  isRemovedDevicePhotoKey: key => mockRemoved.includes( key ),
 } ) );
 
 const mockStaged = [];

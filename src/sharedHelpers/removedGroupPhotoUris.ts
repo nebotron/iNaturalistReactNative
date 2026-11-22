@@ -1,3 +1,4 @@
+import { devicePhotoKey } from "sharedHelpers/usbStaging";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
 const STORAGE_KEY = "removedGroupPhotoUris";
@@ -20,15 +21,24 @@ const load = ( ): string[] => {
 // The list, parsed once and kept: it holds every photo ever removed (15,000 on
 // one device), and the deletion album asks about photos one at a time.
 let loaded: Set<string> | null = null;
+// The same by devicePhotoKey, which the photo picker matches on
+let loadedKeys: Set<string> | null = null;
 let saving = false;
 const removedSet = ( ): Set<string> => {
   loaded ??= new Set( load( ) );
   return loaded;
 };
+const removedKeys = ( ): Set<string> => {
+  loadedKeys ??= new Set( [...removedSet( )].map( devicePhotoKey ) );
+  return loadedKeys;
+};
 
 // Anything else writing the key (an iCloud restore) makes the kept copy stale
 zustandMMKVBackingStorage.addOnValueChangedListener( key => {
-  if ( key === STORAGE_KEY && !saving ) loaded = null;
+  if ( key === STORAGE_KEY && !saving ) {
+    loaded = null;
+    loadedKeys = null;
+  }
 } );
 
 const save = ( uris: Set<string> ): void => {
@@ -60,13 +70,20 @@ export const getRemovedGroupPhotoUris = ( ): string[] => [...removedSet( )];
 
 export const isRemovedGroupPhotoUri = ( uri: string ): boolean => removedSet( ).has( uri );
 
+export const isRemovedDevicePhotoKey = ( key: string ): boolean => removedKeys( ).has( key );
+
+export const hasRemovedGroupPhotoUris = ( ): boolean => removedSet( ).size > 0;
+
 export const addRemovedGroupPhotoUris = ( uris: string[] ): void => {
   const existing = removedSet( );
   const added = uris.filter( uri => !existing.has( uri ) );
   if ( added.length === 0 ) {
     return;
   }
-  added.forEach( uri => existing.add( uri ) );
+  added.forEach( uri => {
+    existing.add( uri );
+    loadedKeys?.add( devicePhotoKey( uri ) );
+  } );
   save( existing );
   listeners.forEach( listener => listener( added ) );
 };

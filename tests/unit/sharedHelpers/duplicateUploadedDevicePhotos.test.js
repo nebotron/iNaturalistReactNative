@@ -1,6 +1,5 @@
 import {
   getDevicePhotoUrisFromObservation,
-  getPreviouslyUploadedDevicePhotoUrisSet,
   markDuplicatePhotosFromLibrary,
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -24,64 +23,14 @@ describe( "duplicateUploadedDevicePhotos", ( ) => {
     } );
   } );
 
-  describe( "getPreviouslyUploadedDevicePhotoUrisSet", ( ) => {
-    it( "collects device photo URIs from uploaded observations", ( ) => {
-      const realm = {
-        objects: jest.fn( modelName => {
-          if ( modelName === "UploadedDevicePhotoUri" ) {
-            return [];
-          }
-          return {
-            filtered: jest.fn( ).mockReturnValue( [
-              {
-                observationPhotos: [
-                  { originalDevicePhotoUri: "ph://UPLOADED-1" },
-                ],
-              },
-              {
-                observationPhotos: [
-                  { originalDevicePhotoUri: "ph://UPLOADED-2" },
-                ],
-              },
-            ] ),
-          };
-        } ),
-      };
-
-      expect(
-        getPreviouslyUploadedDevicePhotoUrisSet( realm ),
-      ).toEqual( new Set( ["ph://UPLOADED-1", "ph://UPLOADED-2"] ) );
-    } );
-
-    it( "includes URIs stored in the uploaded device photo index", ( ) => {
-      const realm = {
-        objects: jest.fn( modelName => {
-          if ( modelName === "UploadedDevicePhotoUri" ) {
-            return [{ uri: "ph://INDEXED-PHOTO" }];
-          }
-          return {
-            filtered: jest.fn( ).mockReturnValue( [] ),
-          };
-        } ),
-      };
-
-      expect(
-        getPreviouslyUploadedDevicePhotoUrisSet( realm ),
-      ).toEqual( new Set( ["ph://INDEXED-PHOTO"] ) );
-    } );
-  } );
-
   describe( "markDuplicatePhotosFromLibrary", ( ) => {
     it( "marks photos that match previously uploaded device URIs", ( ) => {
       const realm = {
-        objects: jest.fn( modelName => {
-          if ( modelName === "UploadedDevicePhotoUri" ) {
-            return [{ uri: "ph://ALREADY-UPLOADED" }];
-          }
-          return {
-            filtered: jest.fn( ).mockReturnValue( [] ),
-          };
-        } ),
+        objects: jest.fn( modelName => ( {
+          filtered: jest.fn( ).mockReturnValue( modelName === "UploadedDevicePhotoUri"
+            ? [{ uri: "ph://ALREADY-UPLOADED" }]
+            : [] ),
+        } ) ),
       };
 
       expect(

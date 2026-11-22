@@ -5,7 +5,7 @@ import GroupPhotosContainer from "components/PhotoImporter/GroupPhotosContainer"
 import initI18next from "i18n/initI18next";
 import React from "react";
 import {
-  getPreviouslyUploadedDevicePhotoUrisSet,
+  findSavedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import {
   getRemovedGroupPhotoUris,
@@ -196,7 +196,7 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
     fireEvent.press( screen.getByText( "DISCARD ALL" ) );
 
     expect(
-      getPreviouslyUploadedDevicePhotoUrisSet( global.realm ),
+      findSavedDevicePhotoUris( global.realm, ["ph://DEVICE-1"] ),
     ).not.toContain( "ph://DEVICE-1" );
     expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://DEVICE-1" );
   } );

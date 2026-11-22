@@ -2,7 +2,7 @@ import * as Exify from "@lodev09/react-native-exify";
 import Observation from "realmModels/Observation";
 import ObservationFieldValue from "realmModels/ObservationFieldValue";
 import ProjectObservation from "realmModels/ProjectObservation";
-import { getPreviouslyUploadedDevicePhotoUrisSet } from
+import { findSavedDevicePhotoUris } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import factory from "tests/factory";
@@ -623,7 +623,7 @@ describe( "Observation", ( ) => {
 
       expect( global.realm.objectForPrimaryKey( "Observation", obsUuid ) ).toBeNull( );
       expect(
-        getPreviouslyUploadedDevicePhotoUrisSet( global.realm ).has( devicePhotoUri ),
+        findSavedDevicePhotoUris( global.realm, [devicePhotoUri] ).has( devicePhotoUri ),
       ).toBe( true );
     } );
   } );

@@ -75,30 +75,69 @@ export const recordUploadedDevicePhotoUrisFromObservation = (
   );
 };
 
-export const getPreviouslyUploadedDevicePhotoUrisSet = (
+// A staged USB photo's path names the app container it was staged in, which
+// changes across updates, so it matches by staged name, as devicePhotoKey does
+const STAGED_NAME = /\/usbStaging\/([^/]+)$/;
+const matchKey = ( uri: string ) => {
+  const name = uri.match( STAGED_NAME )?.[1];
+  return name
+    ? `usbStaging/${name}`
+    : uri;
+};
+
+// `field IN $0`, or-ed with an ENDSWITH per staged photo, and its arguments
+const savedQuery = ( field: string, exact: string[], stagedSuffixes: string[] ) => {
+  const clauses = [
+    `${field} IN $0`,
+    ...stagedSuffixes.map( ( _suffix, i ) => `${field} ENDSWITH $${i + 1}` ),
+  ];
+  return [clauses.join( " OR " ), exact, ...stagedSuffixes] as const;
+};
+
+// Which of these device photos are saved: on an observation in Realm, or
+// recorded as uploaded. Asks Realm about just these, one query a table, run in
+// Realm's own code, rather than reading every observation and record into JS,
+// which with tens of thousands of photos held up opening the photo picker.
+// Resolves the normalized URIs among these that are saved.
+export const findSavedDevicePhotoUris = (
   realm: Realm,
-  excludeObservationUuids: string[] = [],
+  uris: ( string | null | undefined )[],
 ): Set<string> => {
-  const previouslyUploadedUris = new Set<string>( );
-
-  realm.objects<UploadedDevicePhotoUri>( UploadedDevicePhotoUri.schema.name )
-    .forEach( record => {
-      const uri = normalizeDevicePhotoUri( record.uri );
-      if ( uri ) {
-        previouslyUploadedUris.add( uri );
-      }
-    } );
-
-  const savedObservations = realm.objects<RealmObservation>( "Observation" )
-    .filtered( "NOT ( uuid IN $0 )", excludeObservationUuids );
-
-  savedObservations.forEach( observation => {
-    getDevicePhotoUrisFromObservation( observation ).forEach( uri => {
-      previouslyUploadedUris.add( uri );
-    } );
+  const wanted = new Map<string, string>( );
+  uris.forEach( raw => {
+    const uri = normalizeDevicePhotoUri( raw );
+    if ( uri ) wanted.set( matchKey( uri ), uri );
   } );
-
-  return previouslyUploadedUris;
+  const saved = new Set<string>( );
+  if ( wanted.size === 0 ) return saved;
+  const exact: string[] = [];
+  const stagedSuffixes: string[] = [];
+  wanted.forEach( uri => {
+    const name = uri.match( STAGED_NAME )?.[1];
+    if ( name ) {
+      stagedSuffixes.push( `/usbStaging/${name}` );
+    } else {
+      // Observations may store a library URI without its ph://
+      exact.push( uri, uri.replace( /^ph:\/\//, "" ) );
+    }
+  } );
+  const note = ( stored: string | null | undefined ) => {
+    const uri = normalizeDevicePhotoUri( stored );
+    const hit = uri && wanted.get( matchKey( uri ) );
+    if ( hit ) saved.add( hit );
+  };
+  realm.objects<UploadedDevicePhotoUri>( UploadedDevicePhotoUri.schema.name )
+    .filtered( ...savedQuery( "uri", exact, stagedSuffixes ) )
+    .forEach( record => note( record.uri ) );
+  realm.objects<RealmObservation>( "Observation" )
+    .filtered( ...savedQuery(
+      "ANY observationPhotos.originalDevicePhotoUri",
+      exact,
+      stagedSuffixes,
+    ) )
+    .forEach( observation => ( observation.observationPhotos ?? [] )
+      .forEach( obsPhoto => note( obsPhoto.originalDevicePhotoUri ) ) );
+  return saved;
 };
 
 // The same for a single photo, against a set the caller already has. An import
@@ -133,7 +172,12 @@ export const markDuplicatePhotosFromLibrary = <T extends Asset>(
   isDuplicateUpload: boolean;
   originalDevicePhotoUri?: string;
 }[] => {
-  const previouslyUploadedUris = getPreviouslyUploadedDevicePhotoUrisSet( realm );
+  const previouslyUploadedUris = findSavedDevicePhotoUris(
+    realm,
+    movedPhotos.map( ( photo, index ) => getGalleryAssetDevicePhotoUri(
+      sourceAssets[index] ?? photo.image,
+    ) ),
+  );
 
   return movedPhotos.map( ( photo, index ) => markDuplicatePhotoFromLibrary(
     previouslyUploadedUris,
