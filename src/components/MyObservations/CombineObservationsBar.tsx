@@ -9,6 +9,7 @@ import React, { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import combineObservations from "sharedHelpers/combineObservations";
 import deleteObservations from "sharedHelpers/deleteObservations";
+import ensureLocalObservations from "sharedHelpers/ensureLocalObservations";
 import { useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
@@ -26,7 +27,7 @@ const CombineObservationsBar = ( ) => {
   const setCombineSelection = useStore( state => state.setCombineSelection );
   const [combining, setCombining] = useState( false );
 
-  // Leaving My Observations ends the selection
+  // Leaving the screen ends the selection
   useEffect( ( ) => ( ) => setCombineSelection( null ), [setCombineSelection] );
 
   if ( !selection ) return null;
@@ -34,6 +35,7 @@ const CombineObservationsBar = ( ) => {
   const combine = async ( ) => {
     setCombining( true );
     try {
+      await ensureLocalObservations( realm, selection );
       await combineObservations( realm, selection );
       setCombineSelection( null );
     } catch ( error ) {
@@ -46,6 +48,7 @@ const CombineObservationsBar = ( ) => {
   const remove = async ( ) => {
     setCombining( true );
     try {
+      await ensureLocalObservations( realm, selection );
       await deleteObservations( realm, selection );
       setCombineSelection( null );
     } catch ( error ) {

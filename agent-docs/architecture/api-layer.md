@@ -84,6 +84,23 @@ const { data, fetchNextPage, isFetchingNextPage } = useAuthenticatedInfiniteQuer
 const observations = flatten( data?.pages?.map( r => r.results ) ) || [];
 ```
 
+**Persisted results (`persist: true`).** Explore's lists (`useInfiniteExploreScroll`, and
+`useInfiniteScroll` in the Species, Observers and Identifiers views) pass `persist: true`.
+Their pages are written to a separate MMKV instance (`sharedHelpers/persistedQueries.ts`,
+started by `persistQueries( queryClient )` in `index.js`) and read back as `initialData`,
+so leaving Explore or restarting the app shows what was last fetched. `staleTime` and
+`gcTime` are both `PERSISTED_QUERY_TTL_MS` (48 hours, set in that file): until then the
+results aren't fetched again unless the user pulls to refresh. Only the first 10 pages
+and the 30 most recently fetched queries are kept on disk, and sign-out clears them.
+
+The key of a persisted query holds the user's id, locale and name preferences instead of
+the whole user object, so it stays the same across restarts.
+
+The hook also returns `refreshFirstPage( )`, which fetches the first page and replaces
+every page with it only if that works. It throws on failure and leaves the data as it
+was. Pull to refresh uses it instead of `removeQueries` + `refetch`, which emptied the list
+first and left it empty if the request failed.
+
 ### useNonAuthenticatedQuery (useQuery.ts)
 For public endpoints that don't need JWT.
 

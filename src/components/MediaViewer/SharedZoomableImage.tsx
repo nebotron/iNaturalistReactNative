@@ -1,4 +1,4 @@
-import CachedImage from "components/SharedComponents/CachedImage";
+import CachedImage, { decodesWithFasterImage } from "components/SharedComponents/CachedImage";
 import type { ForwardRefRenderFunction, ReactNode } from "react";
 import React, {
   forwardRef,
@@ -8,19 +8,36 @@ import React, {
   useRef,
   useState,
 } from "react";
-import type { LayoutChangeEvent } from "react-native";
-import { StyleSheet, View } from "react-native";
+import type { LayoutChangeEvent, ViewProps } from "react-native";
+import {
+  NativeModules, requireNativeComponent, StyleSheet, View,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
   useAnimatedReaction,
 } from "react-native-reanimated";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
-import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoomTransform";
 import readImageZoomTransform from "sharedHooks/imageZoom/readImageZoomTransform";
 import type { ImageZoomProps, ImageZoomRef } from "sharedHooks/imageZoom/types";
 import { useZoomable } from "sharedHooks/imageZoom/useZoomable";
+
+// The photo drawn with the same per-pixel brightness policy the crop editor
+// bakes into the saved file (ImageCropper.m's applyBrightnessMultiplyBuffer),
+// in place of the CSS brightness() filter, which clamps each channel on its
+// own and so shifts the colour of bright pixels. Registered once here:
+// requireNativeComponent throws when a name is registered twice.
+const BrightenedImage = NativeModules.ImageCropper
+  ? requireNativeComponent<ViewProps & {
+    uri: string;
+    brightness: number;
+    // Brighten every pixel rather than a downsampled copy. Required in the
+    // crop editor (see ImageCropView), which must never show anything but the
+    // full-resolution photo.
+    fullResolution: boolean;
+  }>( "BrightenedImage" )
+  : null;
 
 export type SharedZoomableImageRef = ImageZoomRef & {
   readTransform: ( ) => ImageZoomTransform;
@@ -39,6 +56,14 @@ const styles = StyleSheet.create( {
 type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
   fullResolution?: boolean;
+  // Decode the photo at most this many pixels on the long side (see
+  // CachedImage), e.g. a grid tile at its own size
+  maxPixelSize?: number;
+  // A sharper copy drawn over a maxPixelSize photo, for when it's shown (or
+  // pinched) larger than that: true decodes the whole file, a number caps it.
+  // A layer of its own so the photo underneath stays up while it decodes,
+  // rather than the view blanking as it would on a new source.
+  detail?: boolean | number;
   onLongPress?: () => void;
   onScaleChange?: ( scale: number ) => void;
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
@@ -84,6 +109,8 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     allowLetterboxPan,
     brightness = 1,
     fullResolution,
+    maxPixelSize,
+    detail = false,
     onLongPress,
     onScaleChange,
     onImageDimensionsChange,
@@ -94,9 +121,15 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   ref,
 ) => {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
-  const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>( null );
   const viewSizeRef = useRef<{ width: number; height: number } | null>( null );
-  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>( null );
+  // Once a photo's brightness has been adjusted, keep its brightened copy
+  // mounted even when the slider passes back through 1, so it isn't decoded
+  // again on the next tick.
+  const [brightenedUri, setBrightenedUri] = useState<string | null>( null );
+  if ( brightness !== 1 && uri && brightenedUri !== uri ) {
+    setBrightenedUri( uri );
+  }
+  const showBrightened = !!BrightenedImage && !!uri && brightenedUri === uri;
 
   const {
     animatedStyle,
@@ -167,42 +200,11 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     readViewSize: ( ) => viewSizeRef.current,
   } ), [applyTransform, reset, zoom] );
 
-  // Applied as a plain (non-reanimated) style: reanimated's useAnimatedStyle
-  // does not render the `filter` prop, so an animated brightness silently does
-  // nothing. Driving it from the prop re-renders the image each change instead.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const brightnessFilter: any = brightness !== 1
-    ? { filter: [{ brightness }] }
-    : null;
-
-  // iOS renders a brightness filter as a multiply-blend layer covering the
-  // whole filtered view. With the image at absoluteFill and resizeMode
-  // "contain", that layer also covers the letterbox bars, tinting whatever
-  // shows through them (e.g. the white screen background on Explore >
-  // Identify) so the padding no longer matches the background. Sizing the
-  // image to its contain rect -- same pixels, since that rect is centered in
-  // the view -- keeps the filter on the photo alone.
-  const containRect = brightnessFilter && viewSize && imageSize
-    ? computeContainRect( viewSize.width, viewSize.height, imageSize.width, imageSize.height )
-    : null;
-  const imageLayoutStyle = containRect && containRect.width > 0 && containRect.height > 0
-    ? {
-      position: "absolute" as const,
-      left: containRect.left,
-      top: containRect.top,
-      width: containRect.width,
-      height: containRect.height,
-    }
-    : StyleSheet.absoluteFill;
+  const showDetail = !!detail && !!maxPixelSize && decodesWithFasterImage( uri, fullResolution );
 
   const handleLayout = ( event: LayoutChangeEvent ) => {
     const { width, height } = event.nativeEvent.layout;
     viewSizeRef.current = { width, height };
-    setViewSize( prev => (
-      prev?.width === width && prev?.height === height
-        ? prev
-        : { width, height }
-    ) );
     onZoomableLayout( event );
   };
 
@@ -238,9 +240,10 @@ const SharedZoomableImage: ForwardRefRenderFunction<
             // the IDing game and the crop editor read from the same disk cache
             // as the grids that prefetched them. The transform stays on this
             // wrapper because CachedImage renders a native view underneath.
-            <Animated.View
-              style={[imageLayoutStyle, animatedStyle, brightnessFilter]}
-            >
+            // The brightened copy sits over it in the same transformed layer,
+            // drawn aspect-fit like it, and is transparent until its first
+            // render, so the plain photo shows while it decodes.
+            <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
               <CachedImage
                 testID={testID}
                 className="w-full h-full"
@@ -248,16 +251,33 @@ const SharedZoomableImage: ForwardRefRenderFunction<
                 fullResolution={fullResolution}
                 resizeMode="contain"
                 onLoad={( { width, height } ) => {
-                  setImageSize( prev => (
-                    prev?.width === width && prev?.height === height
-                      ? prev
-                      : { width, height }
-                  ) );
                   onImageDimensionsChange?.( { width, height } );
                   onLoad?.( );
                 }}
+                maxPixelSize={maxPixelSize}
                 onError={onError}
               />
+              {showDetail && (
+                <CachedImage
+                  key={String( detail )}
+                  className="absolute inset-0"
+                  source={{ uri }}
+                  fullResolution={fullResolution}
+                  maxPixelSize={detail === true
+                    ? undefined
+                    : detail || undefined}
+                  resizeMode="contain"
+                />
+              )}
+              {showBrightened && BrightenedImage && (
+                <BrightenedImage
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                  uri={uri}
+                  brightness={brightness}
+                  fullResolution={!!fullResolution}
+                />
+              )}
             </Animated.View>
           )}
       </View>

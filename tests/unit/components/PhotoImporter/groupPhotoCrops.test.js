@@ -1,9 +1,12 @@
 import {
   applyGroupPhotosCrop,
   applyGroupPhotosPinchCrop,
+  frameUncroppedGroupPhotos,
 } from "components/PhotoImporter/helpers/groupPhotoCrops";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrops";
+import { resolveSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 import useStore from "stores/useStore";
 
 jest.mock( "sharedHelpers/cropImageFile", ( ) => jest.fn(
@@ -18,6 +21,10 @@ jest.mock( "sharedHelpers/cropPhotoMetadata", ( ) => ( {
 } ) );
 
 jest.mock( "sharedHelpers/animalCropLog", ( ) => ( { saveAnimalCrop: jest.fn( ) } ) );
+
+jest.mock( "sharedHelpers/useSubjectDetectionForUri", ( ) => ( {
+  resolveSubjectDetectionForUri: jest.fn( ),
+} ) );
 
 jest.mock( "sharedHelpers/imageFileSize", ( ) => jest.fn(
   ( ) => Promise.resolve( { w: 100, h: 100 } ),
@@ -127,5 +134,77 @@ describe( "applyGroupPhotosPinchCrop", ( ) => {
 
     expect( cropImageFile ).not.toHaveBeenCalled( );
     expect( firstPhotoImage( ).uri ).toBe( "file://whole.jpg" );
+    // Logged so the subject detector doesn't reframe it next time it's drawn
+    expect( saveAnimalCrop ).toHaveBeenCalledWith( "file://whole.jpg", {
+      x: 0, y: 0, w: 1, h: 1,
+    } );
+  } );
+} );
+
+describe( "frameUncroppedGroupPhotos", ( ) => {
+  beforeEach( ( ) => {
+    jest.clearAllMocks( );
+    resolveSubjectDetectionForUri.mockResolvedValue( {
+      crop, imageWidth: 100, imageHeight: 100,
+    } );
+  } );
+
+  it( "crops a photo nobody framed to its detected subject", async ( ) => {
+    const group = await frameUncroppedGroupPhotos( {
+      photos: [{ image: { uri: "file://plain.jpg" } }],
+    } );
+
+    expect( cropImageFile ).toHaveBeenCalledWith(
+      "file://plain.jpg",
+      crop,
+      100,
+      100,
+      undefined,
+      1,
+    );
+    expect( group.photos[0].image ).toEqual( {
+      uri: "file://cropped-2.jpg",
+      cropOriginalUri: "file://plain.jpg",
+      crop,
+    } );
+  } );
+
+  it( "leaves cropped photos, GIFs and whole-frame framings alone", async ( ) => {
+    const cropped = { image: { uri: "file://a.jpg", crop } };
+    const gif = { image: { uri: "file://b.gif" }, croppable: false };
+    const group = await frameUncroppedGroupPhotos( { photos: [cropped, gif] } );
+    resolveSubjectDetectionForUri.mockResolvedValue( {
+      crop: {
+        x: 0, y: 0, w: 1, h: 1,
+      },
+      imageWidth: 100,
+      imageHeight: 100,
+    } );
+    const whole = await frameUncroppedGroupPhotos( {
+      photos: [{ image: { uri: "file://c.jpg" } }],
+    } );
+
+    expect( cropImageFile ).not.toHaveBeenCalled( );
+    expect( group.photos ).toEqual( [cropped, gif] );
+    expect( whole.photos[0].image.uri ).toBe( "file://c.jpg" );
+  } );
+
+  it( "imports a photo as it is when it can't be framed", async ( ) => {
+    resolveSubjectDetectionForUri.mockRejectedValue( new Error( "no detector" ) );
+    const group = await frameUncroppedGroupPhotos( {
+      photos: [{ image: { uri: "file://plain.jpg" } }],
+    } );
+
+    expect( group.photos[0].image.uri ).toBe( "file://plain.jpg" );
+  } );
+
+  it( "looks up the framing by the uri the grid showed", async ( ) => {
+    await frameUncroppedGroupPhotos(
+      { photos: [{ image: { uri: "file://moved.jpg" } }] },
+      ["file://shared.jpg"],
+    );
+
+    expect( resolveSubjectDetectionForUri ).toHaveBeenCalledWith( "file://shared.jpg" );
+    expect( resolveSubjectDetectionForUri ).not.toHaveBeenCalledWith( "file://moved.jpg" );
   } );
 } );

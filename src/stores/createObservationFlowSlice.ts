@@ -71,16 +71,27 @@ export interface GroupedPhotoResolution {
 // Placeholders only resolve in the process that started their copy, so
 // persisting them would restore an import that can never finish (see
 // useResumeGroupPhotos).
+// Runs on every store write (persist's partialize), so while an import is
+// copying photos a fresh copy of every group came back each time: the persist
+// layer saw a changed list and re-serialized the whole of Group Photos to disk
+// on writes that had nothing to do with it (upload progress, scroll offsets).
+// The same input now returns the same output, and a group with nothing
+// pending is kept as is.
+let lastPendingInput: GroupedPhoto[] | null = null;
+let lastPendingOutput: GroupedPhoto[] = [];
 export const dropPendingGroupPhotos = ( groups: GroupedPhoto[] ): GroupedPhoto[] => {
-  if ( !groups?.some( group => group.photos?.some( photo => photo.pending ) ) ) {
-    return groups;
+  if ( groups === lastPendingInput ) return lastPendingOutput;
+  let output = groups;
+  if ( groups?.some( group => group.photos?.some( photo => photo.pending ) ) ) {
+    output = groups
+      .map( group => ( group.photos?.some( photo => photo.pending )
+        ? { ...group, photos: group.photos.filter( photo => !photo.pending ) }
+        : group ) )
+      .filter( group => ( group.photos?.length ?? 0 ) > 0 || group.soundUri );
   }
-  return groups
-    .map( group => ( {
-      ...group,
-      photos: ( group.photos || [] ).filter( photo => !photo.pending ),
-    } ) )
-    .filter( group => group.photos.length > 0 || group.soundUri );
+  lastPendingInput = groups;
+  lastPendingOutput = output;
+  return output;
 };
 
 interface LastLocationPickerState {

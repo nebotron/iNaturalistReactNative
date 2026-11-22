@@ -121,6 +121,7 @@ describe( "ExploreV2UsersView", ( ) => {
   it( "passes the disabled flag through to the query", ( ) => {
     renderUsers( { enabled: false } );
 
-    expect( mockUseInfiniteScroll.mock.calls.at( -1 )[3] ).toEqual( { enabled: false } );
+    expect( mockUseInfiniteScroll.mock.calls.at( -1 )[3] )
+      .toEqual( { enabled: false, persist: true } );
   } );
 } );

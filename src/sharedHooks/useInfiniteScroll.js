@@ -7,7 +7,9 @@ const useInfiniteScroll = (
   apiCall: Function,
   newInputParams: Object,
   options?: {
-    enabled: boolean
+    enabled: boolean,
+    // Keep the results on disk, as Explore does; see useAuthenticatedInfiniteQuery
+    persist?: boolean
   },
 ): Object => {
   const baseParams = {
@@ -50,6 +52,7 @@ const useInfiniteScroll = (
       },
 
       enabled: options?.enabled,
+      persist: options?.persist,
     },
     /* eslint-enable consistent-return */
   );

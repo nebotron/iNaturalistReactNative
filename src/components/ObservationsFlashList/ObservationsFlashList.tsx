@@ -1,5 +1,4 @@
 /* eslint-disable react/no-unused-prop-types */
-import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation } from "@react-navigation/native";
 import type { FlashListRef, ViewToken } from "@shopify/flash-list";
 import { isEbirdObservation } from "api/ebird";
@@ -10,6 +9,7 @@ import {
   CustomRefreshControl,
   InfiniteScrollLoadingWheel,
 } from "components/SharedComponents";
+import { prefetchImageData } from "components/SharedComponents/CachedImage";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -134,7 +134,9 @@ const ObservationsFlashList = ( {
   );
   const { t } = useTranslation( );
 
-  const renderItem = useCallback( ( { item }: { item: { uuid: string; empty: boolean } } ) => {
+  const renderItem = useCallback( ( {
+    item,
+  }: { item: { uuid: string; empty: boolean; user?: { id?: number } } } ) => {
     // Empty box
     if ( item.empty ) {
       return (
@@ -210,7 +212,10 @@ const ObservationsFlashList = ( {
         unsynced={obsNeedsSync}
         uploadProgress={uploadProgress}
         squareCorners={squareCorners}
-        selectable={selectable}
+        // Explore shows other people's observations too; only the user's own can be selected
+        selectable={selectable && ( !explore || (
+          !!currentUser && item.user?.id === currentUser.id && !isEbirdObservation( item )
+        ) )}
       />
     );
   }, [
@@ -362,7 +367,7 @@ const ObservationsFlashList = ( {
 
       const allUrls = [...nextItemUrls, ...carouselUrls];
       if ( allUrls.length > 0 ) {
-        prefetch( allUrls );
+        prefetchImageData( allUrls );
       }
     },
     [explore],

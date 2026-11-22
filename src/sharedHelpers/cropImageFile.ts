@@ -29,8 +29,9 @@ interface ImageCropperModule {
     width: number,
     height: number,
     outputPath: string,
-    // Gain multiplied into each channel before the one encode, as the CSS
-    // brightness() filter on the slider preview does. 1 leaves pixels as is.
+    // Gain multiplied into each channel before the one encode, capped per
+    // pixel once its brightest channel reaches 255 so its hue never shifts.
+    // 1 leaves pixels as is.
     brightness: number,
     // Longest side of what is written; a larger crop is scaled down with a
     // high-quality filter before the one encode. 0 keeps the crop's own size.

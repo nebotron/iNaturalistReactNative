@@ -4,7 +4,7 @@ import ExploreFlashList from "components/Explore/ExploreFlashList";
 import type {
   ExploreV2BaseQueryParams,
 } from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import React from "react";
+import React, { useEffect } from "react";
 import User from "realmModels/User";
 import useInfiniteScroll from "sharedHooks/useInfiniteScroll";
 
@@ -38,6 +38,8 @@ interface Props {
   isConnected: boolean | null;
   params: ExploreV2BaseQueryParams;
   tab: UsersTab;
+  // Total from the list's own first page, so the header needs no extra request
+  onCount?: ( count: number ) => void;
 }
 
 const ExploreV2UsersView = ( {
@@ -45,6 +47,7 @@ const ExploreV2UsersView = ( {
   isConnected,
   params,
   tab,
+  onCount,
 }: Props ) => {
   const { queryKey, fetchUsers, extraParams } = TAB_CONFIG[tab];
 
@@ -60,8 +63,12 @@ const ExploreV2UsersView = ( {
       ...params,
       ...extraParams,
     },
-    { enabled },
+    { enabled, persist: true },
   );
+
+  useEffect( ( ) => {
+    if ( onCount && typeof totalResults === "number" ) onCount( totalResults );
+  }, [totalResults, onCount] );
 
   return (
     <ExploreFlashList

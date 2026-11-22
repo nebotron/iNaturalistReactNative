@@ -48,6 +48,7 @@ import {
   OfflineSpeciesView,
   useOfflineExploreResults,
 } from "components/Explore/OfflineExplore";
+import CombineObservationsBar from "components/MyObservations/CombineObservationsBar";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
   ActivityIndicator,
@@ -148,6 +149,7 @@ const ExploreResults = ( ) => {
     [],
   );
   const [identificationsCount, setIdentificationsCount] = useState<number | null>( null );
+  const [observersCount, setObserversCount] = useState<number | null>( null );
   const observationsSortLabels = useObservationsSortLabels( );
   const speciesSortLabels = useSpeciesSortLabels( );
   const { layout, writeLayoutToStorage } = useStoredLayout( useExploreLayoutKey( ) );
@@ -553,6 +555,7 @@ const ExploreResults = ( ) => {
                   hideObsUploadStatus={layout !== "list"}
                   obsListKey="ExploreV2Observations"
                   onEndReached={fetchNextPage}
+                  selectable
                   showNoResults={hasNoResults}
                   testID="ExploreV2ObservationsList"
                 />
@@ -580,6 +583,7 @@ const ExploreResults = ( ) => {
                 style={DROP_SHADOW}
               />
             )}
+            {!showMap && <CombineObservationsBar />}
           </>
         );
       }
@@ -636,6 +640,9 @@ const ExploreResults = ( ) => {
             isConnected={isConnected}
             params={baseSearchParams}
             tab={state.activeTab}
+            onCount={state.activeTab === OBSERVERS_TAB
+              ? setObserversCount
+              : undefined}
           />
         );
       case IDENTIFICATIONS_TAB:
@@ -731,6 +738,8 @@ const ExploreResults = ( ) => {
         && t( "X-Species", { count: lifeListCount } ),
       [IDENTIFICATIONS_TAB]: typeof identificationsCount === "number"
         && t( "X-Identifications", { count: identificationsCount } ),
+      [OBSERVERS_TAB]: typeof observersCount === "number"
+        && t( "X-Observers", { count: observersCount } ),
     }[state.activeTab as string];
     return (
       <>

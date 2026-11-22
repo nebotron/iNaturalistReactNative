@@ -83,6 +83,15 @@ const ObsImage = ( {
 
   const displayUri = uri?.uri;
 
+  // The uri whose zoomable image has finished loading
+  const [zoomLoadedUri, setZoomLoadedUri] = useState<string | null>( null );
+  const handleZoomLoad = useCallback( ( ) => {
+    setZoomLoadedUri( displayUri ?? null );
+  }, [displayUri] );
+  // The uri last drawn as a plain image, before the tile was measured or
+  // subject detection resolved
+  const [plainShownUri, setPlainShownUri] = useState<string | null>( null );
+
   // Once the tile is measured (and, with autoDetectSubject, subject detection
   // resolves) render the photo through the shared image-zoom engine so a
   // two-finger gesture zooms and pans it exactly like the crop editor,
@@ -94,6 +103,16 @@ const ObsImage = ( {
       : zoomable || cropControlled )
     && containerSize
     && uri?.uri,
+  );
+
+  // Keep the plain image under the zoomable one until the zoomable one has
+  // loaded, so swapping between them doesn't flash the placeholder icon.
+  if ( displayUri && !showZoomable && plainShownUri !== displayUri ) {
+    setPlainShownUri( displayUri );
+  }
+  const showPlain = !!displayUri && (
+    !showZoomable
+    || ( plainShownUri === displayUri && zoomLoadedUri !== displayUri )
   );
 
   return (
@@ -120,11 +139,13 @@ const ObsImage = ( {
           size={iconicTaxonIconSize}
         />
       </View>
-      { displayUri && !showZoomable && (
+      { showPlain && (
         <CachedImage
           key={uri.uri}
-          className={classNames( CLASS_NAMES )}
-          testID="ObsList.photo"
+          className={classNames( CLASS_NAMES, showZoomable && "absolute" )}
+          testID={showZoomable
+            ? undefined
+            : "ObsList.photo"}
           source={{ uri: displayUri }}
           onError={onError}
           resizeMode={fitImage
@@ -150,6 +171,7 @@ const ObsImage = ( {
           onCropChange={onZoomCropChange}
           size={containerSize}
           brightness={brightness}
+          onLoad={handleZoomLoad}
         />
       ) }
       { opaque && (

@@ -193,9 +193,9 @@ const GroupPhotos = ( {
     <GroupPhotoImage
       duplicateItem={duplicateItem}
       isDuplicatingPhotos={isDuplicatingPhotos}
+      isSelected={selectedObservations.includes( item )}
       item={item}
       removeItem={removeItem}
-      selectedObservations={selectedObservations}
       selectObservationPhotos={selectObservationPhotos}
       separateItem={separateItem}
       style={gridItemStyle}

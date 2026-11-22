@@ -604,6 +604,23 @@ describe( "ExploreResults observers and identifiers views", ( ) => {
     } );
     expect( screen.queryByLabelText( "Change observations sort order" ) ).toBeNull( );
   } );
+
+  it( "shows the observers total reported by the list", async ( ) => {
+    mockExploreV2UsersView.mockImplementation( ( { onCount } ) => {
+      React.useEffect( ( ) => { onCount?.( 1234 ); }, [onCount] );
+      return null;
+    } );
+    useExploreV2.mockReturnValue( {
+      state: advancedState( OBSERVERS_TAB ),
+      dispatch: mockDispatch,
+    } );
+
+    renderComponent( <ExploreResults /> );
+
+    expect( await screen.findByTestId( "ExploreResults.totalCount" ) )
+      .toHaveTextContent( "1,234 Observers" );
+    mockExploreV2UsersView.mockImplementation( ( ) => null );
+  } );
 } );
 
 describe( "ExploreResults view picker", ( ) => {

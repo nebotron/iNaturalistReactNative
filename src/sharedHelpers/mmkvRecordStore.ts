@@ -4,6 +4,8 @@ import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 export const USER_OBSERVATIONS_MMKV_ID = "user-observations";
 export const AUDIO_ID_CLIPS_MMKV_ID = "audio-id-clips";
 export const AUDIO_ID_HEARD_MMKV_ID = "audio-id-heard";
+// Deleted Audio ID clips whose label Firebase doesn't have yet
+export const AUDIO_ID_UNSYNCED_LABELS_MMKV_ID = "audio-id-unsynced-labels";
 // Device photo records restored from iCloud, waiting for their observation
 export const CLOUD_PHOTO_RESTORE_MMKV_ID = "cloud-photo-restore";
 // Instances holding user data outside the default one, which sign-out clears
@@ -27,6 +29,16 @@ const createMmkvRecordStore = <T>( id: string ) => {
   };
   return {
     put,
+    get: ( key: string | number ): T | undefined => {
+      const json = store.getString( String( key ) );
+      let record: T | undefined;
+      try {
+        if ( json ) record = JSON.parse( json ) as T;
+      } catch {
+        // Unreadable; as if missing
+      }
+      return record;
+    },
     remove: ( key: string | number ) => store.delete( String( key ) ),
     loadAll: ( ): Record<string, T> => {
       const records: Record<string, T> = {};

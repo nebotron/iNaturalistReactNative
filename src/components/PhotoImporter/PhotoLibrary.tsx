@@ -119,8 +119,8 @@ const placeholderGroup = ( node: PhotoNode ): GroupedMediaItem => ( {
 
 const gifPhotoItem = ( node: PhotoNode, gifUri: string ): GroupedMediaPhotoItem => ( {
   croppable: false,
-  // The video in the library the GIF was made from, so removing the GIF in
-  // Group Photos stages that video for deletion like any other imported photo.
+  // The video in the library the GIF was made from. Removing the GIF in Group
+  // Photos leaves that video alone (see isVideoDerivedPhoto).
   originalDevicePhotoUri: deviceVideoUriFromNode( node ),
   image: {
     uri: gifUri,

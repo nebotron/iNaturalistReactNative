@@ -33,6 +33,7 @@ import { EnvConfig } from "sharedHelpers/envConfig";
 import { getInstallID } from "sharedHelpers/installData";
 import { log, logFileDirectory, logWithoutRemote } from "sharedHelpers/logger";
 import { clearMmkvUserData } from "sharedHelpers/mmkvRecordStore";
+import { clearPersistedQueries } from "sharedHelpers/persistedQueries";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { setFirebaseDataCollectionEnabled } from "sharedHelpers/tracking";
@@ -330,6 +331,7 @@ const signOut = async (
     if ( key && json ) zustandMMKVBackingStorage.set( key, json );
   } );
   clearMmkvUserData( );
+  clearPersistedQueries( );
 
   if ( options.clearRealm ) {
     if ( options.realm ) {
