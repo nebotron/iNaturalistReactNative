@@ -2,7 +2,9 @@ import { MMKV } from "react-native-mmkv";
 import {
   CACHED_AT_HEADER,
   createHttpCache,
+  HTTP_CACHE_FRESH_MS,
   HTTP_CACHE_TTL_MS,
+  preferCachedResponse,
   requesterOf,
 } from "sharedHelpers/httpCache";
 
@@ -204,6 +206,59 @@ describe( "httpCache", ( ) => {
     await cache.clear( );
     network.mockRejectedValueOnce( new TypeError( "Network request failed" ) );
     await expect( cache.fetch( URL ) ).rejects.toThrow( );
+  } );
+
+  describe( "preferCachedResponse", ( ) => {
+    const cacheFirst = ( ) => ( {
+      signal: preferCachedResponse( new AbortController( ).signal ),
+    } );
+
+    const cacheResponse = async ( cache: ReturnType<typeof makeCache>, body: unknown ) => {
+      network.mockResolvedValueOnce( jsonResponse( body ) );
+      await read( await cache.fetch( URL ) );
+      await settle( );
+    };
+
+    afterEach( ( ) => {
+      jest.useRealTimers( );
+    } );
+
+    it( "serves a fresh cached response without asking the network", async ( ) => {
+      const cache = makeCache( );
+      await cacheResponse( cache, { v: 1 } );
+      expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 1 } );
+      expect( network ).toHaveBeenCalledTimes( 1 );
+    } );
+
+    it( "goes to the network for unmarked requests", async ( ) => {
+      const cache = makeCache( );
+      await cacheResponse( cache, { v: 1 } );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      expect( await read( await cache.fetch( URL ) ) ).toEqual( { v: 2 } );
+    } );
+
+    it( "goes to the network once the cached response is too old", async ( ) => {
+      jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
+      const cache = makeCache( );
+      await cacheResponse( cache, { v: 1 } );
+      jest.setSystemTime( HTTP_CACHE_FRESH_MS );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 2 } );
+    } );
+
+    it( "goes to the network after the app changes something", async ( ) => {
+      jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
+      const cache = makeCache( );
+      await cacheResponse( cache, { v: 1 } );
+      jest.setSystemTime( 1000 );
+      network.mockResolvedValueOnce( jsonResponse( { id: 1 } ) );
+      await cache.fetch( "https://api.inaturalist.org/v2/identifications", {
+        method: "POST",
+        body: "{}",
+      } );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 2 } );
+    } );
   } );
 
   describe( "requesterOf", ( ) => {

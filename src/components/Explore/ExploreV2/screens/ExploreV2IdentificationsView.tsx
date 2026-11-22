@@ -209,6 +209,7 @@ const ExploreV2IdentificationsView = ( {
     ),
     {
       enabled,
+      cacheFirst: true,
       initialPageParam: 1,
       getNextPageParam: ( lastPage: { page?: number; total_results?: number } | null ) => (
         lastPage?.page && lastPage.page * PAGE_SIZE < ( lastPage.total_results ?? 0 )

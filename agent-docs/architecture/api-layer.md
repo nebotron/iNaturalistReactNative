@@ -114,8 +114,14 @@ successful JSON GET (including inatjs's long GETs sent as POST with
 `X-HTTP-Method-Override: GET`) is written to `Caches/inatHttpCache`, keyed by
 URL, body, and the requesting user ID from the JWT (never the token itself).
 
-- Online, requests always go to the network; the cache is only a fallback
-  when the request fails.
+- Online, requests go to the network and the cache is a fallback when they
+  fail, unless the request's signal was marked with `preferCachedResponse`:
+  then a copy fetched in the last 2 hours (`HTTP_CACHE_FRESH_MS`), and since
+  the app last sent a write, is used without a request.
+  `useAuthenticatedInfiniteQuery` marks requests with `cacheFirst` (on by
+  default with `persist`, so all of Explore's lists); its `refreshFirstPage`
+  (pull to refresh) always goes to the network. Other queries are unaffected,
+  so polling and refetches after edits still see fresh data.
 - Offline (per React Query's `onlineManager`), a cached response is served
   without touching the network, with an `x-inat-cached-at` header.
 - The default query `networkMode` is `"offlineFirst"`, so queries run once
