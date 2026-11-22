@@ -1,3 +1,4 @@
+import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { searchIdentifications } from "api/identifications";
 import type { ApiIdentification, ApiObservation } from "api/types";
@@ -16,6 +17,7 @@ import {
   DisplayTaxonName,
   Divider,
   INatIcon,
+  OfflineNotice,
   SwitchRow,
 } from "components/SharedComponents";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
@@ -181,6 +183,7 @@ const ExploreV2IdentificationsView = ( {
   scrollRestoreKey,
 }: Props ) => {
   const { t } = useTranslation( );
+  const { isConnected } = useNetInfo( );
   const [mavericksOnly, setMavericksOnly] = useState( false );
   const idParams = useMemo( ( ) => ( {
     ...toIdentificationParams( params ),
@@ -261,13 +264,20 @@ const ExploreV2IdentificationsView = ( {
       onEndReached={( ) => fetchNextPage( )}
       onEndReachedThreshold={0.5}
       scrollRestoreKey={scrollRestoreKey && `${scrollRestoreKey}:${mavericksOnly}`}
-      ListEmptyComponent={(
-        <View className="self-center mt-5 p-4">
-          <Body1 className="align-center text-center">
-            {t( "No-results-found" )}
-          </Body1>
-        </View>
-      )}
+      ListEmptyComponent={isConnected === false
+        // Nothing cached for this search, and nothing can load until back online
+        ? (
+          <View className="mt-5">
+            <OfflineNotice onPress={( ) => { refresh( ); }} />
+          </View>
+        )
+        : (
+          <View className="self-center mt-5 p-4">
+            <Body1 className="align-center text-center">
+              {t( "No-results-found" )}
+            </Body1>
+          </View>
+        )}
     />
   );
 };

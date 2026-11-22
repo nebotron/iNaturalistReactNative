@@ -21,6 +21,7 @@ Wrapper-based API abstraction built on `inaturalistjs`, combined with React Quer
 | `src/sharedHooks/useAuthenticatedInfiniteQuery.ts` | Infinite query wrapper for pagination |
 | `src/sharedHooks/useQuery.ts` | Non-authenticated query wrapper |
 | `src/sharedHelpers/logging.js` | Retry logic and delay strategies |
+| `src/sharedHelpers/httpCache.ts` | Disk cache under `fetch`, so recently viewed data works offline |
 
 ## Standard API Wrapper Pattern
 
@@ -103,6 +104,28 @@ first and left it empty if the request failed.
 
 ### useNonAuthenticatedQuery (useQuery.ts)
 For public endpoints that don't need JWT.
+
+## Offline HTTP Cache
+
+`sharedHelpers/httpCache.ts` replaces the global `fetch` (installed by
+`sharedHelpers/installHttpCache`, the first import in `index.js`, because
+inatjs keeps its own reference to `fetch` when first imported). Every
+successful JSON GET (including inatjs's long GETs sent as POST with
+`X-HTTP-Method-Override: GET`) is written to `Caches/inatHttpCache`, keyed by
+URL, body, and the requesting user ID from the JWT (never the token itself).
+
+- Online, requests always go to the network; the cache is only a fallback
+  when the request fails.
+- Offline (per React Query's `onlineManager`), a cached response is served
+  without touching the network, with an `x-inat-cached-at` header.
+- The default query `networkMode` is `"offlineFirst"`, so queries run once
+  offline and can be answered from the cache; only retries wait to be online.
+- Entries expire 30 days after they were fetched; least recently used ones go
+  past 500 entries / 50 MB. URLs matching `api_token|oauth|token|jwt` are never
+  cached. The cache is cleared on sign-out.
+
+The query-level `persist` option on `useAuthenticatedInfiniteQuery` still
+exists: it restores results instantly after a restart, without a request.
 
 ## Query Key Conventions
 

@@ -30,6 +30,7 @@ import Realm, { UpdateMode } from "realm";
 import realmConfig from "realmModels/index";
 import changeLanguage from "sharedHelpers/changeLanguage";
 import { EnvConfig } from "sharedHelpers/envConfig";
+import { clearHttpCache } from "sharedHelpers/httpCache";
 import { getInstallID } from "sharedHelpers/installData";
 import { log, logFileDirectory, logWithoutRemote } from "sharedHelpers/logger";
 import { clearMmkvUserData } from "sharedHelpers/mmkvRecordStore";
@@ -332,6 +333,7 @@ const signOut = async (
   } );
   clearMmkvUserData( );
   clearPersistedQueries( );
+  await clearHttpCache( );
 
   if ( options.clearRealm ) {
     if ( options.realm ) {
