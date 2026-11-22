@@ -29,10 +29,16 @@ const getRestored = ( ): Record<string, string> => JSON.parse(
   store.getString( RESTORED_KEY ) ?? "{}",
 );
 
+// Every device photo restored, and the asset it was restored as. Read it once
+// and pass it to restoredUriFor when looking up many photos: each read parses
+// the whole map.
+export const readRestoredUris = getRestored;
+
 // The asset a device photo was restored as, if it was.
-export const restoredUriFor = ( deviceUri: string ): string | undefined => (
-  getRestored( )[deviceUri]
-);
+export const restoredUriFor = (
+  deviceUri: string,
+  restored: Record<string, string> = getRestored( ),
+): string | undefined => restored[deviceUri];
 
 const { ImageCropper } = NativeModules as {
   ImageCropper?: { existingAssets?: ( phUris: string[] ) => Promise<string[]> };

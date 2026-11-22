@@ -5,11 +5,17 @@ import addPhotosToImportedAlbum, {
 } from "sharedHelpers/importedPhotoAlbum";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import {
+  readRestoredUris,
   restoredUriFor,
   restoreFavedDevicePhotos,
 } from "sharedHelpers/restoreFavedDevicePhotos";
+import { trackUiWork } from "sharedHelpers/uiDelayTracker";
 import classifyDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
-import { libraryUriForDevicePhoto, sweepUsbStaging } from "sharedHelpers/usbStaging";
+import {
+  libraryUriForDevicePhoto,
+  readSavedStagedUris,
+  sweepUsbStaging,
+} from "sharedHelpers/usbStaging";
 import { readUserObservationsCache } from "sharedHelpers/userObservationsCache";
 
 // Keeps the "Imported to iNaturalist" album holding the photos on unfavorited
@@ -31,14 +37,25 @@ let lastSynced = "";
 // doesn't find the same photos missing and save them a second time.
 let restoring: Promise<void> = Promise.resolve( );
 
-// The Photos asset holding a device photo: one saved back after a refave, a
-// faved USB import's saved copy, or the photo itself.
-const libraryUriFor = ( uri: string ) => restoredUriFor( uri ) ?? libraryUriForDevicePhoto( uri );
+// Looks up the Photos asset holding a device photo: one saved back after a
+// refave, a faved USB import's saved copy, or the photo itself. Both maps are
+// read once, when this is called, and not per photo: a sync looks up every
+// device photo ever imported (tens of thousands), and parsing both maps for
+// each one held the JS thread, and so every tap, for a second or more after
+// each upload, sync and fave.
+const libraryUriResolver = ( ) => {
+  const restored = readRestoredUris( );
+  const saved = readSavedStagedUris( );
+  return ( uri: string ) => restoredUriFor( uri, restored )
+    ?? libraryUriForDevicePhoto( uri, saved );
+};
 
 const syncNow = async ( ) => {
   timer = null;
   const { realm, userId } = source || {};
   if ( !realm || realm.isClosed ) return;
+  // Everything up to the first await holds the JS thread
+  const startedAt = Date.now( );
   const cache = userId
     ? readUserObservationsCache( userId )
     : undefined;
@@ -50,9 +67,11 @@ const syncNow = async ( ) => {
     if ( !realm.isClosed ) recordUploadedDevicePhotoUris( realm, uris );
   }, crops );
   // Faved USB imports were saved to Photos as new assets; file those.
+  const libraryUriFor = libraryUriResolver( );
   const toFile = unfavorited.map( libraryUriFor ).sort( );
   const toUnfile = favorited.map( libraryUriFor ).sort( );
   const signature = JSON.stringify( [toFile, toUnfile] );
+  trackUiWork( "queued_deletion_album_sync", startedAt );
   if ( signature === lastSynced ) return;
   lastSynced = signature;
   const ok = await enqueuePhotoLibraryWrite( async ( ) => {
@@ -62,7 +81,8 @@ const syncNow = async ( ) => {
   } );
   let failed = false;
   restoring = restoring.then( async ( ) => {
-    const restored = await restoreFavedDevicePhotos( realm, favorited, libraryUriFor );
+    // Read again here: an earlier restore may have saved more since
+    const restored = await restoreFavedDevicePhotos( realm, favorited, libraryUriResolver( ) );
     ( { failed } = restored );
     // New assets the photo picker would otherwise offer for import again.
     if ( restored.saved.length > 0 && !realm.isClosed ) {

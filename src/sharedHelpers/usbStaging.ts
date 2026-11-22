@@ -63,10 +63,18 @@ export const recordStagedImportCrop = ( uri: string, crop: NormalizedCrop ) => {
   store.set( IMPORT_CROPS_KEY, JSON.stringify( { ...getImportCrops( ), [name]: crop } ) );
 };
 
+// Staged name → the Photos asset it was saved as. Read it once and pass it to
+// libraryUriForDevicePhoto when looking up many photos: each read parses the
+// whole map.
+export const readSavedStagedUris = getSaved;
+
 // The Photos asset a staged photo URI was saved as, or the URI itself.
-export const libraryUriForDevicePhoto = ( uri: string ) => {
+export const libraryUriForDevicePhoto = (
+  uri: string,
+  saved?: Record<string, string>,
+) => {
   const name = stagedNameFromUri( uri );
-  return ( name && getSaved( )[name] ) || uri;
+  return ( name && ( saved ?? getSaved( ) )[name] ) || uri;
 };
 
 // Where a staged photo's original can be read now: the Photos asset it was
