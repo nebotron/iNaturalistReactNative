@@ -311,4 +311,31 @@ describe( "useMyObservationsQuery", ( ) => {
       expect.objectContaining( { enabled: true } ),
     );
   } );
+
+  it( "limits taxonomic order to the searched taxon and its descendants", async ( ) => {
+    useMyObservations.mockReturnValue( {
+      state: {
+        observationsSort: OBSERVATIONS_SORT.TAXONOMY,
+        searchedTaxon: { id: 100, name: "Quercus" },
+      },
+    } );
+    const taxonObs = ( id, ancestorIds ) => factory( "LocalObservation", {
+      needs_sync: false,
+      taxon: { ...factory( "LocalTaxon", { id } ), ancestor_ids: ancestorIds },
+    } );
+    const genus = taxonObs( 100, [1] );
+    const species = taxonObs( 101, [1, 100] );
+    const otherGenus = taxonObs( 201, [1, 200] );
+    [genus, species, otherGenus].forEach( createObservation );
+
+    const { result } = renderHook( ( ) => useMyObservationsQuery( ) );
+
+    await waitFor( ( ) => {
+      expect( result.current.observationIds ).toEqual( [
+        { uuid: genus.uuid },
+        { uuid: species.uuid },
+      ] );
+    } );
+    expect( result.current.isServerAuthoritative ).toEqual( false );
+  } );
 } );

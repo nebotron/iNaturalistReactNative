@@ -39,6 +39,15 @@ export const initialMyObservationsState: MyObservationsState = {
   previousTaxonSearch: null,
 };
 
+// Taxonomic order sorts on device, so every observation the current search matches gets
+// downloaded first. filterKey names the search being downloaded; replacing or clearing this stops
+// the download
+export interface TaxonomicFetchProgress {
+  filterKey: string;
+  fetched: number;
+  total: number;
+}
+
 export interface MyObservationsSlice {
   // Sort and search
   myObservations: MyObservationsState;
@@ -56,6 +65,13 @@ export interface MyObservationsSlice {
   myObservationsClosedIconicTaxaCategories: Set<ICONIC_TAXA_GROUP>;
   setMyObservationsClosedIconicTaxaCategories: ( _closed: Set<ICONIC_TAXA_GROUP> ) => void;
   clearMyObservationsViewState: ( ) => void;
+
+  taxonomicFetch: TaxonomicFetchProgress | null;
+  setTaxonomicFetch: ( _progress: TaxonomicFetchProgress | null ) => void;
+  // The search we last checked, and downloaded or were told not to, for taxonomic order, so
+  // returning to the screen doesn't ask again
+  taxonomicFetchCheckedFilterKey: string | null;
+  setTaxonomicFetchCheckedFilterKey: ( _filterKey: string | null ) => void;
 
   // Scroll position so we can put the user back where they were when they
   // return from the NoBottomTabStackNavigator.
@@ -101,6 +117,13 @@ const createMyObservationsSlice: StateCreator<MyObservationsSlice> = ( set, get 
   clearMyObservationsViewState: ( ) => set( {
     myObservationsMapRegion: null,
     myObservationsClosedIconicTaxaCategories: NONE_CLOSED,
+  } ),
+
+  taxonomicFetch: null,
+  setTaxonomicFetch: progress => set( { taxonomicFetch: progress } ),
+  taxonomicFetchCheckedFilterKey: null,
+  setTaxonomicFetchCheckedFilterKey: filterKey => set( {
+    taxonomicFetchCheckedFilterKey: filterKey,
   } ),
 
   myObsOffset: 0,

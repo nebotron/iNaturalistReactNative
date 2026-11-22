@@ -48,6 +48,10 @@ const useMyObservationsQuery = ( ): UseMyObservationsQueryResult => {
     sortLocally
       ? state.observationsSort
       : undefined,
+    // The server does the searching otherwise
+    isLocalOnlySort
+      ? state.searchedTaxon?.id
+      : undefined,
   );
 
   const {

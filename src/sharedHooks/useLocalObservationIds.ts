@@ -6,17 +6,20 @@ import {
   OBSERVATIONS_SORT,
   observationSortToRealmSort,
 } from "sharedHelpers/observationsSort";
-import { sortByTaxonomy } from "sharedHelpers/taxonomicSort";
+import { sortByTaxonomy, TAXON_AND_DESCENDANTS_QUERY } from "sharedHelpers/taxonomicSort";
 import useSubjectDistances, { sortBySubjectDistance } from "sharedHooks/useSubjectDistances";
 import useTaxonomicLineages from "sharedHooks/useTaxonomicLineages";
 
 const { useQuery } = RealmContext;
 
-const useLocalObservationIds = ( sortBy?: MyObservationsSort ) => {
+// taxonId limits the results to that taxon and its descendants, like the API's taxon_id
+const useLocalObservationIds = ( sortBy?: MyObservationsSort, taxonId?: number ) => {
   const unsyncedObs = useQuery(
     {
       type: Observation,
-      query: observations => observations
+      query: observations => ( taxonId
+        ? observations.filtered( TAXON_AND_DESCENDANTS_QUERY, taxonId )
+        : observations )
         .filtered( "_deleted_at == nil OR _pending_deletion == false OR _pending_deletion == nil" )
         .sorted( sortBy
           ? [observationSortToRealmSort( sortBy )]
@@ -27,7 +30,7 @@ const useLocalObservationIds = ( sortBy?: MyObservationsSort ) => {
         ? ["uuid", "_created_at", "observed_on_string"]
         : ["uuid"],
     },
-    [sortBy],
+    [sortBy, taxonId],
   );
 
   const bySubjectDistance = sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;

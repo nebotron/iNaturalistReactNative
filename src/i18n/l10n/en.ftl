@@ -638,6 +638,9 @@ DOWNLOAD = DOWNLOAD
 Download-for-offline-use = Download for offline use
 # Button on the search screen that downloads the search's results for offline use
 DOWNLOAD-RESULTS = DOWNLOAD RESULTS
+# Progress shown in My Observations while downloading every observation so they can be sorted
+# in taxonomic order
+Downloading-observations-to-sort-fetched-of-total = Downloading observations to sort: { $fetched } of { $total }
 # Button text while search results are being downloaded for offline use
 Downloading-X-observations = Downloading { $count }…
 # Note under the video stabilizer's crop settings explaining how to pick the crop
@@ -1132,6 +1135,9 @@ Listening = Listening…
 LISTENING-FOR = LISTENING FOR
 # Explore filter option for an observation's evidence of presence annotation
 Live-organism--evidence = Live organism
+# Title of a dialog asking whether to download every observation, so they can be sorted in
+# taxonomic order. Only shown for more than 1,000 observations
+Load-all-count-observations = Load all { $count } observations?
 Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 # Loading message shown while fetching the route through a selected hotspot
@@ -2085,6 +2091,8 @@ TAXON = TAXON
 TAXON-NAMES-DISPLAY = TAXON NAMES DISPLAY
 # Sort option: observations in taxonomic order, i.e. sorted by their full scientific classification
 Taxonomic-order = Taxonomic order
+# Message of a dialog asking whether to download every observation for taxonomic order
+Taxonomic-order-downloads-all-observations-which-may-take-a-while = Sorting in taxonomic order downloads all of these observations to this device. That may take a while.
 TAXONOMIC-RANKS = TAXONOMIC RANKS
 # Header for a block of text describing a taxon's taxonomy
 TAXONOMY-header = TAXONOMY
@@ -2827,6 +2835,8 @@ x-uploads-failed =
     }
 # Accessibility label for a camera pairs preference bar comparing two camera/lens combinations
 X-vs-Y = { $first } vs. { $second }
+# Answer to a yes or no question
+Yes = Yes
 YES = YES
 Yes-but-only-if-I-add-the-observation-to-the-project-myself = Yes, but only if I add the observation to the project myself
 Yes-no-matter-who-adds-the-observation-to-the-project = Yes, no matter who adds the observation to the project

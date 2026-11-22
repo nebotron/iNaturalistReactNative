@@ -3,6 +3,9 @@
 // section, tribe, ...) taken into account. Equivalent to sorting by each observation's full
 // lineage of scientific names, compared one rank at a time.
 
+// Realm query for observations of a taxon and all its descendants, like the API's taxon_id
+export const TAXON_AND_DESCENDANTS_QUERY = "taxon.id == $0 OR taxon.ancestor_ids == $0";
+
 export interface LineageTaxon {
   id: number;
   ancestor_ids?: ArrayLike<number> | null;

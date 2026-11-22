@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { fetchSpeciesCounts } from "api/observations";
 import type { ApiSpeciesCountDetails } from "api/types";
 import { fetchTaxaObserved } from "api/users";
+import noop from "lodash/noop";
 import type { MyObservationsStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
 import {
@@ -23,6 +24,7 @@ import React, {
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
 import type { MyObservationsSort } from "sharedHelpers/observationsSort";
+import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
 import {
   earliestObservedOn,
@@ -56,8 +58,10 @@ import useStore, { zustandStorage } from "stores/useStore";
 import type { SpeciesCount } from "types/sorting";
 
 import FullScreenActivityIndicator from "./FullScreenActivityIndicator";
+import { observationsFilterKey } from "./helpers/fetchAllObservations";
 import useMyObservationsQuery from "./hooks/useMyObservationsQuery";
 import useSyncObservations from "./hooks/useSyncObservations";
+import useTaxonomicSortFetch from "./hooks/useTaxonomicSortFetch";
 import useUploadObservations from "./hooks/useUploadObservations";
 import MyObservationsEmptySimple from "./MyObservationsEmptySimple";
 import MyObservationsSimple, {
@@ -201,12 +205,37 @@ const MyObservationsResults = ( ) => {
     } );
   };
 
-  const setObservationsSortOptionId = ( value: MyObservationsSort ) => {
+  const { prepareTaxonomicSort } = useTaxonomicSortFetch( );
+  const searchedTaxonId = myObsState.searchedTaxon?.id;
+  const isTaxonomicSort = myObsState.observationsSort === OBSERVATIONS_SORT.TAXONOMY;
+
+  const setObservationsSortOptionId = async ( value: MyObservationsSort ) => {
+    if (
+      value === OBSERVATIONS_SORT.TAXONOMY
+      && !( await prepareTaxonomicSort( searchedTaxonId ) )
+    ) return;
     myObsDispatch( {
       type: MY_OBSERVATIONS_ACTION.SET_OBSERVATIONS_SORT,
       observationsSort: value,
     } );
   };
+
+  // Searching for something else while in taxonomic order needs those observations downloaded
+  // too. Also covers coming back to this screen, but only asks once per search
+  const taxonomicFetchCheckedFilterKey = useStore( state => state.taxonomicFetchCheckedFilterKey );
+  useEffect( ( ) => {
+    if ( !isTaxonomicSort || !currentUserId || isConnected === false ) return;
+    const filterKey = observationsFilterKey( { userId: currentUserId, taxonId: searchedTaxonId } );
+    if ( filterKey === taxonomicFetchCheckedFilterKey ) return;
+    prepareTaxonomicSort( searchedTaxonId );
+  }, [
+    currentUserId,
+    isConnected,
+    isTaxonomicSort,
+    prepareTaxonomicSort,
+    searchedTaxonId,
+    taxonomicFetchCheckedFilterKey,
+  ] );
 
   const updateObservationsView = ( value: string ) => {
     // Closed/expanded taxa categories belong to the view the user was in, so switching
@@ -507,9 +536,12 @@ const MyObservationsResults = ( ) => {
   const isFetchingNextPageForList = isServerAuthoritative
     ? isFetchingNextPageFromQuery
     : isFetchingNextPage;
-  const handleEndReached = isServerAuthoritative
+  // Taxonomic order downloads everything it sorts up front, and a page of the most recent
+  // uploads would land all over the list
+  let handleEndReached = isServerAuthoritative
     ? fetchNextPageFromQuery
     : fetchNextPage;
+  if ( isTaxonomicSort ) handleEndReached = noop;
 
   useEffect( ( ) => {
     // persist the latest observations count in zustand so a user can see it offline.

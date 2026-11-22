@@ -72,6 +72,7 @@ import SearchedTaxonBanner from "./Search/SearchedTaxonBanner";
 import SearchEmptyState from "./Search/SearchEmptyState";
 import SimpleHeader from "./SimpleHeader";
 import SimpleTaxonGridItem from "./SimpleTaxonGridItem";
+import TaxonomicFetchNotice from "./TaxonomicFetchNotice";
 
 interface Props {
   activeTab: string;
@@ -406,6 +407,7 @@ const MyObservationsSimple = ( {
             obsMissingLocationOrDateExist={obsMissingLocationOrDateExist}
             numTotalObservations={numTotalObservations}
           />
+          <TaxonomicFetchNotice />
         </>
       );
     }
@@ -429,6 +431,7 @@ const MyObservationsSimple = ( {
           obsMissingLocationOrDateExist={obsMissingLocationOrDateExist}
           numTotalObservations={numTotalObservations}
         />
+        <TaxonomicFetchNotice />
       </View>
     );
   } )( );
