@@ -21,6 +21,8 @@ import ExploreV2MapView
   from "components/Explore/ExploreV2/components/ExploreV2MapView";
 import GridOverlaysSheet
   from "components/Explore/ExploreV2/components/GridOverlaysSheet";
+import TaxonomicOrderNotice
+  from "components/Explore/ExploreV2/components/TaxonomicOrderNotice";
 import type { NearbyCoords }
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import buildExploreV2QueryParams
@@ -75,15 +77,22 @@ import {
 import type { SpeciesCountsSort } from "sharedHelpers/speciesSort";
 import {
   EXPLORE_SPECIES_SORT_OPTIONS,
+  SPECIES_SORT,
   speciesSortToSpeciesCountsParams,
   useSpeciesSortLabels,
 } from "sharedHelpers/speciesSort";
+import {
+  EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT,
+  sortByTaxonomy,
+} from "sharedHelpers/taxonomicSort";
 import { useTranslation } from "sharedHooks";
 import useCurrentUser from "sharedHooks/useCurrentUser";
+import useFetchPagesUpTo from "sharedHooks/useFetchPagesUpTo";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import useSpeciesCount from "sharedHooks/useSpeciesCount";
 import useStoredLayout from "sharedHooks/useStoredLayout";
 import useSubjectDistances, { sortBySubjectDistance } from "sharedHooks/useSubjectDistances";
+import { useLineages } from "sharedHooks/useTaxonomicLineages";
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
@@ -93,6 +102,9 @@ import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLo
 import {
   getLatestTrackedLocation,
 } from "../../../../sharedHelpers/locationHistoryTracker";
+
+// The most observations the API returns in a page
+const TAXONOMIC_PER_PAGE = 200;
 
 interface SortOption<SortValue> {
   label: string;
@@ -286,10 +298,17 @@ const ExploreResults = ( ) => {
   }, [offlineMapArea, queryParams] );
   const offlineListResults = useOfflineExploreResults( offlineListParams );
 
+  // Taxonomic order is sorted on device, so it loads its results in bigger pages up front
+  const byTaxonomy = state.sortBy === OBSERVATIONS_SORT.TAXONOMY;
+  const observationsParams = useMemo( ( ) => ( byTaxonomy
+    ? { ...queryParams, per_page: TAXONOMIC_PER_PAGE }
+    : queryParams ), [byTaxonomy, queryParams] );
+
   const {
     error: observationsError,
     fetchNextPage,
     fetchStatus: observationsFetchStatus,
+    hasNextPage,
     isFetchingNextPage,
     isLoading,
     handlePullToRefresh,
@@ -298,18 +317,54 @@ const ExploreResults = ( ) => {
     totalBounds,
     totalResults,
   } = useInfiniteExploreScroll( {
-    params: queryParams,
+    params: observationsParams,
     // Only the observations view uses this search
     enabled: canFetch && state.activeTab === OBSERVATIONS_TAB,
   } );
+
+  const sortsTaxonomically = byTaxonomy && state.activeTab === OBSERVATIONS_TAB && !showMap;
+  useFetchPagesUpTo( {
+    enabled: sortsTaxonomically && canFetch,
+    loadedCount: observations.length,
+    limit: EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } );
+  const taxonomicLoadDone = !hasNextPage
+    || observations.length >= EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT;
+  const observationTaxa = useMemo( ( ) => {
+    if ( !sortsTaxonomically ) return [];
+    return observations.flatMap( ( { uuid, taxon } ) => ( taxon?.id
+      ? [{ key: uuid, taxon: { ...taxon, id: taxon.id } }]
+      : [] ) );
+  }, [sortsTaxonomically, observations] );
+  const observationLineages = useLineages(
+    observationTaxa,
+    sortsTaxonomically,
+    taxonomicLoadDone,
+  );
 
   // Only the user's own local photos have a subject distance, so loaded results are
   // sorted on device and everyone else's come last
   const bySubjectDistance = state.sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;
   const subjectDistances = useSubjectDistances( bySubjectDistance );
-  const sortedObservations = useMemo( ( ) => ( bySubjectDistance
-    ? sortBySubjectDistance( observations, subjectDistances )
-    : observations ), [bySubjectDistance, observations, subjectDistances] );
+  const sortedObservations = useMemo( ( ) => {
+    if ( bySubjectDistance ) return sortBySubjectDistance( observations, subjectDistances );
+    if ( sortsTaxonomically ) {
+      return sortByTaxonomy(
+        observations.slice( 0, EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT ),
+        observationLineages,
+      );
+    }
+    return observations;
+  }, [
+    bySubjectDistance,
+    observations,
+    subjectDistances,
+    sortsTaxonomically,
+    observationLineages,
+  ] );
 
   // Diagnostics: observations sometimes show nothing after switching from
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
@@ -554,8 +609,25 @@ const ExploreResults = ( ) => {
                   // ID/comments/quality badges that grid results can technically have
                   hideObsUploadStatus={layout !== "list"}
                   obsListKey="ExploreV2Observations"
-                  onEndReached={fetchNextPage}
-                  scrollRestoreKey={scrollRestoreKey( `observations-${layout}`, queryParams )}
+                  // Taxonomic order loads everything it sorts itself, and more would land all
+                  // over the list
+                  onEndReached={byTaxonomy
+                    ? noop
+                    : fetchNextPage}
+                  listHeaderContent={byTaxonomy
+                    ? (
+                      <TaxonomicOrderNotice
+                        kind="observations"
+                        loaded={observations.length}
+                        limit={EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT}
+                        total={totalResults}
+                      />
+                    )
+                    : null}
+                  scrollRestoreKey={scrollRestoreKey(
+                    `observations-${layout}`,
+                    observationsParams,
+                  )}
                   selectable
                   showNoResults={hasNoResults}
                   testID="ExploreV2ObservationsList"
@@ -593,6 +665,7 @@ const ExploreResults = ( ) => {
         return (
           <>
             <ExploreV2SpeciesView
+              byTaxonomy={state.speciesSortBy === SPECIES_SORT.TAXONOMY}
               enabled={canFetch}
               isConnected={isConnected}
               params={speciesListParams}

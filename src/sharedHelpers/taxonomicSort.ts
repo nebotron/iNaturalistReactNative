@@ -56,13 +56,13 @@ export function compareLineages( a: LineageStep[], b: LineageStep[] ): number {
   return a.length - b.length;
 }
 
-// Stable, so observations of the same taxon keep their incoming order. Observations without a
-// taxon go last
-export const sortByTaxonomy = <T extends { uuid: string }>(
+// Stable, so items of the same taxon keep their incoming order. Items without a lineage go last
+export const sortByTaxonomyWithKey = <T>(
   items: T[],
   lineages: Map<string, LineageStep[]>,
+  keyOf: ( item: T ) => string,
 ): T[] => items
-    .map( item => ( { item, lineage: lineages.get( item.uuid ) } ) )
+    .map( item => ( { item, lineage: lineages.get( keyOf( item ) ) } ) )
     .sort( ( a, b ) => {
       if ( !a.lineage || !b.lineage ) {
         return Number( !a.lineage ) - Number( !b.lineage );
@@ -70,3 +70,15 @@ export const sortByTaxonomy = <T extends { uuid: string }>(
       return compareLineages( a.lineage, b.lineage );
     } )
     .map( ( { item } ) => item );
+
+// Observations, keyed by uuid
+export const sortByTaxonomy = <T extends { uuid: string }>(
+  items: T[],
+  lineages: Map<string, LineageStep[]>,
+): T[] => sortByTaxonomyWithKey( items, lineages, item => item.uuid );
+
+// Explore can't download a whole search to sort it, so taxonomic order there covers only this
+// many of the most recently added observations, or of the most observed species. Change the
+// Taxonomic-order-covers-... strings along with these
+export const EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT = 1000;
+export const EXPLORE_TAXONOMIC_SPECIES_LIMIT = 2000;

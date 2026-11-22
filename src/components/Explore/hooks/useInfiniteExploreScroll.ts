@@ -48,6 +48,11 @@ const useInfiniteExploreScroll = (
     // these as its preloaded observation and fetches the rest itself.
     fields: {
       ...Observation.DEFAULT_MODE_LIST_FIELDS,
+      taxon: {
+        ...Observation.DEFAULT_MODE_LIST_FIELDS.taxon,
+        // For sorting in taxonomic order
+        ancestor_ids: true,
+      },
       // ObsStatus's identification and comment counts
       identifications: Observation.ADVANCED_MODE_LIST_FIELDS.identifications,
       comments: { uuid: true },

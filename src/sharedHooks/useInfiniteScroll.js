@@ -1,5 +1,6 @@
 // @flow
 
+import { useMemo } from "react";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 const useInfiniteScroll = (
@@ -24,6 +25,7 @@ const useInfiniteScroll = (
     isFetching,
     isFetchingNextPage,
     fetchNextPage,
+    hasNextPage,
     refetch,
     status,
   } = useAuthenticatedInfiniteQuery(
@@ -58,7 +60,12 @@ const useInfiniteScroll = (
   );
 
   const pages = data?.pages || [];
-  const allResults = pages?.map( page => page?.results ).flat( Infinity ).filter( Boolean );
+  // Memoized so lists sorted on device (e.g. Explore species in taxonomic order) only re-sort
+  // when a page arrives
+  const allResults = useMemo(
+    ( ) => ( data?.pages || [] ).map( page => page?.results ).flat( Infinity ).filter( Boolean ),
+    [data?.pages],
+  );
 
   return {
     data: allResults,
@@ -66,6 +73,7 @@ const useInfiniteScroll = (
     isFetching,
     isFetchingNextPage,
     fetchNextPage,
+    hasNextPage,
     refetch,
     status,
     totalResults: pages?.[0]

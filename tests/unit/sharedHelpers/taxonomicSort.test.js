@@ -1,6 +1,7 @@
 import {
   compareLineages,
   sortByTaxonomy,
+  sortByTaxonomyWithKey,
   taxonLineageIds,
 } from "sharedHelpers/taxonomicSort";
 
@@ -92,5 +93,13 @@ describe( "taxonomicSort", ( ) => {
         [{ id: 2, name: "Picea" }],
       ) ).toBeLessThan( 0 );
     } );
+  } );
+} );
+
+describe( "sortByTaxonomyWithKey", ( ) => {
+  it( "sorts items by a key other than uuid", ( ) => {
+    const items = [{ taxonId: "red-oak" }, { taxonId: "animal" }, { taxonId: "chestnut" }];
+    expect( sortByTaxonomyWithKey( items, LINEAGES, item => item.taxonId ).map( i => i.taxonId ) )
+      .toEqual( ["animal", "chestnut", "red-oak"] );
   } );
 } );

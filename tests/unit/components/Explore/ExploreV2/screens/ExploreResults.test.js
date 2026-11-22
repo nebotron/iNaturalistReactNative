@@ -339,6 +339,41 @@ describe( "ExploreResults observations sort", ( ) => {
 
     expect( screen.getByText( "Most faved" ) ).toBeVisible( );
   } );
+
+  it( "offers taxonomic order", async ( ) => {
+    const actor = await openSortSheet( OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST );
+
+    await actor.press( screen.getByText( "Taxonomic order" ) );
+
+    expect( mockDispatch ).toHaveBeenCalledWith( {
+      type: EXPLORE_V2_ACTION.SET_SORT,
+      sortBy: OBSERVATIONS_SORT.TAXONOMY,
+    } );
+  } );
+
+  it( "loads taxonomic order in big pages, up to its limit, before sorting", async ( ) => {
+    const fetchNextPage = jest.fn( );
+    mockUseInfiniteExploreScroll.mockReturnValue( {
+      fetchNextPage,
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      handlePullToRefresh: jest.fn( ),
+      observations: [{ uuid: "obs-1", id: 1, taxon: { id: 5, name: "Quercus" } }],
+      totalResults: 5000,
+    } );
+    useExploreV2.mockReturnValue( {
+      state: {
+        ...mockState( { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE } ),
+        sortBy: OBSERVATIONS_SORT.TAXONOMY,
+      },
+      dispatch: mockDispatch,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    expect( await screen.findByText( /Loading observations to sort/ ) ).toBeVisible( );
+    expect( lastScrollArgs( ).params.per_page ).toBe( 200 );
+    await waitFor( ( ) => expect( fetchNextPage ).toHaveBeenCalledTimes( 1 ) );
+  } );
 } );
 
 describe( "ExploreResults species sort", ( ) => {
@@ -366,6 +401,18 @@ describe( "ExploreResults species sort", ( ) => {
       expect( params.order ).toBe( "desc" );
     } );
     expect( screen.getByLabelText( "Change species sort order" ) ).toBeVisible( );
+  } );
+
+  it( "tells the species view to sort taxonomically in taxonomic order", async ( ) => {
+    useExploreV2.mockReturnValue( {
+      state: { ...speciesTabState, speciesSortBy: SPECIES_SORT.TAXONOMY },
+      dispatch: mockDispatch,
+    } );
+
+    renderComponent( <ExploreResults /> );
+
+    await waitFor( ( ) => expect( lastSpeciesViewProps( ).byTaxonomy ).toBe( true ) );
+    expect( lastSpeciesViewProps( ).params.order_by ).toBe( "count" );
   } );
 
   it( "passes ascending order to the species view when least observed is selected", async ( ) => {

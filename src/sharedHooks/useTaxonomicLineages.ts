@@ -43,34 +43,36 @@ const fetchNames = async ( ids: number[] ): Promise<Map<number, string>> => {
   return new Map( results.flat( ).filter( Boolean ).map( taxon => [taxon.id, taxon.name] ) );
 };
 
-// Index of uuid → the lineage of names of the user's local observations' taxa, for sorting them
-// taxonomically. Names come from Realm and the model's taxonomy file first; whatever neither
-// has is fetched from the API, and sorts by id until it arrives (or for good, offline).
-const useTaxonomicLineages = ( enabled: boolean ): Map<string, LineageStep[]> => {
+export interface KeyedTaxon {
+  key: string;
+  taxon: {
+    id: number;
+    name?: string | null;
+    ancestor_ids?: ArrayLike<number> | null;
+  };
+}
+
+// Index of key → the lineage of names of each taxon, for sorting taxonomically. Names come from
+// the taxa themselves, Realm and the model's taxonomy file first; whatever none has is fetched
+// from the API (only once fetchMissing is true, so a list still loading page by page doesn't
+// refetch them for every page), and sorts by id until it arrives (or for good, offline).
+export const useLineages = (
+  taxa: KeyedTaxon[],
+  enabled: boolean,
+  fetchMissing = true,
+): Map<string, LineageStep[]> => {
   const realm = useRealm( );
-  const observations = useQuery<RealmObservation>(
-    {
-      type: "Observation",
-      query: obs => obs.filtered( enabled
-        ? "taxon != nil"
-        : "FALSEPREDICATE" ),
-      keyPaths: ["uuid", "taxon.id", "taxon.name", "taxon.ancestor_ids"],
-    },
-    [enabled],
-  );
   const offlineTaxonomy = useOfflineTaxonomy( enabled );
 
   const { lineageIds, localNames, missingIds } = useMemo( ( ) => {
-    const idsByUuid = new Map<string, number[]>( );
+    const idsByKey = new Map<string, number[]>( );
     const names = new Map<number, string>( );
-    observations.forEach( observation => {
-      const { taxon } = observation;
-      if ( !taxon ) return;
-      idsByUuid.set( observation.uuid, taxonLineageIds( taxon ) );
+    taxa.forEach( ( { key, taxon } ) => {
+      idsByKey.set( key, taxonLineageIds( taxon ) );
       if ( taxon.name ) names.set( taxon.id, taxon.name );
     } );
     const missing: number[] = [];
-    new Set( [...idsByUuid.values( )].flat( ) ).forEach( id => {
+    new Set( [...idsByKey.values( )].flat( ) ).forEach( id => {
       if ( names.has( id ) ) return;
       const name = offlineTaxonomy?.get( id )?.name
         || realm.objectForPrimaryKey<RealmTaxon>( "Taxon", id )?.name;
@@ -81,20 +83,20 @@ const useTaxonomicLineages = ( enabled: boolean ): Map<string, LineageStep[]> =>
       }
     } );
     return {
-      lineageIds: idsByUuid,
+      lineageIds: idsByKey,
       localNames: names,
       // Wait for the taxonomy file so we don't request names it would have had
       missingIds: offlineTaxonomy
         ? missing.sort( ( a, b ) => a - b )
         : [],
     };
-  }, [observations, offlineTaxonomy, realm] );
+  }, [taxa, offlineTaxonomy, realm] );
 
   const { data: remoteNames } = useNonAuthenticatedQuery(
     ["fetchTaxaNames", missingIds.join( "," )],
     ( ) => fetchNames( missingIds ),
     {
-      enabled: enabled && missingIds.length > 0,
+      enabled: enabled && fetchMissing && missingIds.length > 0,
       staleTime: Infinity,
     },
   );
@@ -104,11 +106,33 @@ const useTaxonomicLineages = ( enabled: boolean ): Map<string, LineageStep[]> =>
       ? new Map( [...remoteNames, ...localNames] )
       : localNames;
     const lineages = new Map<string, LineageStep[]>( );
-    lineageIds.forEach( ( ids, uuid ) => {
-      lineages.set( uuid, ids.map( id => ( { id, name: names.get( id ) } ) ) );
+    lineageIds.forEach( ( ids, key ) => {
+      lineages.set( key, ids.map( id => ( { id, name: names.get( id ) } ) ) );
     } );
     return lineages;
   }, [lineageIds, localNames, remoteNames] );
+};
+
+// Index of uuid → the lineage of names of the user's local observations' taxa
+const useTaxonomicLineages = ( enabled: boolean ): Map<string, LineageStep[]> => {
+  const observations = useQuery<RealmObservation>(
+    {
+      type: "Observation",
+      query: obs => obs.filtered( enabled
+        ? "taxon != nil"
+        : "FALSEPREDICATE" ),
+      keyPaths: ["uuid", "taxon.id", "taxon.name", "taxon.ancestor_ids"],
+    },
+    [enabled],
+  );
+  const taxa = useMemo( ( ) => {
+    const keyed: KeyedTaxon[] = [];
+    observations.forEach( ( { uuid, taxon } ) => {
+      if ( taxon ) keyed.push( { key: uuid, taxon } );
+    } );
+    return keyed;
+  }, [observations] );
+  return useLineages( taxa, enabled );
 };
 
 export default useTaxonomicLineages;

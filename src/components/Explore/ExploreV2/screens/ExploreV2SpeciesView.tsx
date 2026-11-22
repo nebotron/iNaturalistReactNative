@@ -5,17 +5,26 @@ import type { ApiSpeciesCountSummary, ApiTaxon } from "api/types";
 import ExploreFlashList from "components/Explore/ExploreFlashList";
 import ExploreV2SpeciesGridItem
   from "components/Explore/ExploreV2/components/ExploreV2SpeciesGridItem";
+import TaxonomicOrderNotice
+  from "components/Explore/ExploreV2/components/TaxonomicOrderNotice";
 import type {
   ExploreV2BaseQueryParams,
 } from "components/Explore/ExploreV2/helpers/buildQueryParams";
+import { View } from "components/styledComponents";
 import i18n from "i18next";
 import React, { useCallback, useMemo } from "react";
 import Taxon from "realmModels/Taxon";
 import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 import type { SpeciesCountsSortAPIParams } from "sharedHelpers/speciesSort";
+import {
+  EXPLORE_TAXONOMIC_SPECIES_LIMIT,
+  sortByTaxonomyWithKey,
+} from "sharedHelpers/taxonomicSort";
 import useCurrentUser from "sharedHooks/useCurrentUser";
+import useFetchPagesUpTo from "sharedHooks/useFetchPagesUpTo";
 import useGridLayout from "sharedHooks/useGridLayout";
 import useInfiniteScroll from "sharedHooks/useInfiniteScroll";
+import { useLineages } from "sharedHooks/useTaxonomicLineages";
 
 export type SpeciesCountQueryParams = ExploreV2BaseQueryParams & SpeciesCountsSortAPIParams;
 
@@ -25,6 +34,8 @@ interface SpeciesCountResult {
 }
 
 interface Props {
+  // Taxonomic order: the most observed species, loaded up front and sorted on device
+  byTaxonomy?: boolean;
   enabled: boolean;
   isConnected: boolean | null;
   params: SpeciesCountQueryParams;
@@ -35,9 +46,15 @@ interface Props {
 // One seen-query per infinite-scroll page: the seen-id chunks are sized to
 // SPECIES_PAGE_SIZE so each chunk aligns to exactly one loaded page
 const SPECIES_PAGE_SIZE = 10;
+// The most species_counts returns in a page
+const TAXONOMIC_PAGE_SIZE = 500;
+// Taxonomic order checks which species the user has seen in fewer, bigger requests
+const TAXONOMIC_SEEN_CHUNK_SIZE = 100;
+
+const speciesKey = ( item: SpeciesCountResult ) => String( item.taxon.id );
 
 const ExploreV2SpeciesView = ( {
-  enabled, isConnected, params, scrollRestoreKey,
+  byTaxonomy = false, enabled, isConnected, params, scrollRestoreKey,
 }: Props ) => {
   const currentUser = useCurrentUser( );
   const { flashListStyle, gridItemStyle, numColumns } = useGridLayout( );
@@ -48,6 +65,7 @@ const ExploreV2SpeciesView = ( {
 
   const {
     data,
+    hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
     totalResults,
@@ -56,7 +74,9 @@ const ExploreV2SpeciesView = ( {
     fetchSpeciesCounts,
     {
       ...params,
-      per_page: SPECIES_PAGE_SIZE,
+      per_page: byTaxonomy
+        ? TAXONOMIC_PAGE_SIZE
+        : SPECIES_PAGE_SIZE,
       ...( !currentUser && { locale } ),
       fields: {
         taxon: Taxon.LIMITED_TAXON_FIELDS,
@@ -65,12 +85,43 @@ const ExploreV2SpeciesView = ( {
     { enabled, persist: true },
   );
 
-  const taxonIds = ( data as SpeciesCountResult[] ).map( r => r.taxon.id as number );
+  const speciesCounts = data as SpeciesCountResult[];
 
-  // taxonIdChunks holds the cumulative list of all taxa viewed, sliced into groups of 10.
+  useFetchPagesUpTo( {
+    enabled: byTaxonomy && enabled,
+    loadedCount: speciesCounts.length,
+    limit: EXPLORE_TAXONOMIC_SPECIES_LIMIT,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } );
+  const taxonomicLoadDone = !hasNextPage
+    || speciesCounts.length >= EXPLORE_TAXONOMIC_SPECIES_LIMIT;
+  const speciesTaxa = useMemo( ( ) => ( byTaxonomy
+    ? speciesCounts.map( item => ( {
+      key: speciesKey( item ),
+      taxon: { ...item.taxon, id: item.taxon.id as number },
+    } ) )
+    : [] ), [byTaxonomy, speciesCounts] );
+  const lineages = useLineages( speciesTaxa, byTaxonomy, taxonomicLoadDone );
+  const listData = useMemo( ( ) => ( byTaxonomy
+    ? sortByTaxonomyWithKey(
+      speciesCounts.slice( 0, EXPLORE_TAXONOMIC_SPECIES_LIMIT ),
+      lineages,
+      speciesKey,
+    )
+    : speciesCounts ), [byTaxonomy, speciesCounts, lineages] );
+
+  const taxonIds = speciesCounts.map( r => r.taxon.id as number );
+
+  // taxonIdChunks holds the cumulative list of all taxa viewed, sliced into groups of 10
+  // (one per page), or bigger ones for taxonomic order's big pages
+  const seenChunkSize = byTaxonomy
+    ? TAXONOMIC_SEEN_CHUNK_SIZE
+    : SPECIES_PAGE_SIZE;
   const taxonIdChunks: number[][] = [];
-  for ( let i = 0; i < taxonIds.length; i += SPECIES_PAGE_SIZE ) {
-    taxonIdChunks.push( taxonIds.slice( i, i + SPECIES_PAGE_SIZE ) );
+  for ( let i = 0; i < taxonIds.length; i += seenChunkSize ) {
+    taxonIdChunks.push( taxonIds.slice( i, i + seenChunkSize ) );
   }
 
   // useQueries executes taxonIdChunks.length queries,
@@ -134,12 +185,15 @@ const ExploreV2SpeciesView = ( {
     [gridItemStyle, observedIdSet],
   );
 
-  return (
+  const list = (
     <ExploreFlashList
       canFetch={enabled}
       contentContainerStyle={flashListStyle}
-      data={data}
-      fetchNextPage={fetchNextPage}
+      data={listData}
+      // Taxonomic order loads everything it sorts itself, and more would land all over the list
+      fetchNextPage={byTaxonomy
+        ? undefined
+        : fetchNextPage}
       hideLoadingWheel={!isFetchingNextPage}
       isFetchingNextPage={isFetchingNextPage}
       isConnected={isConnected}
@@ -153,6 +207,19 @@ const ExploreV2SpeciesView = ( {
       totalResults={totalResults}
       testID="ExploreV2SpeciesList"
     />
+  );
+
+  if ( !byTaxonomy ) return list;
+  return (
+    <View className="flex-1">
+      <TaxonomicOrderNotice
+        kind="species"
+        loaded={speciesCounts.length}
+        limit={EXPLORE_TAXONOMIC_SPECIES_LIMIT}
+        total={totalResults}
+      />
+      {list}
+    </View>
   );
 };
 

@@ -1122,8 +1122,12 @@ Live-organism--evidence = Live organism
 Load-all-count-observations = Load all { $count } observations?
 Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
+# Progress of loading Explore results to sort them in taxonomic order
+Loading-observations-to-sort-loaded-of-total = Loading observations to sort: { $loaded } of { $total }
 # Loading message shown while fetching the route through a selected hotspot
 Loading-route = Loading route…
+# Progress of loading Explore species to sort them in taxonomic order
+Loading-species-to-sort-loaded-of-total = Loading species to sort: { $loaded } of { $total }
 Loads-content-that-requires-an-Internet-connection = Loads content that requires an Internet connection
 LOCATION = LOCATION
 Location = Location
@@ -1972,6 +1976,8 @@ sound-recorder-help-Try-to-isolate = Try to isolate the sound of a single organi
 Sounds = Sounds
 Source-List = <0>(Source List: </0><1>{ $source }</1><0>)</0>
 Species = Species
+# Description of the taxonomic order sort option for species
+Species-are-grouped-by-genus-then-family-and-so-on = Species are grouped by genus, then by family, and so on
 # Description of the Date Observed: Oldest species sort order
 Species-first-observed-least-recently-appear-first = Species first observed least recently appear first
 # Description of the Date Observed: Newest species sort order
@@ -2061,6 +2067,10 @@ TAXON = TAXON
 TAXON-NAMES-DISPLAY = TAXON NAMES DISPLAY
 # Sort option: observations in taxonomic order, i.e. sorted by their full scientific classification
 Taxonomic-order = Taxonomic order
+# Shown above Explore results in taxonomic order when the search has more than it can sort
+Taxonomic-order-covers-the-1000-most-recently-added-observations = Taxonomic order covers the 1,000 most recently added observations
+# Shown above Explore species in taxonomic order when the search has more than it can sort
+Taxonomic-order-covers-the-2000-most-observed-species = Taxonomic order covers the 2,000 most observed species
 # Message of a dialog asking whether to download every observation for taxonomic order
 Taxonomic-order-downloads-all-observations-which-may-take-a-while = Sorting in taxonomic order downloads all of these observations to this device. That may take a while.
 TAXONOMIC-RANKS = TAXONOMIC RANKS
