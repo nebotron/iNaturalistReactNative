@@ -1,4 +1,5 @@
 import { getCurrentRoute } from "navigation/navigationUtils";
+import { AppState } from "react-native";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "uiDelayTracker" );
@@ -66,6 +67,38 @@ export const trackScreenTransition = ( {
       totalMs,
     } );
   } );
+};
+
+// A tap is only handled once the JS thread is free, so a stall here is a tap
+// that waited, wherever it landed. slow_screen_transition only times taps that
+// navigate; this covers every other button, and work no tap started.
+const STALL_TICK_MS = 500;
+// Past this late, a tap made at the start of the stall felt it
+const STALL_MS = 300;
+// The process was suspended, not blocked
+const MAX_PLAUSIBLE_STALL_MS = 30_000;
+let stallWatchStarted = false;
+
+export const startJsStallWatch = ( ) => {
+  if ( stallWatchStarted ) return;
+  stallWatchStarted = true;
+  let expectedAt = Date.now( ) + STALL_TICK_MS;
+  const tick = ( ) => {
+    const now = Date.now( );
+    const lateMs = now - expectedAt;
+    // Only in front: in the background nobody is tapping, and iOS freezing
+    // the process would read as a stall
+    if ( lateMs >= STALL_MS && lateMs < MAX_PLAUSIBLE_STALL_MS
+      && AppState.currentState === "active" ) {
+      logger.infoWithExtra( "js_stall", {
+        stallMs: lateMs,
+        screen: currentScreen( ),
+      } );
+    }
+    expectedAt = Date.now( ) + STALL_TICK_MS;
+    setTimeout( tick, STALL_TICK_MS );
+  };
+  setTimeout( tick, STALL_TICK_MS );
 };
 
 export const trackUiWork = ( work: string, startedAt: number ) => {

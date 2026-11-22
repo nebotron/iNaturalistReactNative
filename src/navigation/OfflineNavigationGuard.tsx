@@ -10,6 +10,7 @@ import setPowerProfileScreen from "sharedHelpers/powerProfile";
 import { logFirebaseScreenView } from "sharedHelpers/tracking";
 import {
   markNavigationDispatched,
+  startJsStallWatch,
   trackScreenTransition,
 } from "sharedHelpers/uiDelayTracker";
 
@@ -57,6 +58,7 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
         setPowerProfileScreen( routeNameRef.current );
         noteScreenMemory( routeNameRef.current );
         startMemoryWatermark( );
+        startJsStallWatch( );
         // The action listener is documented as debugging-only, which is exactly
         // what this is: it's the only hook that fires when navigation is asked
         // to move, before any state change, so it's where a transition's clock
