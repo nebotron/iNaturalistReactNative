@@ -13,8 +13,26 @@ const MAP_DEFAULT_STORAGE_KEYS = [
   "hotspotExploreObservationsLayout",
 ];
 
+const defaultLayoutFor = ( storageKey: string ) => (
+  MAP_DEFAULT_STORAGE_KEYS.includes( storageKey )
+    ? "map"
+    : "grid"
+);
+
+// Casting is necessary because zustandStorage.getItem returns string | number | null
+const readLayout = ( storageKey: string ) => (
+  zustandStorage.getItem( storageKey ) as string | null
+) || defaultLayoutFor( storageKey );
+
 const useStoredLayout = ( storageKey: string ): LayoutHook => {
-  const [layout, setLayout] = useState<string | null>( null );
+  // MMKV reads are synchronous, so read on the first render: screens render nothing until
+  // they have a layout, and waiting for an effect cost them a blank frame on every mount
+  const [layout, setLayout] = useState<string | null>( ( ) => readLayout( storageKey ) );
+  const [layoutKey, setLayoutKey] = useState( storageKey );
+  if ( layoutKey !== storageKey ) {
+    setLayoutKey( storageKey );
+    setLayout( readLayout( storageKey ) );
+  }
 
   const writeLayoutToStorage = useCallback( ( newValue: string ) => {
     zustandStorage.setItem( storageKey, newValue );
@@ -22,17 +40,9 @@ const useStoredLayout = ( storageKey: string ): LayoutHook => {
   }, [storageKey] );
 
   useEffect( ( ) => {
-    const defaultLayout = MAP_DEFAULT_STORAGE_KEYS.includes( storageKey )
-      ? "map"
-      : "grid";
-    // Casting is necessary because zustandStorage.getItem returns string | number | null
-    const storedLayout = zustandStorage.getItem( storageKey ) as string | null;
-    setLayout( storedLayout || defaultLayout );
-
     const listener = mmkvStorage.addOnValueChangedListener( changedKey => {
       if ( changedKey !== storageKey ) return;
-      const updated = zustandStorage.getItem( storageKey ) as string | null;
-      setLayout( updated || defaultLayout );
+      setLayout( readLayout( storageKey ) );
     } );
 
     return ( ) => listener.remove( );

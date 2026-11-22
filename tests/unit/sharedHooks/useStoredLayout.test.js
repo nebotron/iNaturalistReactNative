@@ -35,6 +35,18 @@ describe( "useStoredLayout", ( ) => {
     await waitFor( ( ) => expect( result.current.layout ).toBe( "list" ) );
   } );
 
+  it( "has the stored layout on the first render", ( ) => {
+    zustandStorage.setItem( MY_OBS_KEY, "list" );
+
+    const renderedLayouts = [];
+    renderHook( ( ) => {
+      const { layout } = useStoredLayout( MY_OBS_KEY );
+      renderedLayouts.push( layout );
+    } );
+
+    expect( renderedLayouts[0] ).toBe( "list" );
+  } );
+
   it( "persists a newly selected layout", async ( ) => {
     const { result } = renderStoredLayout( EXPLORE_V2_KEY );
     await waitFor( ( ) => expect( result.current.layout ).toBe( "map" ) );
