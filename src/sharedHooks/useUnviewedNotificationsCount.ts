@@ -9,7 +9,14 @@ import {
   useCallback, useEffect, useRef, useState,
 } from "react";
 import { AppState, Image } from "react-native";
+import { MMKV } from "react-native-mmkv";
 import Photo from "realmModels/Photo";
+import type { UserPojo } from "realmModels/User";
+import {
+  PERSISTED_QUERY_META,
+  PERSISTED_QUERY_TTL_MS,
+  readPersistedQueryUpdatedAt,
+} from "sharedHelpers/persistedQueries";
 import useStore from "stores/useStore";
 
 import useAuthenticatedQuery from "./useAuthenticatedQuery";
@@ -18,7 +25,7 @@ import type { Notification } from "./useInfiniteNotificationsScroll";
 import {
   fetchNotificationsPage,
   getNextNotificationsPageParam,
-  getNotificationsQueryKey,
+  getNotificationsFullQueryKey,
 } from "./useInfiniteNotificationsScroll";
 
 const { useRealm } = RealmContext;
@@ -79,9 +86,28 @@ export const markObservationNotificationsViewedLocally = (
 
 type Tab = "owner" | "following";
 
-// Long enough that a list preloaded behind the tab dot is still there when the
-// user gets round to opening it; nothing else observes it until they do.
-const PRELOADED_LIST_GC_TIME = 24 * 60 * 60 * 1000;
+// What each tab's saved list covers, so the dot can show straight away after
+// a restart when nothing new has come in since
+const preloadStorage = new MMKV( { id: "notifications-preload" } );
+
+const readPreloadedCounts = (
+  currentUser: UserPojo | null,
+): Partial<Record<Tab, number>> => {
+  if ( !currentUser ) return {};
+  let saved: { userId?: number; counts?: Partial<Record<Tab, number>> } = {};
+  try {
+    saved = JSON.parse( preloadStorage.getString( "counts" ) ?? "{}" );
+  } catch {
+    return {};
+  }
+  if ( saved.userId !== currentUser.id || !saved.counts ) return {};
+  // Only where the list it covers is still on disk
+  return Object.fromEntries( Object.entries( saved.counts ).filter( ( [tab] ) => (
+    readPersistedQueryUpdatedAt(
+      getNotificationsFullQueryKey( TAB_PARAMS[tab as Tab], currentUser ),
+    ) !== undefined
+  ) ) );
+};
 // The dot waits on the preload, so don't let a stalled image hold it back
 const MEDIA_PRELOAD_TIMEOUT = 15000;
 
@@ -123,7 +149,25 @@ const useUnviewedNotificationsCount = ( { preload = false }: Options = {} ) => {
   const observationMarkedAsViewedAt = useStore( state => state.observationMarkedAsViewedAt );
   // The unviewed count each tab's cached list is known to cover. A count above
   // it means there are notifications the cache hasn't loaded yet.
-  const [preloadedCounts, setPreloadedCounts] = useState<Partial<Record<Tab, number>>>( {} );
+  const [preloadedCounts, setPreloadedCounts] = useState<Partial<Record<Tab, number>>>(
+    ( ) => ( preload
+      ? readPreloadedCounts( currentUser )
+      : {} ),
+  );
+  const restoredForUser = useRef( currentUser?.id );
+  useEffect( ( ) => {
+    // The user loads after the first render
+    if ( !preload || restoredForUser.current === currentUser?.id ) return;
+    restoredForUser.current = currentUser?.id;
+    setPreloadedCounts( readPreloadedCounts( currentUser ) );
+  }, [preload, currentUser] );
+  useEffect( ( ) => {
+    if ( !preload || !currentUser ) return;
+    preloadStorage.set(
+      "counts",
+      JSON.stringify( { userId: currentUser.id, counts: preloadedCounts } ),
+    );
+  }, [preload, currentUser, preloadedCounts] );
   const preloading = useRef<Partial<Record<Tab, boolean>>>( {} );
 
   const preloadTab = useCallback( async ( tab: Tab, count: number ) => {
@@ -138,7 +182,7 @@ const useUnviewedNotificationsCount = ( { preload = false }: Options = {} ) => {
         // realm is a stable context value, deliberately kept out of the key so
         // this matches the query key used in useInfiniteNotificationsScroll
         // eslint-disable-next-line @tanstack/query/exhaustive-deps
-        queryKey: [...getNotificationsQueryKey( params ), undefined, currentUser],
+        queryKey: getNotificationsFullQueryKey( params, currentUser ),
         queryFn: ( { pageParam }: { pageParam: number } ) => fetchNotificationsPage(
           params,
           pageParam,
@@ -148,7 +192,10 @@ const useUnviewedNotificationsCount = ( { preload = false }: Options = {} ) => {
         ),
         initialPageParam: 1,
         getNextPageParam: getNextNotificationsPageParam,
-        gcTime: PRELOADED_LIST_GC_TIME,
+        // Saved to disk like the list's own fetches, so it's still there
+        // after a restart
+        meta: PERSISTED_QUERY_META,
+        gcTime: PERSISTED_QUERY_TTL_MS,
       } );
       await prefetchNotificationMedia( data.pages[0] || [] );
     } catch {
