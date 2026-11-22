@@ -532,6 +532,9 @@ const ExploreResults = ( ) => {
                   notice={<EbirdNotice ebird={ebird} />}
                   onRedoSearchPress={handleRedoSearchPress}
                   placeMode={state.location.placeMode}
+                  placeId={state.location.placeMode === EXPLORE_V2_PLACE_MODE.PLACE
+                    ? state.location.place.id
+                    : undefined}
                   queryParams={queryParams}
                   totalBounds={totalBounds}
                 />

@@ -36,6 +36,16 @@ let mockHasPermissions;
 let mockHasBlockedPermissions;
 const mockDispatch = jest.fn( );
 const mockRequestPermissions = jest.fn( );
+jest.mock( "api/places", ( ) => ( {
+  __esModule: true,
+  default: jest.fn( ( ) => Promise.resolve( {
+    id: 1,
+    bounding_box_geojson: {
+      coordinates: [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]],
+    },
+  } ) ),
+} ) );
+
 jest.mock( "sharedHooks/useLocationPermission", ( ) => ( {
   __esModule: true,
   default: ( ) => ( {
@@ -479,7 +489,7 @@ describe( "ExploreResults observations view", ( ) => {
     },
   );
 
-  it( "frames the map to the bounds of the results", async ( ) => {
+  it( "frames the map to the bounding box of the place filter", async ( ) => {
     mockUseInfiniteExploreScroll.mockReturnValue( {
       fetchNextPage: jest.fn( ),
       isFetchingNextPage: false,
@@ -500,9 +510,10 @@ describe( "ExploreResults observations view", ( ) => {
 
     renderComponent( <ExploreResults /> );
 
-    const map = await screen.findByTestId( "Map.MapView" );
-    expect( map.props.initialRegion.latitude ).toBe( 20 );
-    expect( map.props.initialRegion.longitude ).toBe( 30 );
+    await waitFor( ( ) => expect(
+      screen.getByTestId( "Map.MapView" ).props.initialRegion.latitude,
+    ).toBe( 50 ) );
+    expect( screen.getByTestId( "Map.MapView" ).props.initialRegion.longitude ).toBe( 0 );
   } );
 
   it( "searches the visible map area when redo search is pressed", async ( ) => {

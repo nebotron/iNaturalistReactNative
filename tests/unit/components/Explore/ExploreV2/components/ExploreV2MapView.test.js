@@ -1,4 +1,6 @@
-import { act, screen, userEvent } from "@testing-library/react-native";
+import {
+  act, screen, userEvent, waitFor,
+} from "@testing-library/react-native";
 import ExploreV2MapView from "components/Explore/ExploreV2/components/ExploreV2MapView";
 import i18next from "i18next";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
@@ -17,6 +19,12 @@ jest.mock( "sharedHooks/useLocationPermission", ( ) => ( {
     renderPermissionsGate: ( ) => null,
     requestPermissions: jest.fn( ),
   } ),
+} ) );
+
+const mockFetchPlace = jest.fn( );
+jest.mock( "api/places", ( ) => ( {
+  __esModule: true,
+  default: ( ...args ) => mockFetchPlace( ...args ),
 } ) );
 
 const mockQueryParams = {
@@ -120,6 +128,39 @@ describe( "ExploreV2MapView", ( ) => {
     expect( initialRegion.longitude ).toBe( 30 );
     expect( initialRegion.latitudeDelta ).toBe( 28 );
     expect( initialRegion.longitudeDelta ).toBe( 28 );
+  } );
+
+  it( "frames a place search on the place's bounding box, not the results", async ( ) => {
+    mockFetchPlace.mockResolvedValue( {
+      id: 1,
+      bounding_box_geojson: {
+        coordinates: [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]],
+      },
+    } );
+    renderMapView( {
+      placeMode: EXPLORE_V2_PLACE_MODE.PLACE,
+      placeId: 1,
+      totalBounds: mockTotalBounds,
+    } );
+
+    await waitFor( ( ) => expect( mapProps( ).initialRegion.latitude ).toBe( 50 ) );
+    expect( mockFetchPlace ).toHaveBeenCalledWith( 1, expect.anything( ) );
+    const { initialRegion } = mapProps( );
+    expect( initialRegion.longitude ).toBe( 0 );
+    expect( initialRegion.latitudeDelta ).toBe( 28 );
+    expect( initialRegion.longitudeDelta ).toBe( 28 );
+  } );
+
+  it( "frames the results when a place has no bounding box", async ( ) => {
+    mockFetchPlace.mockResolvedValue( { id: 2 } );
+    renderMapView( {
+      placeMode: EXPLORE_V2_PLACE_MODE.PLACE,
+      placeId: 2,
+      totalBounds: mockTotalBounds,
+    } );
+
+    await waitFor( ( ) => expect( mockFetchPlace ).toHaveBeenCalled( ) );
+    await waitFor( ( ) => expect( mapProps( ).initialRegion.latitude ).toBe( 20 ) );
   } );
 
   it( "keeps the map up at world scale until a place's bounds load", ( ) => {

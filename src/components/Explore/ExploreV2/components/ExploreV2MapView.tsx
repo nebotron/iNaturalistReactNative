@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import fetchPlace from "api/places";
 import type { ApiTotalBounds } from "api/types";
 import EbirdMapMarkers from "components/Explore/EbirdMapMarkers";
 import type {
@@ -7,6 +9,7 @@ import type {
 import ActivityIndicator from "components/SharedComponents/ActivityIndicator";
 import Button from "components/SharedComponents/Buttons/Button";
 import {
+  boundingBoxGeojsonToBounds,
   getMapRegion,
   longitudeSpan,
   regionFromBounds,
@@ -50,6 +53,11 @@ const regionForResults = ( bounds: ApiTotalBounds, placeMode: EXPLORE_V2_PLACE_M
     : getMapRegion( bounds )
 );
 
+const fetchPlaceBounds = async ( placeId: number ) => {
+  const place = await fetchPlace( placeId, { fields: { bounding_box_geojson: true } } );
+  return boundingBoxGeojsonToBounds( place?.bounding_box_geojson );
+};
+
 const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
   elevation: 6,
@@ -64,6 +72,8 @@ interface Props {
   notice?: React.ReactNode;
   onRedoSearchPress?: ( _bounds: ApiTotalBounds ) => void;
   placeMode: EXPLORE_V2_PLACE_MODE;
+  // The place a PLACE search is filtered to; the map frames its bounding box
+  placeId?: number;
   queryParams: ExploreV2QueryParams;
   totalBounds?: ApiTotalBounds;
 }
@@ -76,6 +86,7 @@ const ExploreV2MapView = ( {
   notice,
   onRedoSearchPress,
   placeMode,
+  placeId,
   queryParams,
   totalBounds,
 }: Props ) => {
@@ -117,6 +128,23 @@ const ExploreV2MapView = ( {
       : undefined;
   }, [swlat, swlng, nelat, nelng, placeMode] );
 
+  const isPlaceSearch = placeMode === EXPLORE_V2_PLACE_MODE.PLACE && !!placeId;
+  const { data: placeBounds, isFetched: placeBoundsFetched } = useQuery( {
+    queryKey: ["exploreV2PlaceBounds", placeId],
+    queryFn: ( ) => fetchPlaceBounds( placeId as number ),
+    enabled: isPlaceSearch,
+    staleTime: Infinity,
+  } );
+
+  // A place search frames the place itself, not just where its results happen to be.
+  // Fall back to the results only if the place's bounding box can't be had.
+  const placeRegion = useMemo( ( ): Region | undefined => {
+    if ( placeBounds ) return getMapRegion( placeBounds );
+    return isPlaceSearch && placeBoundsFetched
+      ? boundsRegion
+      : undefined;
+  }, [isPlaceSearch, placeBounds, placeBoundsFetched, boundsRegion] );
+
   // in exploreV2, we unmount the map when switching between views
   // where ExploreV1 moves it off the screen, still mounted
   // mapAreaRegion specifies the initial map area for the remount after switching views
@@ -136,6 +164,7 @@ const ExploreV2MapView = ( {
   // The region the camera should be showing for the current context
   const cameraRegion = useMemo( ( ): Region | undefined => {
     if ( placeMode === EXPLORE_V2_PLACE_MODE.NEARBY ) return nearbyRegion;
+    if ( isPlaceSearch ) return placeRegion;
     if ( placeMode === EXPLORE_V2_PLACE_MODE.MAP_AREA ) {
       return appliedSearchCount === redoAppliedSearchCount
         ? undefined
@@ -145,6 +174,8 @@ const ExploreV2MapView = ( {
   }, [
     placeMode,
     nearbyRegion,
+    isPlaceSearch,
+    placeRegion,
     boundsRegion,
     mapAreaRegion,
     appliedSearchCount,
