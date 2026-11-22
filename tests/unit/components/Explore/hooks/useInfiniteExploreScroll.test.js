@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
 import inatjs from "inaturalistjs";
@@ -92,6 +92,20 @@ describe( "useInfiniteExploreScroll", ( ) => {
     inatjs.observations.search.mockClear( );
     await act( ( ) => result.current.handlePullToRefresh( ) );
     expect( inatjs.observations.search.mock.calls[0][0] ).toHaveProperty( "ttl", -1 );
+  } );
+
+  it( "asks the HTTP cache for what it has while offline, and fetches again online", async ( ) => {
+    onlineManager.setOnline( false );
+    inatjs.observations.search.mockResolvedValue( response( ["cached"] ) );
+    const { result } = renderExploreScroll( );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["cached"] ) );
+    expect( inatjs.observations.search.mock.calls[0][1].headers )
+      .toEqual( { "Cache-Control": expect.stringContaining( "only-if-cached" ) } );
+
+    inatjs.observations.search.mockResolvedValue( response( ["fresh"] ) );
+    act( ( ) => { onlineManager.setOnline( true ); } );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["fresh"] ) );
+    expect( inatjs.observations.search.mock.calls.at( -1 )[1].headers ).toBeUndefined( );
   } );
 
   it( "replaces the results when pulling to refresh works", async ( ) => {

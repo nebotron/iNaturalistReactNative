@@ -5,6 +5,7 @@
 #import <Firebase.h>
 #import <React/RCTBridge.h>
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTHTTPRequestHandler.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <RNShareMenu/ShareMenuManager.h>
 #import <React/RCTLinkingManager.h>
@@ -318,6 +319,24 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
   } @catch (NSException *exception) {
     NSLog(@"Skipping Firebase configuration due to invalid local GoogleService-Info.plist: %@", exception.reason);
   }
+  // Explore's results come back after a restart, and offline, from the HTTP
+  // cache rather than a copy the JS makes (see useAuthenticatedInfiniteQuery).
+  // Set before React Native's session is made, which takes the shared cache.
+  NSURLCache.sharedURLCache = [[NSURLCache alloc] initWithMemoryCapacity:4 * 1024 * 1024
+                                                            diskCapacity:50 * 1024 * 1024
+                                                            directoryURL:nil];
+  // Offline, a request asks for "Cache-Control: only-if-cached": whatever the
+  // cache holds, however old, and no network. OkHttp does that on Android;
+  // NSURLSession ignores request cache directives, so map it to the policy
+  // that does the same.
+  RCTSetCustomHTTPRequestInterceptor( ^NSURLRequest *( NSURLRequest *request ) {
+    NSString *cacheControl = [request valueForHTTPHeaderField:@"Cache-Control"];
+    if ( ![cacheControl containsString:@"only-if-cached"] ) return nil;
+    NSMutableURLRequest *fromCache = [request mutableCopy];
+    fromCache.cachePolicy = NSURLRequestReturnCacheDataDontLoad;
+    [fromCache setValue:nil forHTTPHeaderField:@"Cache-Control"];
+    return fromCache;
+  } );
   self.reactNativeFactory = [[RCTReactNativeFactory alloc] initWithDelegate:self];
   facebook::react::ReactNativeFeatureFlags::dangerouslyForceOverride(
     std::make_unique<INatFeatureFlags>() );

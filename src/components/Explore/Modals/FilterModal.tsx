@@ -1,7 +1,6 @@
 import type { ApiPlace, ApiProject } from "api/types";
 import classNames from "classnames";
 import NumberBadge from "components/Explore/NumberBadge";
-import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import type { ExploreSearchUser } from "components/Explore/SearchScreens/ExploreUserSearch";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
 import {
@@ -1228,8 +1227,6 @@ const FilterModal = ( {
               accessibilityLabel={t( "View-photo-licensing-info" )}
             />
           </View>
-
-          <ObservationSourceToggle className="mb-7 self-start" />
         </View>
       </ScrollView>
       <ButtonBar>

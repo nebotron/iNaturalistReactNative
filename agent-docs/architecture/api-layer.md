@@ -96,6 +96,14 @@ because these requests leave out `ttl: -1`, which makes the API answer
 characters is sent by inaturalistjs as a POST, which no HTTP cache stores, so keep
 `fields` for these lists small.
 
+Offline, cacheable queries still run (`networkMode: "offlineFirst"`) and send
+`Cache-Control: only-if-cached, max-stale=<30 days>`, so the HTTP cache answers with
+whatever it holds without touching the network. OkHttp honors that on Android; on iOS,
+`AppDelegate.mm` maps it to `NSURLRequestReturnCacheDataDontLoad` with
+`RCTSetCustomHTTPRequestInterceptor` (NSURLSession ignores request cache directives) and
+sizes the shared `NSURLCache` at 50 MB. Results served that way are fetched again when
+the connection comes back.
+
 The key of a cacheable query holds the user's id, locale and name preferences instead of
 the whole user object, whose counts change constantly and would restart the query.
 

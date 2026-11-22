@@ -1,5 +1,5 @@
 import { useRoute } from "@react-navigation/native";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { onlineManager, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import i18n from "i18next";
 import { useCallback, useEffect, useRef } from "react";
@@ -11,6 +11,12 @@ import { useCurrentUser } from "sharedHooks";
 // How long a cacheable query's results stay in memory, shown without asking
 // again, after its screen is left. Pulling to refresh fetches new ones sooner.
 const CACHEABLE_RESULTS_MS = 48 * 60 * 60 * 1000;
+// Offline, a cacheable query asks the HTTP cache for whatever it holds, up to
+// this old, without touching the network: OkHttp honors these directives on
+// Android, and AppDelegate maps only-if-cached to NSURLCache's
+// ReturnCacheDataDontLoad on iOS.
+const OFFLINE_MAX_STALE_S = 30 * 24 * 60 * 60;
+const OFFLINE_CACHE_CONTROL = `only-if-cached, max-stale=${OFFLINE_MAX_STALE_S}`;
 
 // Should work like React Query's useInfiniteQuery with our custom reactQueryRetry
 // and authentication.
@@ -20,7 +26,8 @@ const CACHEABLE_RESULTS_MS = 48 * 60 * 60 * 1000;
 // come from the HTTP cache, which stores the responses natively for as long
 // as the API's Cache-Control allows, as long as the caller doesn't send
 // ttl: -1 (which makes the API send no-store). refreshFirstPage sends it, so a
-// refresh is always fresh.
+// refresh is always fresh. Offline, they still run, answered from the HTTP
+// cache however old (up to 30 days), and are fetched again on reconnecting.
 interface AuthenticatedInfiniteQueryOptions {
   allowAnonymousJWT?: boolean;
   cacheable?: boolean;
@@ -55,6 +62,9 @@ const useAuthenticatedInfiniteQuery = (
     : currentUser;
   const fullQueryKey = [...queryKey, queryOptions.allowAnonymousJWT, userKey];
 
+  // Whether the results shown came from the HTTP cache while offline
+  const servedOfflineRef = useRef( false );
+
   const queryFn = async ( params: Record<string, unknown> ) => {
     if ( !currentUser ) {
       params.locale = locale;
@@ -65,9 +75,14 @@ const useAuthenticatedInfiniteQuery = (
     // fetching from RNSInfo becomes a performance issue
     const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
     const { signal, clear } = createRequestTimeoutSignal( );
+    const offline = cacheable && !onlineManager.isOnline( );
+    if ( offline ) servedOfflineRef.current = true;
     const options = {
       api_token: apiToken,
       signal,
+      ...( offline
+        ? { headers: { "Cache-Control": OFFLINE_CACHE_CONTROL } }
+        : {} ),
     };
     try {
       return await queryFunction( params, options );
@@ -80,6 +95,8 @@ const useAuthenticatedInfiniteQuery = (
     ? {
       staleTime: CACHEABLE_RESULTS_MS,
       gcTime: CACHEABLE_RESULTS_MS,
+      // Run offline too, so the HTTP cache can answer
+      networkMode: "offlineFirst" as const,
     }
     : {};
 
@@ -95,6 +112,15 @@ const useAuthenticatedInfiniteQuery = (
     ...cacheOptions,
     ...infiniteQueryOptions,
   } );
+
+  // Results the cache gave while offline are as old as the cache's copy, not
+  // as new as when they were shown, so fetch them again once back online
+  const { refetch } = query;
+  useEffect( ( ) => onlineManager.subscribe( online => {
+    if ( !online || !servedOfflineRef.current ) return;
+    servedOfflineRef.current = false;
+    void refetch( );
+  } ), [refetch] );
 
   // Fetches the first page again and, only if that works, replaces every page
   // with it. The results already shown stay while it runs and if it fails, in

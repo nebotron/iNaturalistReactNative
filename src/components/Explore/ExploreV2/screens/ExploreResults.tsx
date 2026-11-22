@@ -13,7 +13,6 @@ import {
   SPECIES_TAB,
 } from "appConstants/tabs";
 import CameraStatsView from "components/Explore/CameraStatsView";
-import EbirdNotice from "components/Explore/EbirdNotice";
 import ExcludedSpeciesError
   from "components/Explore/ExploreV2/components/ExcludedSpeciesError";
 import ExploreV2Header
@@ -37,8 +36,6 @@ import ExploreV2UsersView
   from "components/Explore/ExploreV2/screens/ExploreV2UsersView";
 import useInfiniteExploreScroll
   from "components/Explore/hooks/useInfiniteExploreScroll";
-import useObservationsWithEbird
-  from "components/Explore/hooks/useObservationsWithEbird";
 import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
@@ -116,6 +113,9 @@ const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
 };
 
 const noop = ( ) => undefined;
+
+// Tabs other than observations whose results are saved to disk
+const PERSISTED_TABS: ExploreV2Tab[] = [SPECIES_TAB, OBSERVERS_TAB, IDENTIFIERS_TAB];
 
 const logger = log.extend( "ExploreResults" );
 
@@ -236,7 +236,6 @@ const ExploreResults = ( ) => {
   const excludedSpeciesIds = excludedSpecies.ids;
   const excludedSpeciesReady = !excludedSpecies.active || !!excludedSpeciesIds;
   const canFetch = !needsPermission && nearbyResolved && excludedSpeciesReady;
-  const ebirdOnly = useStore( s => s.layout.observationSource === "ebird" );
 
   const queryParams = useMemo(
     ( ) => buildExploreV2QueryParams(
@@ -271,7 +270,6 @@ const ExploreResults = ( ) => {
     error: observationsError,
     fetchNextPage,
     fetchStatus: observationsFetchStatus,
-    hasNextPage,
     isFetchingNextPage,
     isLoading,
     handlePullToRefresh,
@@ -282,35 +280,16 @@ const ExploreResults = ( ) => {
   } = useInfiniteExploreScroll( {
     params: queryParams,
     // Only the observations view uses this search
-    enabled: canFetch && state.activeTab === OBSERVATIONS_TAB && !ebirdOnly,
+    enabled: canFetch && state.activeTab === OBSERVATIONS_TAB,
   } );
-  const { ebird, observations: observationsWithEbird } = useObservationsWithEbird(
-    observations,
-    queryParams,
-    {
-      enabled: canFetch && state.activeTab === OBSERVATIONS_TAB,
-      complete: !isLoading && !hasNextPage,
-    },
-  );
-  const resultsLoading = ebirdOnly
-    ? !!ebird?.isLoading
-    : isLoading;
-  let observationsCount = totalResults;
-  if ( ebirdOnly ) {
-    observationsCount = ebird && !ebird.isLoading
-      ? observationsWithEbird.length
-      : null;
-  } else if ( typeof totalResults === "number" && ebird && !ebird.isLoading ) {
-    observationsCount = totalResults + ebird.observations.length;
-  }
 
   // Only the user's own local photos have a subject distance, so loaded results are
   // sorted on device and everyone else's come last
   const bySubjectDistance = state.sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;
   const subjectDistances = useSubjectDistances( bySubjectDistance );
   const sortedObservations = useMemo( ( ) => ( bySubjectDistance
-    ? sortBySubjectDistance( observationsWithEbird, subjectDistances )
-    : observationsWithEbird ), [bySubjectDistance, observationsWithEbird, subjectDistances] );
+    ? sortBySubjectDistance( observations, subjectDistances )
+    : observations ), [bySubjectDistance, observations, subjectDistances] );
 
   // Diagnostics: observations sometimes show nothing after switching from
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
@@ -331,10 +310,6 @@ const ExploreResults = ( ) => {
     error: observationsError
       ? `${errorStatus ?? ""} ${( observationsError as Error ).message ?? observationsError}`
       : null,
-    ebirdOnly,
-    ebirdLimits: ebird?.limits,
-    ebirdError: !!ebird?.error,
-    // Includes eBird sightings, so eBird-only searches aren't counted as empty
     observationCount: sortedObservations.length,
     totalResults,
     hasTotalBounds: !!totalBounds,
@@ -359,11 +334,7 @@ const ExploreResults = ( ) => {
       logger.info( "explore_tab_switch", JSON.stringify( { fromTab, ...diagnosticsRef.current } ) );
       timer = setTimeout( ( ) => {
         const latest = diagnosticsRef.current;
-        // eBird-only with filters eBird can't match is empty by design, and says so
-        const explained = latest.ebirdOnly
-          && ( latest.ebirdLimits as string[] | undefined )?.includes( "filters" );
-        if ( latest.activeTab === OBSERVATIONS_TAB && latest.observationCount === 0
-          && !explained ) {
+        if ( latest.activeTab === OBSERVATIONS_TAB && latest.observationCount === 0 ) {
           const details = JSON.stringify( { fromTab, ...latest } );
           logger.error( "explore_empty_after_tab_switch", details );
         }
@@ -516,22 +487,23 @@ const ExploreResults = ( ) => {
   const renderTabContent = ( ) => {
     switch ( state.activeTab ) {
       case OBSERVATIONS_TAB: {
-        const hasNoResults = canFetch && observationsCount === 0
-          && sortedObservations.length === 0;
+        const hasNoResults = canFetch && totalResults === 0;
         return (
           <>
             {showMap
               ? (
                 <ExploreV2MapView
                   appliedSearchCount={state.appliedSearchCount}
-                  isLoading={resultsLoading}
+                  isLoading={isLoading}
                   mapAreaBounds={state.location.placeMode === EXPLORE_V2_PLACE_MODE.MAP_AREA
                     ? state.location.bounds
                     : undefined}
                   nearbyCoords={nearbyCoords}
-                  notice={<EbirdNotice ebird={ebird} />}
                   onRedoSearchPress={handleRedoSearchPress}
                   placeMode={state.location.placeMode}
+                  placeId={state.location.placeMode === EXPLORE_V2_PLACE_MODE.PLACE
+                    ? state.location.place.id
+                    : undefined}
                   queryParams={queryParams}
                   totalBounds={totalBounds}
                 />
@@ -549,7 +521,6 @@ const ExploreResults = ( ) => {
                   layout={layout === "list"
                     ? "list"
                     : "grid"}
-                  listHeaderContent={<EbirdNotice ebird={ebird} />}
                   // bit over a misnomer on this prop; in this case it hides the
                   // ID/comments/quality badges that grid results can technically have
                   hideObsUploadStatus={layout !== "list"}
@@ -663,6 +634,12 @@ const ExploreResults = ( ) => {
     }
   };
 
+  // Tabs whose results are cached on disk can show them offline. The species
+  // and users lists show the offline notice themselves when nothing's cached.
+  const hasCachedResults = state.activeTab === OBSERVATIONS_TAB
+    ? sortedObservations.length > 0
+    : PERSISTED_TABS.includes( state.activeTab );
+
   const renderContent = ( ) => {
     // Before anything else, offline results included: they're filtered by it too
     // A saved search it excludes was renamed or deleted, or couldn't be loaded
@@ -719,7 +696,8 @@ const ExploreResults = ( ) => {
         </>
       );
     }
-    if ( isConnected === false ) {
+    // Results fetched earlier for this search are still shown, from the cache
+    if ( isConnected === false && !hasCachedResults ) {
       return (
         <View className="flex-1">
           <OfflineNotice onPress={reload} />
@@ -730,8 +708,8 @@ const ExploreResults = ( ) => {
       return renderPermissionPrompt( );
     }
     const totalCount = {
-      [OBSERVATIONS_TAB]: typeof observationsCount === "number"
-        && t( "X-Observations", { count: observationsCount } ),
+      [OBSERVATIONS_TAB]: typeof totalResults === "number"
+        && t( "X-Observations", { count: totalResults } ),
       [SPECIES_TAB]: typeof speciesCount === "number"
         && t( "X-Species", { count: speciesCount } ),
       [LIFELIST_TAB]: typeof lifeListCount === "number"

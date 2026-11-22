@@ -96,9 +96,6 @@ export const TUNABLE_PARAMS = {
   usbMaxPhotosPerScan: def( "usb", 500, 1, 5000 ),
   usbStagingRetentionDays: def( "usb", 3, 0, 365, false ),
 
-  ebirdMaxDistKm: def( "explore", 50, 1, 50 ),
-  ebirdBackDays: def( "explore", 30, 1, 30 ),
-  ebirdMaxResults: def( "explore", 100, 1, 1000 ),
   placeSearchMaxSuggestions: def( "explore", 5, 1, 20 ),
 
   gamePoolSize: def( "game", 20, 1, 200 ),

@@ -165,7 +165,6 @@ jobs:
       - name: Replay the commit's own setup steps
         env:
           DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
-          EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
           GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
         run: |
           ruby .symbol-tools/.github/scripts/replay_build_steps.rb \

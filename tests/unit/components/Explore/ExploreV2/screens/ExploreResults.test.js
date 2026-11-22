@@ -36,6 +36,16 @@ let mockHasPermissions;
 let mockHasBlockedPermissions;
 const mockDispatch = jest.fn( );
 const mockRequestPermissions = jest.fn( );
+jest.mock( "api/places", ( ) => ( {
+  __esModule: true,
+  default: jest.fn( ( ) => Promise.resolve( {
+    id: 1,
+    bounding_box_geojson: {
+      coordinates: [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]],
+    },
+  } ) ),
+} ) );
+
 jest.mock( "sharedHooks/useLocationPermission", ( ) => ( {
   __esModule: true,
   default: ( ) => ( {
@@ -243,6 +253,36 @@ describe( "ExploreResults offline state", ( ) => {
       expect( screen.queryByTestId( "Map.MapView" ) ).toBeNull( );
     },
   );
+
+  it( "shows results cached from an earlier search when disconnected", async ( ) => {
+    mockLayout = "grid";
+    mockUseInfiniteExploreScroll.mockReturnValue( {
+      fetchNextPage: jest.fn( ),
+      isFetchingNextPage: false,
+      handlePullToRefresh: mockHandlePullToRefresh,
+      observations: [{ uuid: "cached-obs", id: 1 }],
+      totalResults: 1,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    expect( await screen.findByTestId( "ExploreV2ObservationsList" ) ).toBeVisible( );
+    expect( screen.queryByText( "You are offline. Tap to try again." ) ).toBeNull( );
+  } );
+
+  it( "hands the species tab its cached results when disconnected", async ( ) => {
+    useExploreV2.mockReturnValue( {
+      state: {
+        ...mockState( { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE } ),
+        activeTab: SPECIES_TAB,
+      },
+      dispatch: mockDispatch,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    await waitFor( ( ) => expect( mockExploreV2SpeciesView ).toHaveBeenCalled( ) );
+    expect( mockExploreV2SpeciesView.mock.calls.at( -1 )[0].isConnected ).toBe( false );
+    expect( screen.queryByText( "You are offline. Tap to try again." ) ).toBeNull( );
+  } );
 
   it( "retries the search when the offline notice is tapped and we are back online", async ( ) => {
     refresh.mockResolvedValue( { isConnected: true } );
@@ -479,7 +519,7 @@ describe( "ExploreResults observations view", ( ) => {
     },
   );
 
-  it( "frames the map to the bounds of the results", async ( ) => {
+  it( "frames the map to the bounding box of the place filter", async ( ) => {
     mockUseInfiniteExploreScroll.mockReturnValue( {
       fetchNextPage: jest.fn( ),
       isFetchingNextPage: false,
@@ -500,9 +540,10 @@ describe( "ExploreResults observations view", ( ) => {
 
     renderComponent( <ExploreResults /> );
 
-    const map = await screen.findByTestId( "Map.MapView" );
-    expect( map.props.initialRegion.latitude ).toBe( 20 );
-    expect( map.props.initialRegion.longitude ).toBe( 30 );
+    await waitFor( ( ) => expect(
+      screen.getByTestId( "Map.MapView" ).props.initialRegion.latitude,
+    ).toBe( 50 ) );
+    expect( screen.getByTestId( "Map.MapView" ).props.initialRegion.longitude ).toBe( 0 );
   } );
 
   it( "searches the visible map area when redo search is pressed", async ( ) => {

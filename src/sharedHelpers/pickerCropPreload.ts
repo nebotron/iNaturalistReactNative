@@ -13,9 +13,10 @@ import { enqueuePreload } from "sharedHelpers/imageCropPreload";
 //
 // They are queued in the background, behind anything a crop is waiting on,
 // so they are never discarded to make way for one: Done promotes the picked
-// ones, and the rest keep their prepares for a later batch, across restarts,
-// until the media cache lifetime runs out (imageCropPreload). How many is the
-// same PRELOAD_LOOKAHEAD the cropper and Group Photos keep prepared.
+// ones, and the rest are deleted with every other crop source once the import
+// finishes (clearCropSources), after which the import prepares the picker's
+// newest photos afresh for the next batch. How many is the same PRELOAD_LOOKAHEAD the
+// cropper and Group Photos keep prepared.
 
 const exporter = ( ) => ( NativeModules as {
   ImageCropper?: {
