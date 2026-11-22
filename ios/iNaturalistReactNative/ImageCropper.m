@@ -840,17 +840,33 @@ static UIImage *drawnOverSentinel(
 
 // ─── Raw decodes ──────────────────────────────────────────────────────────────
 
+// The type ImageIO reads a file as, or nil when it can't open it.
+static UTType *imageFileType( NSString *path )
+{
+  CGImageSourceRef src =
+    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  if ( !src ) return nil;
+  NSString *type = (__bridge NSString *)CGImageSourceGetType( src );
+  UTType   *uti  = type ? [UTType typeWithIdentifier:type] : nil;
+  CFRelease( src );
+  return uti;
+}
+
 // Whether a file is a camera raw, by its contents rather than its name: a crop's
 // preserved original is a CR3 written under a .jpg name.
 static BOOL isCameraRawFile( NSString *path )
 {
-  CGImageSourceRef src =
-    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
-  if ( !src ) return NO;
-  NSString *type = (__bridge NSString *)CGImageSourceGetType( src );
-  BOOL      raw  = type && [[UTType typeWithIdentifier:type] conformsToType:UTTypeRAWImage];
-  CFRelease( src );
-  return raw;
+  return [imageFileType( path ) conformsToType:UTTypeRAWImage];
+}
+
+// A HEIC or HEIF (Canon's .HIF) photo. React Native's image loader decodes
+// these through ImageIO like any JPEG, so the cropper draws the original file
+// itself rather than a JPEG re-encode of it.
+static BOOL isHeifFile( NSString *path )
+{
+  UTType *uti = imageFileType( path );
+  return [uti.identifier isEqualToString:@"public.heif"]
+    || [uti conformsToType:UTTypeHEIC] || [uti conformsToType:UTTypeHEIF];
 }
 
 // iOS's raw decoder fails intermittently -- it draws nothing, or a frame of
@@ -2231,26 +2247,11 @@ static const uint8_t kBlackProbeThreshold = 6;
 // photograph of the night sky. Cached on disk under the photo's key and served
 // to every cell from then on, that file is what left Group Photos cells stuck
 // as black squares with no load error anywhere to explain them.
-// Mean channel level (0-255) of encoded JPEG data, and its brightest channel
-// value, read off the same small probe decode. NO when the data won't decode.
-static BOOL jpegDataLevels( NSData *data, CGFloat *meanOut, uint8_t *maxOut )
+// Mean and brightest channel levels of image, drawn into a width x height probe.
+static BOOL cgImageLevels(
+  CGImageRef image, size_t width, size_t height, CGFloat *meanOut, uint8_t *maxOut )
 {
-  if ( data.length == 0 ) return NO;
-  CGImageSourceRef source = CGImageSourceCreateWithData( (__bridge CFDataRef)data, NULL );
-  if ( !source ) return NO;
-  NSDictionary *opts = @{
-    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
-    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( kBlackProbePixel ),
-  };
-  CGImageRef probe =
-    CGImageSourceCreateThumbnailAtIndex( source, 0, (__bridge CFDictionaryRef)opts );
-  CFRelease( source );
-  if ( !probe ) return NO;
-
-  size_t width  = CGImageGetWidth( probe );
-  size_t height = CGImageGetHeight( probe );
-  if ( width == 0 || height == 0 ) { CGImageRelease( probe ); return NO; }
-
+  if ( !image || width == 0 || height == 0 ) return NO;
   CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
   // Same layout as the rasterization buffer: no alpha, so every pixel is the
   // four bytes stepped through below.
@@ -2259,9 +2260,8 @@ static BOOL jpegDataLevels( NSData *data, CGFloat *meanOut, uint8_t *maxOut )
     kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little
   );
   CGColorSpaceRelease( space );
-  if ( !ctx ) { CGImageRelease( probe ); return NO; }
-  CGContextDrawImage( ctx, CGRectMake( 0, 0, width, height ), probe );
-  CGImageRelease( probe );
+  if ( !ctx ) return NO;
+  CGContextDrawImage( ctx, CGRectMake( 0, 0, width, height ), image );
 
   const uint8_t *pixels      = CGBitmapContextGetData( ctx );
   size_t         bytesPerRow = CGBitmapContextGetBytesPerRow( ctx );
@@ -2281,6 +2281,43 @@ static BOOL jpegDataLevels( NSData *data, CGFloat *meanOut, uint8_t *maxOut )
   if ( meanOut ) *meanOut = sum / ( (double)width * height * 3 );
   if ( maxOut )  *maxOut  = maxLevel;
   return YES;
+}
+
+// Mean channel level (0-255) of encoded JPEG data, and its brightest channel
+// value, read off the same small probe decode. NO when the data won't decode.
+static BOOL jpegDataLevels( NSData *data, CGFloat *meanOut, uint8_t *maxOut )
+{
+  if ( data.length == 0 ) return NO;
+  CGImageSourceRef source = CGImageSourceCreateWithData( (__bridge CFDataRef)data, NULL );
+  if ( !source ) return NO;
+  NSDictionary *opts = @{
+    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( kBlackProbePixel ),
+  };
+  CGImageRef probe =
+    CGImageSourceCreateThumbnailAtIndex( source, 0, (__bridge CFDictionaryRef)opts );
+  CFRelease( source );
+  if ( !probe ) return NO;
+  BOOL ok = cgImageLevels(
+    probe, CGImageGetWidth( probe ), CGImageGetHeight( probe ), meanOut, maxOut );
+  CGImageRelease( probe );
+  return ok;
+}
+
+// Mean level of a decoded image, read off a kBlackProbePixel probe of it, or
+// -1 when it has no bitmap to read.
+static CGFloat imageMeanLevel( UIImage *image )
+{
+  CGImageRef cg = image.CGImage;
+  if ( !cg ) return -1;
+  size_t  w       = CGImageGetWidth( cg );
+  size_t  h       = CGImageGetHeight( cg );
+  CGFloat longest = MAX( w, h );
+  if ( longest <= 0 ) return -1;
+  CGFloat scale = MIN( 1, kBlackProbePixel / longest );
+  CGFloat mean  = -1;
+  return cgImageLevels( cg, MAX( 1, (size_t)( w * scale ) ), MAX( 1, (size_t)( h * scale ) ),
+    &mean, NULL ) ? mean : -1;
 }
 
 static BOOL jpegDataIsBlack( NSData *data )
@@ -2827,6 +2864,11 @@ RCT_EXPORT_METHOD( prepareCropSource
     // Raws keep the lazy decode they have always had: their retries and lock
     // are tuned to it, and what UIImage loads for them is the embedded preview.
     BOOL              raw           = isCameraRawFile( input );
+    // A HEIC is drawn by the cropper as it is: the decode below only feeds
+    // detection and the darkness check, so it is drawn at detection size and
+    // no display file is encoded or written.
+    BOOL              heif          = !raw && isHeifFile( input );
+    __block CGFloat   heifLevel     = -1;
     NSMutableDictionary *decodedInfo = [NSMutableDictionary dictionary];
     __block int       encodeMs      = 0;
     __block BOOL      loaded        = NO;
@@ -2866,12 +2908,18 @@ RCT_EXPORT_METHOD( prepareCropSource
       }
     }
     NSTimeInterval convertStarted = [NSDate timeIntervalSinceReferenceDate];
-    display = rasterizedImage( clampToMaxPixel( drawSource, [maxPixel floatValue] ) );
+    display = rasterizedImage( clampToMaxPixel( drawSource,
+      heif ? kSubjectDetectionMaxPixel : [maxPixel floatValue] ) );
     drawSource = nil;
     NSTimeInterval encodeStarted = [NSDate timeIntervalSinceReferenceDate];
     drawMs  = (int)( ( encodeStarted - drawStarted ) * 1000 );
     if ( decodeMs >= 0 ) {
       convertMs = (int)( ( encodeStarted - convertStarted ) * 1000 );
+    }
+    if ( heif ) {
+      heifLevel     = display ? imageMeanLevel( display ) : -1;
+      encodeFailure = display ? nil : @"Decode drew no pixels";
+      return display != nil;
     }
     NSString *decodeEncodeFailure = nil;
     data    = display
@@ -2891,7 +2939,7 @@ RCT_EXPORT_METHOD( prepareCropSource
         : @"Could not load image, file missing", nil );
       return;
     }
-    if ( !data ) {
+    if ( !data && !( heif && display ) ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; attempts: %d",
         encodeFailure ?: @"unknown", attempts],
         diagnosticsError(
@@ -2903,7 +2951,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       withIntermediateDirectories:YES attributes:nil error:nil];
     NSTimeInterval writeStarted = [NSDate timeIntervalSinceReferenceDate];
     NSError *writeError = nil;
-    if ( ![data writeToFile:output options:NSDataWritingAtomic error:&writeError] ) {
+    if ( !heif && ![data writeToFile:output options:NSDataWritingAtomic error:&writeError] ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:
         @"Could not write display image (freeDiskMB=%llu): %@", freeDiskMB( ),
         writeError.localizedDescription], nil );
@@ -2936,7 +2984,7 @@ RCT_EXPORT_METHOD( prepareCropSource
 
     // Free the full-resolution pixels and their JPEG as soon as they're on disk,
     // keeping only what detection needs, so the next raw decode has room.
-    CGFloat displayLevel = jpegDataMeanLevel( data );
+    CGFloat displayLevel = heif ? heifLevel : jpegDataMeanLevel( data );
     data = nil;
     // Scaling the decoded bitmap already in hand, rather than reading the file
     // again at detection size: the bounds stay the ones the detector was tuned
@@ -2950,7 +2998,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       : nil;
 
     resolve( @{
-      @"displayUri": [NSString stringWithFormat:@"file://%@", output],
+      @"displayUri": [NSString stringWithFormat:@"file://%@", heif ? input : output],
       @"width":      @( width ),
       @"height":     @( height ),
       @"bounds":     bounds ?: [NSNull null],

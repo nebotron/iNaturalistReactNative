@@ -51,8 +51,9 @@ export interface PreparedSourceFile {
 }
 
 interface PreparedSource {
-  // The file the cropper draws. The crop itself is still applied to the
-  // original.
+  // The file the cropper draws: the source itself for a HEIC, which React
+  // Native decodes directly, else a JPEG decoded from it. The crop itself is
+  // still applied to the original.
   displayUri: string;
   // Dimensions of the original as a decoder sees it, which is the pixel space
   // the crop is expressed in.
