@@ -45,6 +45,13 @@ afterAll( uniqueRealmAfterAll );
 
 const mockUser = factory( "LocalUser" );
 
+// The real lookup leaves a several-second accuracy timer running past the end
+// of the file, where it fires into whichever suite this worker runs next
+jest.mock( "sharedHelpers/fetchAccurateUserLocation", () => ( {
+  __esModule: true,
+  default: jest.fn( () => ( { latitude: 1, longitude: 1, accuracy: 9 } ) ),
+} ) );
+
 jest.mock( "sharedHooks/useSuggestions/useOnlineSuggestions", ( ) => jest.fn( () => ( {
   dataUpdatedAt: 1764627659, // arbitrary epoch timestamp, 1/1/2000
   error: null,

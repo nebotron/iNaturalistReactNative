@@ -11,6 +11,7 @@ import { recordUploadedDevicePhotoUris } from "sharedHelpers/duplicateUploadedDe
 import {
   mockInteractionManagerRunAfterInteractions,
   navigateToPhotoImporterFromMyObs,
+  pressPhotoGalleryDone,
   waitForMyObservationsScreen,
   waitForMyObsGridItems,
 } from "tests/helpers/addObsBottomSheet";
@@ -125,7 +126,7 @@ const makeMockNode = ( name, timestamp ) => ( {
     filename: `${name}.jpg`,
     filepath: `/path/to/${name}.jpg`,
     extension: "jpg",
-    uri: `file:///path/to/${name}.jpg`,
+    uri: `ph://MOCK-ID-${name}`,
     height: 1920,
     width: 1080,
     fileSize: 123456,
@@ -160,7 +161,7 @@ describe( "Photo Import", ( ) => {
     for ( const node of nodes ) {
       fireEvent.press( screen.getByTestId( `PhotoGallery.${node.image.uri}` ) );
     }
-    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await pressPhotoGalleryDone( );
   }
 
   async function groupPhotosIntoObservation( firstNode, secondNode ) {
@@ -175,7 +176,7 @@ describe( "Photo Import", ( ) => {
     await actor.press( secondPhoto );
     const combineButton = await screen.findByLabelText( /Combine Photos/ );
     await actor.press( combineButton );
-    const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+    const importButton = await screen.findByLabelText( /IMPORT 1 OBSERVATION/ );
     await actor.press( importButton );
   }
 
@@ -191,7 +192,7 @@ describe( "Photo Import", ( ) => {
     await waitFor( ( ) => {
       expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
-    const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+    const importButton = await screen.findByLabelText( /IMPORT 1 OBSERVATION/ );
     await actor.press( importButton );
 
     const obsGridItems = await waitForMyObsGridItems();
@@ -229,7 +230,7 @@ describe( "Photo Import", ( ) => {
       await waitFor( ( ) => {
         expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
       }, { timeout: 10_000 } );
-      const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+      const importButton = await screen.findByLabelText( /IMPORT 1 OBSERVATION/ );
       await actor.press( importButton );
 
       // The import sends the user back to My Obs and keeps saving in the

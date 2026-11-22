@@ -24,6 +24,9 @@ jest.mock( "sharedHelpers/imageCropPreload", ( ) => {
   const cache = new Map( );
   return {
     preloadCache: cache,
+    PRELOAD_LOOKAHEAD: 10,
+    releaseCropSource: jest.fn( ),
+    takeCropRequestedAt: jest.fn( ( ) => 0 ),
     enqueuePreload: jest.fn( uri => {
       const cached = cache.get( uri );
       return cached

@@ -325,8 +325,8 @@ describe( "ExploreResults observations sort", ( ) => {
   it( "offers most faved", async ( ) => {
     const actor = await openSortSheet( OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST );
 
+    // The observations sort applies as soon as an option is picked
     await actor.press( screen.getByText( "Most faved" ) );
-    await actor.press( screen.getByText( "CONFIRM" ) );
 
     expect( mockDispatch ).toHaveBeenCalledWith( {
       type: EXPLORE_V2_ACTION.SET_SORT,

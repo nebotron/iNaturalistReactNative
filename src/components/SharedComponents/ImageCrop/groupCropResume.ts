@@ -64,3 +64,19 @@ export const groupCropResumeParams = (
     remainingUris: [imageUri, ...pendingImageUris],
   };
 };
+
+// The My Observations tab with the cropper reopened on top of Group Photos
+export const observationsTabWithCropper = (
+  cropParams: SharedStackParamList["ImageCropEditor"],
+  groupPhotosParams?: object,
+) => ( {
+  name: "ObservationsTab",
+  state: {
+    index: 2,
+    routes: [
+      { name: "ObsList" },
+      { name: "GroupPhotos", params: groupPhotosParams },
+      { name: "ImageCropEditor", params: cropParams },
+    ],
+  },
+} );

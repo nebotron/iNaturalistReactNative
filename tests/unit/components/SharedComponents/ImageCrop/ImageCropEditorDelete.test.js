@@ -56,13 +56,23 @@ describe( "ImageCropEditor delete from Group Photos", ( ) => {
   // Photos grid, so it has to leave the same trail: staged for device deletion
   // and recorded as removed, which is what keeps it out of the photo picker.
   it( "stages the photo for device deletion and records it as removed", ( ) => {
+    // A second photo keeps the import going: deleting the last one discards
+    // the whole import instead
     useStore.setState( {
-      groupedPhotos: [{
-        photos: [{
-          image: { uri: DISPLAY_URI },
-          originalDevicePhotoUri: DEVICE_URI,
-        }],
-      }],
+      groupedPhotos: [
+        {
+          photos: [{
+            image: { uri: DISPLAY_URI },
+            originalDevicePhotoUri: DEVICE_URI,
+          }],
+        },
+        {
+          photos: [{
+            image: { uri: "file:///local_2.jpg" },
+            originalDevicePhotoUri: "ph://DEVICE-2",
+          }],
+        },
+      ],
     } );
     renderComponent( <ImageCropEditor /> );
 
@@ -70,6 +80,7 @@ describe( "ImageCropEditor delete from Group Photos", ( ) => {
 
     expect( useStore.getState( ).pendingGroupPhotoDeletionUris ).toContain( DEVICE_URI );
     expect( getRemovedGroupPhotoUris( ) ).toContain( DEVICE_URI );
-    expect( useStore.getState( ).groupedPhotos ).toHaveLength( 0 );
+    expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://DEVICE-2" );
+    expect( useStore.getState( ).groupedPhotos ).toHaveLength( 1 );
   } );
 } );

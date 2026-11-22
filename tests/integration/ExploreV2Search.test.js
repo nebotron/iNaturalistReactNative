@@ -223,9 +223,11 @@ describe( "searching from Advanced Search", ( ) => {
       expect( lastObservationsSearchParams( ) ).toMatchObject( { taxon_id: mockTaxon.id } );
     } );
 
-    const tabBar = await screen.findByTestId( "CustomTabBar" );
-    await actor.press( within( tabBar ).getByTestId( "NavButton.personIcon" ) );
-    await actor.press( within( tabBar ).getByText( "Explore" ) );
+    await actor.press( within( await screen.findByTestId( "CustomTabBar" ) )
+      .getByTestId( "NavButton.personIcon" ) );
+    // The Me tab resets its stack, which renders the tab bar afresh
+    await actor.press( within( await screen.findByTestId( "CustomTabBar" ) )
+      .getByText( "Explore" ) );
 
     await screen.findByTestId( "ExploreResults" );
     const header = await screen.findByTestId( "ExploreV2Header" );

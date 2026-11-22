@@ -172,7 +172,6 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
 
     fireEvent.press( screen.getByTestId( "GroupPhotos.remove.file:///local_1.jpg" ) );
     fireEvent.press( screen.getByTestId( "GroupPhotos.discard" ) );
-    fireEvent.press( screen.getByText( "DISCARD ALL" ) );
 
     expect( getRemovedGroupPhotoUris( ) ).toContain( "ph://DEVICE-1" );
     expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://DEVICE-2" );
@@ -193,7 +192,6 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
     renderComponent( <GroupPhotosContainer /> );
 
     fireEvent.press( screen.getByTestId( "GroupPhotos.discard" ) );
-    fireEvent.press( screen.getByText( "DISCARD ALL" ) );
 
     expect(
       getPreviouslyUploadedDevicePhotoUrisSet( global.realm ),

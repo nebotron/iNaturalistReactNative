@@ -73,8 +73,17 @@ export async function searchForTaxon( taxon, realm ) {
   await submitAdvancedSearch( );
 }
 
-/** The params of the most recent observations search, i.e. what the user's choices produced. */
+/** The params of the most recent Explore observations search, i.e. what the user's choices
+ * produced. Searches from lists in other tabs, like My Observations paging in the background,
+ * are skipped: only Explore asks for the bounds of its results. The params are copied without
+ * the query's own context (its client, signal and so on), which only gets in the way of
+ * comparing them. */
 export function lastObservationsSearchParams( ) {
   const { calls } = inatjs.observations.search.mock;
-  return calls[calls.length - 1]?.[0];
+  const params = calls.map( call => call[0] ).filter( p => p?.return_bounds ).at( -1 );
+  if ( !params ) return params;
+  const {
+    client, queryKey, pageParam, direction, meta, signal, ...searchParams
+  } = params;
+  return searchParams;
 }

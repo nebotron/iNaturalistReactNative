@@ -159,11 +159,14 @@ describe( "logged in", ( ) => {
         await actor.press( taxonPressable );
         const exploreButton = await screen.findByLabelText( /See observations of this taxon in explore/ );
         await actor.press( exploreButton );
-        expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
-          taxon_id: mockTaxon.id,
-          verifiable: true,
-        } ), {
-          api_token: TEST_JWT,
+        // Explore's searches also pass an abort signal along with the token
+        await waitFor( ( ) => {
+          expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
+            taxon_id: mockTaxon.id,
+            verifiable: true,
+          } ), expect.objectContaining( {
+            api_token: TEST_JWT,
+          } ) );
         } );
         const defaultGlobalLocation = await screen.findByText( /Worldwide/ );
         expect( defaultGlobalLocation ).toBeVisible( );
@@ -195,11 +198,14 @@ describe( "logged in", ( ) => {
         expect( inatjs.users.fetch ).toHaveBeenCalled( );
         const observationsButton = await screen.findByLabelText( /See observations by this user in Explore/ );
         await actor.press( observationsButton );
-        expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
-          user_id: mockUser.id,
-          verifiable: true,
-        } ), {
-          api_token: TEST_JWT,
+        // Explore's searches also pass an abort signal along with the token
+        await waitFor( ( ) => {
+          expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
+            user_id: mockUser.id,
+            verifiable: true,
+          } ), expect.objectContaining( {
+            api_token: TEST_JWT,
+          } ) );
         } );
         const defaultGlobalLocation = await screen.findByText( /Worldwide/ );
         expect( defaultGlobalLocation ).toBeVisible( );
@@ -233,11 +239,17 @@ describe( "logged in", ( ) => {
         expect( inatjs.users.fetch ).toHaveBeenCalled( );
         const speciesButton = await screen.findByLabelText( /See species observed by this user in Explore/ );
         await actor.press( speciesButton );
-        expect( inatjs.observations.speciesCounts ).toHaveBeenCalledWith( expect.objectContaining( {
-          user_id: mockUser.id,
-          verifiable: true,
-        } ), {
-          api_token: TEST_JWT,
+        // Explore's searches also pass an abort signal along with the token
+        await waitFor( ( ) => {
+          expect( inatjs.observations.speciesCounts ).toHaveBeenCalledWith(
+            expect.objectContaining( {
+              user_id: mockUser.id,
+              verifiable: true,
+            } ),
+            expect.objectContaining( {
+              api_token: TEST_JWT,
+            } ),
+          );
         } );
         const defaultGlobalLocation = await screen.findByText( /Worldwide/ );
         expect( defaultGlobalLocation ).toBeVisible( );
@@ -300,11 +312,14 @@ describe( "logged in", ( ) => {
         await actor.press( userProfileButton );
         const observationsButton = await screen.findByLabelText( /See observations by this user in Explore/ );
         await actor.press( observationsButton );
-        expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
-          user_id: mockUser.id,
-          verifiable: true,
-        } ), {
-          api_token: TEST_JWT,
+        // Explore's searches also pass an abort signal along with the token
+        await waitFor( ( ) => {
+          expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
+            user_id: mockUser.id,
+            verifiable: true,
+          } ), expect.objectContaining( {
+            api_token: TEST_JWT,
+          } ) );
         } );
         const observationsViewIcon = await screen.findByLabelText( /Observations View/ );
         expect( observationsViewIcon ).toBeVisible( );

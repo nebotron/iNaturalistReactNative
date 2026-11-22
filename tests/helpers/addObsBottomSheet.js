@@ -51,14 +51,6 @@ export async function pressAddObservationsButton() {
   await actor.longPress( await findAddObservationsButton( ) );
 }
 
-/**
- * A regular press on the add-observation button, which in the all-options
- * layout goes straight to the photo importer.
- */
-export async function tapAddObservationsButton() {
-  await actor.press( await findAddObservationsButton( ) );
-}
-
 /** Presses an option in the open add-observation bottom sheet. */
 export async function pressAddObsOption( testID ) {
   const button = await screen.findByTestId( testID );
@@ -81,11 +73,22 @@ export async function navigateToPhotoImporterFromMyObs() {
   await waitFor( ( ) => {
     expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
   } );
-  await tapAddObservationsButton( );
+  await pressAddObservationsButton( );
+  await pressAddObsOption( ADD_OBS_OPTIONS.photoImporter );
   await advancePhotoLibraryTimers( );
   await waitFor( ( ) => {
     expect( screen.getByTestId( "PhotoLibrary" ) ).toBeTruthy( );
   }, { timeout: 10_000 } );
+}
+
+/**
+ * Presses Done in the photo picker. That goes straight on into the cropper for
+ * the batch just picked, with Group Photos underneath, so this backs out of
+ * the cropper to land on Group Photos.
+ */
+export async function pressPhotoGalleryDone() {
+  await actor.press( screen.getByTestId( "PhotoGallery.done" ) );
+  await actor.press( await screen.findByTestId( "BackButton", {}, { timeout: 10_000 } ) );
 }
 
 export async function waitForSoundRecorderScreen() {

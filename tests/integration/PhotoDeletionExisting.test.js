@@ -13,6 +13,7 @@ import factory, { makeResponse } from "tests/factory";
 import {
   mockInteractionManagerRunAfterInteractions,
   navigateToPhotoImporterFromMyObs,
+  pressPhotoGalleryDone,
   waitForMyObsGridItems,
 } from "tests/helpers/addObsBottomSheet";
 import faker from "tests/helpers/faker";
@@ -26,6 +27,13 @@ jest.unmock( "@react-navigation/native" );
 
 const mockUser = factory( "LocalUser" );
 // Mock useCurrentUser hook
+// The real lookup leaves a several-second accuracy timer running past the end
+// of the file, where it fires into whichever suite this worker runs next
+jest.mock( "sharedHelpers/fetchAccurateUserLocation", () => ( {
+  __esModule: true,
+  default: jest.fn( () => ( { latitude: 1, longitude: 1, accuracy: 9 } ) ),
+} ) );
+
 jest.mock( "sharedHooks/useCurrentUser", () => ( {
   __esModule: true,
   default: jest.fn( () => mockUser ),
@@ -109,11 +117,11 @@ describe( "Photo Deletion with existing saved observation", () => {
       expect( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) ).toBeTruthy( );
     }, { timeout: 10_000 } );
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) );
-    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await pressPhotoGalleryDone( );
     await waitFor( ( ) => {
       expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
-    const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+    const importButton = await screen.findByLabelText( /IMPORT 1 OBSERVATION/ );
     await actor.press( importButton );
     const obsGridItems = await waitForMyObsGridItems();
     await actor.press( obsGridItems[0] );
@@ -129,10 +137,10 @@ describe( "Photo Deletion with existing saved observation", () => {
   }
 
   async function expectNoPhotosInStandardCamera() {
-    // Back on the camera, with no photos left in its photo strip
+    // Back on the camera, with no latest-photo thumbnail left
     expect( await screen.findByTestId( "take-photo-button" ) ).toBeVisible();
     await waitFor( () => {
-      expect( screen.queryAllByTestId( /PhotoCarousel\.displayPhoto/ ) ).toHaveLength( 0 );
+      expect( screen.queryByTestId( "AICamera.latestPhoto" ) ).toBeNull( );
     } );
   }
 
@@ -163,9 +171,8 @@ describe( "Photo Deletion with existing saved observation", () => {
     await waitFor( () => {
       expect( screen.getByTestId( "take-photo-button" ) ).toBeVisible();
     } );
-    // Tap the photo preview to enter the MediaViewer
-    const carouselPhoto = await screen.findByTestId( /PhotoCarousel\.displayPhoto/ );
-    fireEvent.press( carouselPhoto );
+    // Tap the latest-photo thumbnail to enter the MediaViewer
+    await actor.press( await screen.findByTestId( "AICamera.latestPhoto" ) );
     await deletePhotoInMediaViewer();
     await expectNoPhotosInStandardCamera();
   } );

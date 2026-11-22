@@ -13,6 +13,7 @@ import factory, { makeResponse } from "tests/factory";
 import {
   mockInteractionManagerRunAfterInteractions,
   navigateToPhotoImporterFromMyObs,
+  pressPhotoGalleryDone,
 } from "tests/helpers/addObsBottomSheet";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
@@ -232,11 +233,11 @@ describe( "MyObservations -> Photo Importer -> ObsEdit -> MyObservations", ( ) =
       expect( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) ).toBeTruthy( );
     }, { timeout: 10_000 } );
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) );
-    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await pressPhotoGalleryDone( );
     await waitFor( ( ) => {
       expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
-    const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+    const importButton = await screen.findByLabelText( /IMPORT 1 OBSERVATION/ );
     await actor.press( importButton );
     await waitForDisplayedText( /Upload 3 observations/, 10_000 );
   } );

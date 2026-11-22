@@ -16,6 +16,7 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
   testID="MyObservations.obsGridItem.00000000-0000-0000-0000-000000000000"
 >
   <View
+    onLayout={[Function]}
     style={
       {
         "aspectRatio": 1,
@@ -67,7 +68,7 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
             ]
           }
         >
-          
+          
         </Text>
       </View>
     </View>
@@ -86,7 +87,7 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
         source={
           {
             "cachePolicy": "discNoCacheControl",
-            "resizeMode": "cover",
+            "resizeMode": "contain",
             "transitionDuration": 0,
             "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg",
           }
@@ -179,6 +180,7 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
   testID="MyObservations.obsGridItem.00000000-0000-0000-0000-000000000000"
 >
   <View
+    onLayout={[Function]}
     style={
       {
         "aspectRatio": 1,
@@ -230,7 +232,7 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
             ]
           }
         >
-          
+          
         </Text>
       </View>
     </View>

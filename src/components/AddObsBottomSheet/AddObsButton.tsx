@@ -4,7 +4,10 @@ import AddObsBottomSheet from "components/AddObsBottomSheet/AddObsBottomSheet";
 import AddObsTooltip from "components/AddObsBottomSheet/AddObsTooltip";
 import useAudioIdSession from "components/AudioId/audioIdSession";
 import GradientButton from "components/SharedComponents/Buttons/GradientButton";
-import { groupCropResumeParams } from "components/SharedComponents/ImageCrop/groupCropResume";
+import {
+  groupCropResumeParams,
+  observationsTabWithCropper,
+} from "components/SharedComponents/ImageCrop/groupCropResume";
 import { navigationRef } from "navigation/navigationUtils";
 import type { RootStackParamList } from "navigation/types";
 import * as React from "react";
@@ -195,17 +198,10 @@ const AddObsButton = ( ) => {
       if ( crop ) {
         const tabState = navigationRef.getRootState( )?.routes
           .find( route => route.name === "TabNavigator" )?.state;
-        const observationsTab = {
-          name: "ObservationsTab",
-          state: {
-            index: 2,
-            routes: [
-              { name: "ObsList" },
-              { name: "GroupPhotos", params: { ...params, previousScreen: currentRoute } },
-              { name: "ImageCropEditor", params: crop.params },
-            ],
-          },
-        };
+        const observationsTab = observationsTabWithCropper(
+          crop.params,
+          { ...params, previousScreen: currentRoute },
+        );
         const tabRoutes = tabState?.routes?.length
           ? tabState.routes.map( route => ( route.name === "ObservationsTab"
             ? observationsTab

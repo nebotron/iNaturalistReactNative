@@ -323,9 +323,12 @@ describe( "Suggestions", ( ) => {
         safeRealmWrite( global.mockRealms[__filename], ( ) => {
           global.mockRealms[__filename].create( "Taxon", mockSearchResultTaxon, "modified" );
         }, "writing a searchable taxon for Suggestions integration test" );
-        await act(
-          async ( ) => actor.type( searchInput, "Searchable taxon" ),
-        );
+        // Typed outside act, so each keystroke sees the text the last one left
+        await actor.type( searchInput, "Searchable taxon" );
+        // Past the search bar's debounce
+        act( ( ) => {
+          jest.advanceTimersByTime( 400 );
+        } );
         const taxonResultButton = await screen.findByTestId(
           `Search.taxa.${mockSearchResultTaxon.id}`,
         );

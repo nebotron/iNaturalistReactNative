@@ -9,7 +9,11 @@ import {
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import {
+  ADD_OBS_OPTIONS,
   navigateToPhotoImporterFromMyObs,
+  pressAddObservationsButton,
+  pressAddObsOption,
+  pressPhotoGalleryDone,
 } from "tests/helpers/addObsBottomSheet";
 import { renderApp } from "tests/helpers/render";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
@@ -106,7 +110,7 @@ describe( "PhotoLibrary navigation", ( ) => {
 
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode2.image.uri}` ) );
-    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await pressPhotoGalleryDone( );
 
     await waitFor( ( ) => {
       expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
@@ -127,7 +131,7 @@ describe( "PhotoLibrary navigation", ( ) => {
     }, { timeout: 10_000 } );
 
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
-    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await pressPhotoGalleryDone( );
 
     await waitFor( ( ) => {
       expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
@@ -148,7 +152,7 @@ describe( "PhotoLibrary navigation", ( ) => {
       ).toBeTruthy( );
     }, { timeout: 10_000 } );
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
-    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await pressPhotoGalleryDone( );
 
     await waitFor( ( ) => {
       expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
@@ -169,7 +173,9 @@ describe( "PhotoLibrary navigation", ( ) => {
       expect( screen.queryByTestId( "PhotoLibrary" ) ).toBeNull( );
     }, { timeout: 10_000 } );
 
-    fireEvent.press( within( tabBar ).getByTestId( "NavButton.personIcon" ) );
+    // The Me tab always opens the observation list; the import resumes from +
+    await pressAddObservationsButton( );
+    await pressAddObsOption( ADD_OBS_OPTIONS.photoImporter );
     await waitFor( ( ) => {
       expect( screen.getByTestId( "PhotoLibrary" ) ).toBeTruthy( );
     }, { timeout: 10_000 } );

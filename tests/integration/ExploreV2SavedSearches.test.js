@@ -19,6 +19,7 @@ import {
 } from "tests/helpers/exploreV2";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
+import { skipDefaultSavedSearches } from "tests/helpers/savedSearch";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
@@ -90,6 +91,8 @@ beforeEach( async ( ) => {
   setStoreStateLayout( { isDefaultMode: false, isAllAddObsOptionsMode: true } );
   enableExploreV2( );
   inatjs.observations.search.mockClear( );
+  // Starts from an empty list rather than the starter saved searches
+  skipDefaultSavedSearches( mockUser.id );
   await signIn( mockUser, { realm: global.mockRealms[__filename] } );
 } );
 
@@ -125,9 +128,10 @@ describe( "saved searches", ( ) => {
     await actor.press( within( savedList ).getByText( "Cup plants" ) );
 
     await screen.findByTestId( "ExploreResults" );
-    await waitFor( ( ) => {
-      expect( lastObservationsSearchParams( ) ).toMatchObject( { taxon_id: mockTaxon.id } );
-    } );
+    // The same search ran earlier, so its results can come from the cache
+    // rather than a new request: check the search the screen is showing
+    const header = await screen.findByTestId( "ExploreV2Header" );
+    expect( within( header ).getByText( mockTaxon.name ) ).toBeVisible( );
     expect( screen.queryByLabelText( "Save this search" ) ).toBeNull( );
 
     await openAdvancedSearch( );

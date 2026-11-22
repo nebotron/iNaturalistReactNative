@@ -12,6 +12,13 @@ const mockedNavigate = jest.fn();
 
 const mockTaxon = factory( "RemoteTaxon" );
 
+// The real lookup leaves a several-second accuracy timer running past the end
+// of the file, where it fires into whichever suite this worker runs next
+jest.mock( "sharedHelpers/fetchAccurateUserLocation", () => ( {
+  __esModule: true,
+  default: jest.fn( () => ( { latitude: 1, longitude: 1, accuracy: 9 } ) ),
+} ) );
+
 jest.mock( "sharedHooks/useAuthenticatedQuery", () => ( {
   __esModule: true,
   default: () => ( {
