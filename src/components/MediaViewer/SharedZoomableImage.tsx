@@ -32,6 +32,10 @@ const BrightenedImage = NativeModules.ImageCropper
   ? requireNativeComponent<ViewProps & {
     uri: string;
     brightness: number;
+    // Brighten every pixel rather than a downsampled copy. Required in the
+    // crop editor (see ImageCropView), which must never show anything but the
+    // full-resolution photo.
+    fullResolution: boolean;
   }>( "BrightenedImage" )
   : null;
 
@@ -271,6 +275,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
                   pointerEvents="none"
                   uri={uri}
                   brightness={brightness}
+                  fullResolution={!!fullResolution}
                 />
               )}
             </Animated.View>

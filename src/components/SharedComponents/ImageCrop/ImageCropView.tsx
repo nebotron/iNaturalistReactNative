@@ -501,6 +501,13 @@ const ImageCropView = ( {
               autoReset={!initialCrop}
               cropPanContext={cropPanContext}
               brightness={brightness}
+              // DESIGN REQUIREMENT: the cropper always shows the photo at full
+              // resolution -- the plain image and the brightened preview alike
+              // -- so the user can see the subject clearly while framing it.
+              // Never draw a downsampled or display-sized decode here, not even
+              // to load faster or save memory; find another way to speed up.
+              // sourceUri is already full size (DISPLAY_MAX_PIXEL in
+              // prepareCropSource.ts), so don't pass maxPixelSize or detail.
               fullResolution
               testID={`ImageCropView.${sourceUri}`}
               onInteractionEnd={updateDownsizeStatus}

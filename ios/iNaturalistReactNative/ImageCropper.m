@@ -3945,24 +3945,30 @@ RCT_EXPORT_METHOD( saveCroppedAsset
 
 // ─── Live brightness preview ─────────────────────────────────────────────────
 
-// Longest side of the preview's decode. Large enough to stay sharp on screen
-// and moderately zoomed in, small enough that re-applying the gain on every
-// slider tick keeps up.
+// Longest side of the preview's decode outside the cropper (fullResolution
+// off). Large enough to stay sharp on screen and moderately zoomed in, small
+// enough that re-applying the gain on every slider tick keeps up.
 static const CGFloat kBrightnessPreviewMaxPixel = 2560;
 
-// An 8-bit RGBX copy of the image in src, orientation applied, at most
-// kBrightnessPreviewMaxPixel on its longest side, in the colour space
-// croppedJpegData's brightening draws in. NULL on failure.
-static NSData *brightnessPreviewPixels( CGImageSourceRef src, size_t *outW, size_t *outH,
+// An 8-bit RGBX copy of the image in src, orientation applied, in the colour
+// space croppedJpegData's brightening draws in: at most maxPixel on its
+// longest side, or every pixel of the image when maxPixel is 0. NULL on
+// failure.
+static NSData *brightnessPreviewPixels( CGImageSourceRef src, CGFloat maxPixel,
+                                        size_t *outW, size_t *outH,
                                         CGColorSpaceRef *outSpace )
 {
   if ( !src || CGImageSourceGetCount( src ) == 0 ) return nil;
-  NSDictionary *options = @{
+  NSMutableDictionary *options = [@{
     (id)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
     (id)kCGImageSourceCreateThumbnailWithTransform: @YES,
-    (id)kCGImageSourceThumbnailMaxPixelSize: @( kBrightnessPreviewMaxPixel ),
     (id)kCGImageSourceShouldCacheImmediately: @YES,
-  };
+  } mutableCopy];
+  // Without a max pixel size, ImageIO's "thumbnail" is the whole image at its
+  // own size: the full-resolution decode, just with orientation applied.
+  if ( maxPixel > 0 ) {
+    options[(id)kCGImageSourceThumbnailMaxPixelSize] = @( maxPixel );
+  }
   CGImageRef image = CGImageSourceCreateThumbnailAtIndex(
     src, primaryImageIndex( src ), (__bridge CFDictionaryRef)options );
   if ( !image ) return nil;
@@ -4004,9 +4010,15 @@ static dispatch_queue_t brightnessPreviewQueue( void )
 // the same per-pixel policy the cropped file is written with -- in place of the
 // CSS brightness() filter, which clamps each channel on its own. Transparent
 // until the first render, so whatever is drawn beneath shows meanwhile.
+//
+// fullResolution decodes and brightens every pixel of the photo instead of a
+// kBrightnessPreviewMaxPixel copy. The crop editor sets it, and must: see
+// DISPLAY_MAX_PIXEL in prepareCropSource.ts -- the cropper only ever shows the
+// photo at full resolution, brightened or not.
 @interface BrightenedImageView : UIView
 @property ( nonatomic, copy ) NSString *uri;
 @property ( nonatomic, assign ) float brightness;
+@property ( nonatomic, assign ) BOOL fullResolution;
 @end
 
 @implementation BrightenedImageView
@@ -4017,6 +4029,10 @@ static dispatch_queue_t brightnessPreviewQueue( void )
   CGColorSpaceRef _space;
   BOOL            _rendering;
   BOOL            _renderAgain;
+  // Bumped whenever uri or fullResolution changes, so a decode that finishes
+  // for an earlier source is dropped.
+  NSUInteger      _sourceGeneration;
+  BOOL            _loadScheduled;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -4047,21 +4063,53 @@ static dispatch_queue_t brightnessPreviewQueue( void )
 {
   if ( [uri isEqualToString:_uri] ) return;
   _uri = [uri copy];
+  [self sourceChanged];
+}
+
+- (void)setFullResolution:(BOOL)fullResolution
+{
+  if ( fullResolution == _fullResolution ) return;
+  _fullResolution = fullResolution;
+  [self sourceChanged];
+}
+
+// Drops the current decode and loads the new source once this batch of props
+// has all been set, so a uri and fullResolution set together decode once, at
+// the resolution asked for.
+- (void)sourceChanged
+{
+  _sourceGeneration += 1;
   _pixels = nil;
   CGColorSpaceRelease( _space );
   _space = NULL;
   self.layer.contents = nil;
+  if ( _loadScheduled ) return;
+  _loadScheduled = YES;
+  __weak BrightenedImageView *weakSelf = self;
+  dispatch_async( dispatch_get_main_queue( ), ^{
+    BrightenedImageView *view = weakSelf;
+    if ( !view ) return;
+    view->_loadScheduled = NO;
+    [view loadSource];
+  } );
+}
+
+- (void)loadSource
+{
+  NSString  *uri = _uri;
   if ( uri.length == 0 ) return;
+  NSUInteger generation = _sourceGeneration;
+  CGFloat    maxPixel = _fullResolution ? 0 : kBrightnessPreviewMaxPixel;
 
   __weak BrightenedImageView *weakSelf = self;
   void ( ^decode )( CGImageSourceRef ) = ^( CGImageSourceRef src ) {
     size_t          W = 0, H = 0;
     CGColorSpaceRef space = NULL;
-    NSData         *pixels = brightnessPreviewPixels( src, &W, &H, &space );
+    NSData         *pixels = brightnessPreviewPixels( src, maxPixel, &W, &H, &space );
     if ( src ) CFRelease( src );
     dispatch_async( dispatch_get_main_queue( ), ^{
       BrightenedImageView *view = weakSelf;
-      if ( view && pixels && [view.uri isEqualToString:uri] ) {
+      if ( view && pixels && view->_sourceGeneration == generation ) {
         view->_pixels = pixels;
         view->_pixelsW = W;
         view->_pixelsH = H;
@@ -4132,7 +4180,7 @@ static dispatch_queue_t brightnessPreviewQueue( void )
   size_t          W = _pixelsW, H = _pixelsH;
   CGColorSpaceRef space = CGColorSpaceRetain( _space );
   float           k = _brightness;
-  NSString       *uri = _uri;
+  NSUInteger      generation = _sourceGeneration;
   __weak BrightenedImageView *weakSelf = self;
   dispatch_async( brightnessPreviewQueue( ), ^{
     NSMutableData *pixels = [base mutableCopy];
@@ -4147,7 +4195,7 @@ static dispatch_queue_t brightnessPreviewQueue( void )
       BrightenedImageView *view = weakSelf;
       if ( view ) {
         view->_rendering = NO;
-        if ( image && [view.uri isEqualToString:uri] ) {
+        if ( image && view->_sourceGeneration == generation ) {
           [CATransaction begin];
           [CATransaction setDisableActions:YES];
           view.layer.contents = (__bridge id)image;
@@ -4174,6 +4222,7 @@ RCT_EXPORT_MODULE( )
 
 RCT_EXPORT_VIEW_PROPERTY( uri, NSString )
 RCT_EXPORT_VIEW_PROPERTY( brightness, float )
+RCT_EXPORT_VIEW_PROPERTY( fullResolution, BOOL )
 
 - (UIView *)view { return [BrightenedImageView new]; }
 
