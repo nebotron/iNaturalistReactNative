@@ -1,4 +1,5 @@
 import { fetchSpeciesCounts } from "api/observations";
+import { roundNearbyCoords } from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import {
   referencedSavedSearches,
   resolveExcludedSpeciesIds,
@@ -154,7 +155,10 @@ describe( "resolveExcludedSpeciesIds", ( ) => {
 
     await resolveExcludedSpeciesIds( excluding( "Nearby" ), context( [nearby] ) );
 
-    expect( fetchSpeciesCounts.mock.calls[0][0] ).toMatchObject( { lat: 1, lng: 2, radius: 5 } );
+    expect( fetchSpeciesCounts.mock.calls[0][0] ).toMatchObject( {
+      ...roundNearbyCoords( { lat: 1, lng: 2 } ),
+      radius: 5,
+    } );
   } );
 } );
 

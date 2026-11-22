@@ -144,8 +144,8 @@ describe( "ExploreResults nearby resolution", ( ) => {
 
     await waitFor( ( ) => {
       const { params, enabled } = lastScrollArgs( );
-      expect( params.lat ).toBe( 37.5 );
-      expect( params.lng ).toBe( -122.1 );
+      expect( params.lat ).toBeCloseTo( 37.5, 3 );
+      expect( params.lng ).toBeCloseTo( -122.1, 3 );
       expect( params.radius ).toBe( 1 );
       expect( enabled ).toBe( true );
     } );

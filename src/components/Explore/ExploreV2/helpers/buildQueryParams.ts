@@ -44,6 +44,27 @@ export interface NearbyCoords {
   lng: number;
 }
 
+// Metres in a degree of latitude, and in a degree of longitude at the equator
+const METERS_PER_DEGREE = 111320;
+const NEARBY_GRID_METERS = 100;
+
+// The location snapped to a 100 m grid, so a Nearby search from about the same
+// spot makes the same query and finds results saved from before, offline too.
+// Each latitude band has its own longitude step, so the grid stays 100 m wide.
+export const roundNearbyCoords = ( { lat, lng }: NearbyCoords ): NearbyCoords => {
+  const latStep = NEARBY_GRID_METERS / METERS_PER_DEGREE;
+  const roundedLat = Math.round( lat / latStep ) * latStep;
+  // Near the poles a degree of longitude shrinks to nothing
+  const cosLat = Math.max( Math.cos( roundedLat * ( Math.PI / 180 ) ), 0.01 );
+  const lngStep = latStep / cosLat;
+  const roundedLng = Math.round( lng / lngStep ) * lngStep;
+  // Fixed decimals, so the same cell always gives the same query key
+  return {
+    lat: Number( roundedLat.toFixed( 6 ) ),
+    lng: Number( Math.max( -180, Math.min( 180, roundedLng ) ).toFixed( 6 ) ),
+  };
+};
+
 // Whether the search leaves out the species a saved search finds. See excludedSpecies.
 export const excludesSpecies = ( state: Pick<ExploreV2State, "filters"> ): boolean => (
   !!state.filters.excludeSpeciesInSavedSearch
@@ -92,8 +113,9 @@ const buildExploreV2QueryParams = (
   switch ( location.placeMode ) {
     case EXPLORE_V2_PLACE_MODE.NEARBY:
       if ( nearbyCoords ) {
-        params.lat = nearbyCoords.lat;
-        params.lng = nearbyCoords.lng;
+        const { lat, lng } = roundNearbyCoords( nearbyCoords );
+        params.lat = lat;
+        params.lng = lng;
         params.radius = location.radius ?? DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM;
       }
       break;

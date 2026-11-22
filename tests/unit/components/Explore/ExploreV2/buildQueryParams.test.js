@@ -1,5 +1,6 @@
-import buildExploreV2QueryParams
-  from "components/Explore/ExploreV2/helpers/buildQueryParams";
+import buildExploreV2QueryParams, {
+  roundNearbyCoords,
+} from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import {
   EXPLORE_V2_PLACE_MODE,
   initialExploreV2State,
@@ -92,10 +93,51 @@ describe( "buildExploreV2QueryParams", ( ) => {
         lng: -122.1,
         radius: 1,
       } );
-      expect( params.lat ).toBe( 37.5 );
-      expect( params.lng ).toBe( -122.1 );
+      expect( params.lat ).toBeCloseTo( 37.5, 3 );
+      expect( params.lng ).toBeCloseTo( -122.1, 3 );
       expect( params.radius ).toBe( 1 );
       expect( params.place_id ).toBeUndefined( );
+    } );
+
+    it( "rounds the nearby location to the nearest 100 m", ( ) => {
+      const state = {
+        ...initialExploreV2State,
+        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY },
+      };
+      const here = buildExploreV2QueryParams( state, { lat: 37.50001, lng: -122.10001 } );
+      // About 20 m away
+      const nextDoor = buildExploreV2QueryParams( state, { lat: 37.50017, lng: -122.10001 } );
+      expect( nextDoor.lat ).toBe( here.lat );
+      expect( nextDoor.lng ).toBe( here.lng );
+    } );
+  } );
+
+  describe( "roundNearbyCoords", ( ) => {
+    const metersBetween = ( a, b ) => {
+      const dLat = ( a.lat - b.lat ) * 111320;
+      const dLng = ( a.lng - b.lng ) * 111320 * Math.cos( a.lat * ( Math.PI / 180 ) );
+      return Math.hypot( dLat, dLng );
+    };
+
+    it.each( [
+      [0, 0],
+      [37.5123, -122.1456],
+      [-33.86, 151.21],
+      [64.1466, -21.9426],
+    ] )( "moves (%s, %s) no more than ~71 m, half a 100 m cell's diagonal", ( lat, lng ) => {
+      const rounded = roundNearbyCoords( { lat, lng } );
+      expect( metersBetween( { lat, lng }, rounded ) ).toBeLessThanOrEqual( 71 );
+    } );
+
+    it( "puts points 200 m apart in different cells", ( ) => {
+      const a = roundNearbyCoords( { lat: 37.5, lng: -122.1 } );
+      const b = roundNearbyCoords( { lat: 37.5 + 200 / 111320, lng: -122.1 } );
+      expect( b.lat ).not.toBe( a.lat );
+    } );
+
+    it( "returns the same values for a point already on the grid", ( ) => {
+      const once = roundNearbyCoords( { lat: 37.5123, lng: -122.1456 } );
+      expect( roundNearbyCoords( once ) ).toEqual( once );
     } );
 
     it( "omits coords in NEARBY mode when coords are unresolved (worldwide fallback)", ( ) => {
@@ -249,8 +291,7 @@ describe( "buildExploreV2QueryParams", ( ) => {
       order_by: "created_at",
       order: "desc",
       taxon_id: 42,
-      lat: 37.5,
-      lng: -122.1,
+      ...roundNearbyCoords( { lat: 37.5, lng: -122.1 } ),
       radius: 1,
     } );
   } );
