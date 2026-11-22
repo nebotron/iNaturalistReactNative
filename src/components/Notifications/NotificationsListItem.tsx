@@ -64,6 +64,8 @@ const NotificationsListItem = ( { notification }: Props ) => {
         navigation.push( "ObsDetails", {
           uuid: notification.resource_uuid,
           targetActivityItemID: notification.identification_id || notification.comment_id,
+          // Fetched with every field ObsDetails needs, so it opens straight away
+          preloadedObservation: notification.resource,
         } );
       }}
     >

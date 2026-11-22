@@ -6,6 +6,7 @@ import type {
   ApiOpts,
 } from "api/types";
 import flatten from "lodash/flatten";
+import merge from "lodash/merge";
 import { RealmContext } from "providers/contexts";
 import { useEffect, useMemo, useState } from "react";
 import type Realm from "realm";
@@ -26,6 +27,7 @@ interface InfiniteNotificationsScrollResponse {
   fetchNextPage: ( ) => void;
   isError?: boolean;
   isFetching?: boolean;
+  isFetchingNextPage?: boolean;
   isInitialLoading?: boolean;
   showStillLoadingMessage: boolean;
   notifications: Notification[];
@@ -60,6 +62,16 @@ const BASE_PARAMS: ApiObservationsUpdatesParams = {
   page: 1,
 };
 
+// Everything ObsDetails shows, so tapping a notification opens it with its
+// activity already there instead of waiting on another request. Login is added
+// because the list fields only ask for user.id.
+const NOTIFICATION_OBSERVATION_FIELDS = merge(
+  {},
+  Observation.ADVANCED_MODE_LIST_FIELDS,
+  Observation.FIELDS,
+  { user: { login: true } },
+);
+
 async function fetchObsByUUIDs(
   uuids: string[],
   authOptions: ApiOpts,
@@ -71,17 +83,7 @@ async function fetchObsByUUIDs(
   // TODO convert api/observations to TS
   const observations: ApiObservation[] | null = await fetchRemoteObservations(
     uuids,
-    {
-      fields: {
-        ...Observation.ADVANCED_MODE_LIST_FIELDS,
-        // Ensure login is fetched; ADVANCED_MODE_LIST_FIELDS only requests user.id,
-        // which would otherwise override the login field via the spread above
-        user: {
-          ...Observation.ADVANCED_MODE_LIST_FIELDS.user,
-          login: true,
-        },
-      },
-    },
+    { fields: NOTIFICATION_OBSERVATION_FIELDS },
     authOptions,
   );
   if ( options.save ) {
@@ -95,6 +97,13 @@ async function fetchObsByUUIDs(
 export const getNotificationsQueryKey = (
   notificationParams: ApiObservationsUpdatesParams,
 ): string[] => ["useInfiniteNotificationsScroll", JSON.stringify( notificationParams )];
+
+export const getNextNotificationsPageParam = (
+  lastPage: Notification[],
+  allPages: Notification[][],
+) => ( lastPage.length > 0
+  ? allPages.length + 1
+  : undefined );
 
 export async function fetchNotificationsPage(
   notificationParams: ApiObservationsUpdatesParams,
@@ -152,6 +161,7 @@ const useInfiniteNotificationsScroll = (
   const {
     data,
     isFetching,
+    isFetchingNextPage,
     isInitialLoading,
     isError,
     refetch,
@@ -166,9 +176,7 @@ const useInfiniteNotificationsScroll = (
       currentUser?.id,
     ),
     {
-      getNextPageParam: ( lastPage, allPages ) => ( lastPage.length > 0
-        ? allPages.length + 1
-        : undefined ),
+      getNextPageParam: getNextNotificationsPageParam,
       enabled: !!( currentUser ),
     },
   );
@@ -216,6 +224,7 @@ const useInfiniteNotificationsScroll = (
     refetch,
     isError,
     isFetching,
+    isFetchingNextPage,
     isInitialLoading,
     showStillLoadingMessage,
     // Disable fetchNextPage if signed out
