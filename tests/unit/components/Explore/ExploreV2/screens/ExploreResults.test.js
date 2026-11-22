@@ -254,6 +254,36 @@ describe( "ExploreResults offline state", ( ) => {
     },
   );
 
+  it( "shows results cached from an earlier search when disconnected", async ( ) => {
+    mockLayout = "grid";
+    mockUseInfiniteExploreScroll.mockReturnValue( {
+      fetchNextPage: jest.fn( ),
+      isFetchingNextPage: false,
+      handlePullToRefresh: mockHandlePullToRefresh,
+      observations: [{ uuid: "cached-obs", id: 1 }],
+      totalResults: 1,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    expect( await screen.findByTestId( "ExploreV2ObservationsList" ) ).toBeVisible( );
+    expect( screen.queryByText( "You are offline. Tap to try again." ) ).toBeNull( );
+  } );
+
+  it( "hands the species tab its cached results when disconnected", async ( ) => {
+    useExploreV2.mockReturnValue( {
+      state: {
+        ...mockState( { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE } ),
+        activeTab: SPECIES_TAB,
+      },
+      dispatch: mockDispatch,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    await waitFor( ( ) => expect( mockExploreV2SpeciesView ).toHaveBeenCalled( ) );
+    expect( mockExploreV2SpeciesView.mock.calls.at( -1 )[0].isConnected ).toBe( false );
+    expect( screen.queryByText( "You are offline. Tap to try again." ) ).toBeNull( );
+  } );
+
   it( "retries the search when the offline notice is tapped and we are back online", async ( ) => {
     refresh.mockResolvedValue( { isConnected: true } );
     const actor = userEvent.setup( );

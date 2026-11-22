@@ -1,6 +1,7 @@
 // @flow
+import { refresh } from "@react-native-community/netinfo";
 import {
-  ActivityIndicator, Body3, CustomFlashList, InfiniteScrollLoadingWheel,
+  ActivityIndicator, Body3, CustomFlashList, InfiniteScrollLoadingWheel, OfflineNotice,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import UserList from "components/UserList/UserList";
@@ -60,15 +61,23 @@ const ExploreFlashList = ( {
     return ( <ActivityIndicator size={50} testID="ExploreFlashList.loading" /> );
   }, [totalResults, t] );
 
-  const renderEmptyComponent = useCallback( ( ) => (
-    <View className="self-center mt-[150px] p-4">
-      {canFetch
-        ? (
-          renderLoading()
-        )
-        : <Body3 className="align-center">{t( "No-results-found-try-different-search" )}</Body3>}
-    </View>
-  ), [canFetch, renderLoading, t] );
+  const renderEmptyComponent = useCallback( ( ) => ( isConnected === false
+    // Nothing cached to show, and nothing can load until back online. Checking
+    // the connection again lets React Query fetch if it's back.
+    ? (
+      <View className="mt-[150px]">
+        <OfflineNotice onPress={( ) => { refresh( ); }} />
+      </View>
+    )
+    : (
+      <View className="self-center mt-[150px] p-4">
+        {canFetch
+          ? (
+            renderLoading()
+          )
+          : <Body3 className="align-center">{t( "No-results-found-try-different-search" )}</Body3>}
+      </View>
+    ) ), [canFetch, isConnected, renderLoading, t] );
 
   return layout === "user"
     ? (

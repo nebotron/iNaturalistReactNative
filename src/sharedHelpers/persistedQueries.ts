@@ -1,5 +1,5 @@
 import type { Query, QueryClient, QueryKey } from "@tanstack/react-query";
-import { hashKey } from "@tanstack/react-query";
+import { hashKey, onlineManager } from "@tanstack/react-query";
 import { MMKV } from "react-native-mmkv";
 import { log } from "sharedHelpers/logger";
 
@@ -9,6 +9,10 @@ const logger = log.extend( "persistedQueries" );
 // shown without asking the server again. Explore's results use this. Pulling
 // to refresh fetches new ones sooner.
 export const PERSISTED_QUERY_TTL_MS = 48 * 60 * 60 * 1000;
+// How long they stay on disk to be shown offline, when nothing newer can be
+// fetched. Shown with the time they were fetched, so they're fetched again
+// once back online.
+export const PERSISTED_QUERY_OFFLINE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Distinct queries (e.g. filter sets) kept on disk; the least recently
 // fetched are dropped past this
@@ -44,8 +48,13 @@ function readIndex( ): Record<string, number> {
   }
 }
 
-const isExpired = ( dataUpdatedAt: number ) => (
-  Date.now( ) - dataUpdatedAt >= PERSISTED_QUERY_TTL_MS
+const isExpired = ( dataUpdatedAt: number, ttl = PERSISTED_QUERY_TTL_MS ) => (
+  Date.now( ) - dataUpdatedAt >= ttl
+);
+
+// Kept on disk until they can't be shown even offline
+const isRetained = ( dataUpdatedAt: number ) => (
+  !isExpired( dataUpdatedAt, PERSISTED_QUERY_OFFLINE_TTL_MS )
 );
 
 interface InfiniteData {
@@ -84,15 +93,19 @@ const truncatePages = ( data: unknown ) => (
 );
 
 // When the results saved for this query key were fetched, if that was within
-// the TTL. Reads only the index.
+// the TTL, or within the offline TTL while offline. Reads only the index.
 export function readPersistedQueryUpdatedAt( queryKey: QueryKey ): number | undefined {
   const dataUpdatedAt = readIndex( )[hashKey( queryKey )];
-  return dataUpdatedAt && !isExpired( dataUpdatedAt )
+  const ttl = onlineManager.isOnline( )
+    ? PERSISTED_QUERY_TTL_MS
+    : PERSISTED_QUERY_OFFLINE_TTL_MS;
+  return dataUpdatedAt && !isExpired( dataUpdatedAt, ttl )
     ? dataUpdatedAt
     : undefined;
 }
 
 // The results saved for this query key, if they were fetched within the TTL
+// (or the offline TTL while offline)
 export function readPersistedQuery( queryKey: QueryKey ): unknown {
   const raw = readPersistedQueryUpdatedAt( queryKey )
     ? storage.getString( hashKey( queryKey ) )
@@ -115,7 +128,7 @@ function writeQuery( query: Query ) {
   const index = { ...readIndex( ), [hash]: dataUpdatedAt };
   const newestFirst = Object.entries( index ).sort( ( a, b ) => b[1] - a[1] );
   const kept = newestFirst
-    .filter( ( [, at] ) => !isExpired( at ) )
+    .filter( ( [, at] ) => isRetained( at ) )
     .slice( 0, MAX_ENTRIES );
   const keptHashes = new Set( kept.map( ( [k] ) => k ) );
   newestFirst.forEach( ( [k] ) => {

@@ -114,6 +114,9 @@ const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
 
 const noop = ( ) => undefined;
 
+// Tabs other than observations whose results are saved to disk
+const PERSISTED_TABS: ExploreV2Tab[] = [SPECIES_TAB, OBSERVERS_TAB, IDENTIFIERS_TAB];
+
 const logger = log.extend( "ExploreResults" );
 
 // How long the observations tab may sit empty after a view switch before we log it
@@ -631,6 +634,12 @@ const ExploreResults = ( ) => {
     }
   };
 
+  // Tabs whose results are cached on disk can show them offline. The species
+  // and users lists show the offline notice themselves when nothing's cached.
+  const hasCachedResults = state.activeTab === OBSERVATIONS_TAB
+    ? sortedObservations.length > 0
+    : PERSISTED_TABS.includes( state.activeTab );
+
   const renderContent = ( ) => {
     // Before anything else, offline results included: they're filtered by it too
     // A saved search it excludes was renamed or deleted, or couldn't be loaded
@@ -687,7 +696,8 @@ const ExploreResults = ( ) => {
         </>
       );
     }
-    if ( isConnected === false ) {
+    // Results fetched earlier for this search are still shown, from the cache
+    if ( isConnected === false && !hasCachedResults ) {
       return (
         <View className="flex-1">
           <OfflineNotice onPress={reload} />
