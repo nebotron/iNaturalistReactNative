@@ -6,6 +6,7 @@ import { MMKV } from "react-native-mmkv";
 import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import { log } from "sharedHelpers/logger";
+import { setMemoryContext } from "sharedHelpers/memoryWatermark";
 import createMmkvRecordStore, { AUDIO_ID_HEARD_MMKV_ID } from "sharedHelpers/mmkvRecordStore";
 import { getTunable } from "sharedHelpers/tunableParams";
 import * as uuid from "uuid";
@@ -288,6 +289,8 @@ const markListening = ( detail: string | null ) => {
   else listeningMarker.clearAll( );
 };
 let sessionStarted = "";
+// Runs scored this session, for the memory snapshots (setMemoryContext)
+let sessionRuns = 0;
 let starting = false;
 let sessionId = 0;
 // Every species, unfiltered by place, for scoring until the user is located
@@ -348,6 +351,7 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
     }
     set( { listening: true } );
     sessionStarted = new Date( ).toISOString( );
+    sessionRuns = 0;
     markListening( `started ${sessionStarted}, no summary yet` );
     logger.info( `mic started, ${mic.sampleRate} Hz x${mic.channels}` );
     const current = ( ) => sessionId === id && get( ).listening;
@@ -374,6 +378,7 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
     scoringGeneration = null;
     AudioBirdId?.stop( );
     markListening( null );
+    setMemoryContext( "audioId" );
     set( { listening: false, starting: false } );
   },
 } ) );
@@ -546,6 +551,16 @@ const onScores = ( event: ScoresEvent ) => {
   const { scores } = event;
   const sps = setup?.species || [];
   runs.push( event );
+  sessionRuns += 1;
+  // Long sessions have climbed to the memory limit (Nov 5, Nov 20)
+  setMemoryContext( "audioId", {
+    runs: sessionRuns,
+    minutes: sessionStarted
+      ? Math.round( ( Date.now( ) - Date.parse( sessionStarted ) ) / 60000 )
+      : null,
+    heapUsedMB: event.heapUsedMB,
+    screen: screenState( ),
+  } );
   if ( runs.length >= LOG_EVERY ) {
     const last = runs[runs.length - 1];
     const best = runs.reduce( ( b, r ) => Object.entries( r.scores ).reduce(

@@ -19,6 +19,7 @@ import { CommonResolutions } from "react-native-vision-camera";
 import { getBestRecentFix, startPositionWarmup } from "sharedHelpers/accuratePositionWatcher";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { log } from "sharedHelpers/logger";
+import { setMemoryContext } from "sharedHelpers/memoryWatermark";
 import { hasWriteMediaPermission } from "sharedHelpers/permissions";
 import { completeSentinelFile, createSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -293,6 +294,13 @@ const CameraContainer = ( ) => {
         await handleNavigation( newPhotoState, options?.visionResult );
       }
       setNewPhotoUris( [...newPhotoUris, uri] );
+      // A camera session climbed ~470 MB per 20 s to the memory limit on
+      // Nov 20; this says whether that tracks the photos taken
+      setMemoryContext( "camera", {
+        type: cameraType,
+        photos: newPhotoUris.length + 1,
+        resolution: `${targetResolution.width}x${targetResolution.height}`,
+      } );
       storedUri = uri;
     } catch ( captureError ) {
       const error = captureError instanceof Error
@@ -306,6 +314,11 @@ const CameraContainer = ( ) => {
 
     return storedUri;
   };
+
+  useEffect( ( ) => {
+    setMemoryContext( "camera", { type: cameraType, photos: 0 } );
+    return ( ) => setMemoryContext( "camera" );
+  }, [cameraType] );
 
   useEffect( () => {
     const unsubscribe = navigation.addListener( "blur", () => {

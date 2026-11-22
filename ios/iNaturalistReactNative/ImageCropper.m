@@ -12,6 +12,9 @@
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
 #include <mach/mach.h>
+#include <malloc/malloc.h>
+#include <stddef.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <sys/utsname.h>
 #include "onnxruntime_c_api.h"
@@ -2968,43 +2971,326 @@ RCT_EXPORT_METHOD( availableMemoryBytes
   resolve( @( (double)os_proc_available_memory( ) ) );
 }
 
-// The app's footprint (what iOS's memory limit is measured on) and what it may
-// still allocate, for memoryWatermark.ts to say which screen the memory went to
-// before an out-of-memory kill, which leaves nothing in the log itself.
+// ---- Memory snapshots -------------------------------------------------------
 //
-// Also what the footprint is made of. Two Nov 20 kills, one with Audio ID
-// listening in the background and one a minute into the camera, climbed
-// ~25 MB/s to the limit with nothing to say what was growing: malloc
-// (internalMB, decoded images and heap), IOSurfaces and GPU buffers
-// (graphicsMB: camera frames, CoreML on the GPU), media buffers (mediaMB:
-// the capture and audio pipelines), Neural Engine buffers (neuralMB), or
-// memory iOS has compressed (compressedMB, counted in internalMB too).
+// iOS kills the app for memory without a crash report, and two Nov 20 kills
+// climbed ~25 MB/s to the limit (Audio ID listening in the background; a
+// minute into the camera) with only the total footprint on record. A snapshot
+// says what the memory is and where it grew, as far as the process can see
+// without Instruments:
+// - the kernel's footprint ledgers: malloc and other anonymous memory
+//   (internal), what of it iOS compressed, and the GPU/IOSurface, media
+//   (capture, audio) and Neural Engine ledgers;
+// - every VM region's dirty and compressed pages, totalled by the tag its
+//   allocator gave it (malloc sizes, CoreGraphics images, IOSurfaces, CoreML,
+//   ...), as vmmap/footprint do, with the change per tag since the last
+//   snapshot;
+// - the largest regions themselves, since one malloc_large region is one
+//   allocation: a decoded 48 MP photo shows up as a ~186 MB region;
+// - each malloc zone's bytes in use.
+
+// Names for the VM tags in <mach/vm_statistics.h> that apps carry; anything
+// else is logged by number.
+static NSString *vmTagName( unsigned tag )
+{
+  switch ( tag ) {
+    case 0: return @"untagged";
+    case VM_MEMORY_MALLOC: return @"malloc";
+    case VM_MEMORY_MALLOC_SMALL: return @"malloc_small";
+    case VM_MEMORY_MALLOC_LARGE: return @"malloc_large";
+    case VM_MEMORY_MALLOC_HUGE: return @"malloc_huge";
+    case VM_MEMORY_REALLOC: return @"realloc";
+    case VM_MEMORY_MALLOC_TINY: return @"malloc_tiny";
+    case VM_MEMORY_MALLOC_LARGE_REUSABLE: return @"malloc_large_reusable";
+    case VM_MEMORY_MALLOC_LARGE_REUSED: return @"malloc_large_reused";
+#ifdef VM_MEMORY_MALLOC_NANO
+    case VM_MEMORY_MALLOC_NANO: return @"malloc_nano";
+#endif
+#ifdef VM_MEMORY_MALLOC_MEDIUM
+    case VM_MEMORY_MALLOC_MEDIUM: return @"malloc_medium";
+#endif
+    case VM_MEMORY_MACH_MSG: return @"mach_msg";
+    case VM_MEMORY_IOKIT: return @"iokit";
+    case VM_MEMORY_STACK: return @"stack";
+    case VM_MEMORY_GUARD: return @"guard";
+    case VM_MEMORY_DYLIB: return @"dylib";
+    case VM_MEMORY_FOUNDATION: return @"foundation";
+    case VM_MEMORY_COREGRAPHICS: return @"coregraphics";
+    case VM_MEMORY_LAYERKIT: return @"coreanimation";
+    case VM_MEMORY_CGIMAGE: return @"cgimage";
+    case VM_MEMORY_COREGRAPHICS_DATA: return @"coregraphics_data";
+    case VM_MEMORY_COREGRAPHICS_SHARED: return @"coregraphics_shared";
+    case VM_MEMORY_COREGRAPHICS_FRAMEBUFFERS: return @"coregraphics_framebuffers";
+    case VM_MEMORY_COREGRAPHICS_BACKINGSTORES: return @"coregraphics_backingstores";
+    case VM_MEMORY_DYLD: return @"dyld";
+    case VM_MEMORY_DYLD_MALLOC: return @"dyld_malloc";
+    case VM_MEMORY_SQLITE: return @"sqlite";
+    case VM_MEMORY_JAVASCRIPT_CORE: return @"javascriptcore";
+    case VM_MEMORY_COREIMAGE: return @"coreimage";
+    case VM_MEMORY_IMAGEIO: return @"imageio";
+#ifdef VM_MEMORY_OS_ALLOC_ONCE
+    case VM_MEMORY_OS_ALLOC_ONCE: return @"os_alloc_once";
+#endif
+#ifdef VM_MEMORY_LIBDISPATCH
+    case VM_MEMORY_LIBDISPATCH: return @"libdispatch";
+#endif
+#ifdef VM_MEMORY_ACCELERATE
+    case VM_MEMORY_ACCELERATE: return @"accelerate";
+#endif
+#ifdef VM_MEMORY_COREUI
+    case VM_MEMORY_COREUI: return @"coreui";
+#endif
+#ifdef VM_MEMORY_RAWCAMERA
+    case VM_MEMORY_RAWCAMERA: return @"rawcamera";
+#endif
+#ifdef VM_MEMORY_SWIFT_RUNTIME
+    case VM_MEMORY_SWIFT_RUNTIME: return @"swift_runtime";
+#endif
+#ifdef VM_MEMORY_SWIFT_METADATA
+    case VM_MEMORY_SWIFT_METADATA: return @"swift_metadata";
+#endif
+#ifdef VM_MEMORY_IOSURFACE
+    case VM_MEMORY_IOSURFACE: return @"iosurface";
+#endif
+#ifdef VM_MEMORY_LIBNETWORK
+    case VM_MEMORY_LIBNETWORK: return @"libnetwork";
+#endif
+#ifdef VM_MEMORY_AUDIO
+    case VM_MEMORY_AUDIO: return @"audio";
+#endif
+#ifdef VM_MEMORY_VIDEOBITSTREAM
+    case VM_MEMORY_VIDEOBITSTREAM: return @"videobitstream";
+#endif
+#ifdef VM_MEMORY_CM_MEMORYPOOL
+    case VM_MEMORY_CM_MEMORYPOOL: return @"coremedia_pool";
+#endif
+#ifdef VM_MEMORY_CM_READCACHE
+    case VM_MEMORY_CM_READCACHE: return @"coremedia_readcache";
+#endif
+#ifdef VM_MEMORY_IOACCELERATOR
+    case VM_MEMORY_IOACCELERATOR: return @"ioaccelerator";
+#endif
+#ifdef VM_MEMORY_COREUI_CACHED_IMAGE_DATA
+    case VM_MEMORY_COREUI_CACHED_IMAGE_DATA: return @"coreui_cached_images";
+#endif
+#ifdef VM_MEMORY_COLORSYNC
+    case VM_MEMORY_COLORSYNC: return @"colorsync";
+#endif
+    default: return [NSString stringWithFormat:@"tag%u", tag];
+  }
+}
+
+static NSNumber *roundedMB( uint64_t bytes )
+{
+  return @( round( bytes / 1048576.0 * 10 ) / 10 );
+}
+
+// What the snapshot before this one counted per tag, for the growth since it
+static NSDictionary<NSString *, NSNumber *> *lastTagBytes = nil;
+static CFAbsoluteTime lastSnapshotAt = 0;
+
+static NSDictionary *memorySnapshot( void )
+{
+  NSMutableDictionary *snapshot = [NSMutableDictionary new];
+  snapshot[@"footprintMB"] = @( footprintMB( ) );
+  snapshot[@"freeMB"] = @( freeMB( ) );
+
+  task_vm_info_data_t    vm;
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  if ( task_info( mach_task_self( ), TASK_VM_INFO, (task_info_t)&vm, &count ) == KERN_SUCCESS ) {
+    NSMutableDictionary *ledgers = [@{
+      @"internal": roundedMB( vm.internal ),
+      @"compressed": roundedMB( vm.compressed ),
+    } mutableCopy];
+    // The tag ledgers are only filled in by kernels that keep them
+    size_t filled = count * sizeof( natural_t );
+    if ( filled >= offsetof( task_vm_info_data_t, ledger_tag_neural_footprint_compressed )
+                   + sizeof( vm.ledger_tag_neural_footprint_compressed ) ) {
+      ledgers[@"peakFootprint"] = roundedMB( vm.ledger_phys_footprint_peak );
+      ledgers[@"graphics"] = roundedMB( vm.ledger_tag_graphics_footprint
+                                        + vm.ledger_tag_graphics_footprint_compressed );
+      ledgers[@"media"] = roundedMB( vm.ledger_tag_media_footprint
+                                     + vm.ledger_tag_media_footprint_compressed );
+      ledgers[@"neural"] = roundedMB( vm.ledger_tag_neural_footprint
+                                      + vm.ledger_tag_neural_footprint_compressed );
+      ledgers[@"network"] = roundedMB( vm.ledger_tag_network_nonvolatile
+                                       + vm.ledger_tag_network_nonvolatile_compressed );
+    }
+    snapshot[@"ledgersMB"] = ledgers;
+  }
+
+  // Dirty plus compressed pages of every region, by tag. Clean memory (library
+  // text, mapped files) isn't charged to the app, so only those pages count.
+  NSMutableDictionary<NSString *, NSNumber *> *tagBytes = [NSMutableDictionary new];
+  NSMutableDictionary<NSString *, NSNumber *> *tagRegions = [NSMutableDictionary new];
+  NSMutableArray<NSDictionary *> *regions = [NSMutableArray new];
+  vm_address_t address = 0;
+  natural_t depth = 0;
+  for ( int guard = 0; guard < 200000; guard++ ) {
+    vm_size_t size = 0;
+    vm_region_submap_info_data_64_t info;
+    mach_msg_type_number_t infoCount = VM_REGION_SUBMAP_INFO_COUNT_64;
+    if ( vm_region_recurse_64( mach_task_self( ), &address, &size, &depth,
+                               (vm_region_recurse_info_t)&info, &infoCount ) != KERN_SUCCESS ) {
+      break;
+    }
+    if ( info.is_submap ) {
+      depth++;
+      continue;
+    }
+    uint64_t bytes = (uint64_t)( info.pages_dirtied + info.pages_swapped_out ) * vm_page_size;
+    if ( bytes > 0 ) {
+      NSString *tag = vmTagName( info.user_tag );
+      tagBytes[tag] = @( tagBytes[tag].unsignedLongLongValue + bytes );
+      tagRegions[tag] = @( tagRegions[tag].integerValue + 1 );
+      if ( bytes >= 8 * 1048576 ) {
+        [regions addObject:@{ @"tag": tag, @"bytes": @( bytes ), @"size": @( size ) }];
+      }
+    }
+    address += size;
+  }
+
+  NSArray<NSString *> *byBytes =
+    [tagBytes keysSortedByValueUsingComparator:^( NSNumber *a, NSNumber *b ) {
+      return [b compare:a];
+    }];
+  NSMutableArray *tags = [NSMutableArray new];
+  for ( NSString *tag in byBytes ) {
+    uint64_t bytes = tagBytes[tag].unsignedLongLongValue;
+    if ( tags.count >= 12 || bytes < 4 * 1048576 ) break;
+    [tags addObject:@{ @"tag": tag, @"mb": roundedMB( bytes ), @"regions": tagRegions[tag] }];
+  }
+  snapshot[@"tagsMB"] = tags;
+
+  // Growth per tag since the last snapshot: the tags that went up most
+  if ( lastTagBytes ) {
+    NSMutableDictionary<NSString *, NSNumber *> *deltas = [NSMutableDictionary new];
+    NSMutableSet *all = [NSMutableSet setWithArray:tagBytes.allKeys];
+    [all addObjectsFromArray:lastTagBytes.allKeys];
+    for ( NSString *tag in all ) {
+      double delta = ( tagBytes[tag].doubleValue - lastTagBytes[tag].doubleValue ) / 1048576.0;
+      if ( fabs( delta ) >= 8 ) deltas[tag] = @( round( delta ) );
+    }
+    snapshot[@"growthMB"] = deltas;
+    snapshot[@"growthOverS"] = @( round( CFAbsoluteTimeGetCurrent( ) - lastSnapshotAt ) );
+  }
+  lastTagBytes = tagBytes;
+  lastSnapshotAt = CFAbsoluteTimeGetCurrent( );
+
+  // The largest regions: "malloc_large 186.0/186.0" is one 186 MB allocation
+  [regions sortUsingComparator:^( NSDictionary *a, NSDictionary *b ) {
+    return [b[@"bytes"] compare:a[@"bytes"]];
+  }];
+  NSMutableArray *largest = [NSMutableArray new];
+  for ( NSDictionary *region in regions ) {
+    if ( largest.count >= 10 ) break;
+    [largest addObject:[NSString stringWithFormat:@"%@ %@/%@",
+      region[@"tag"], roundedMB( [region[@"bytes"] unsignedLongLongValue] ),
+      roundedMB( [region[@"size"] unsignedLongLongValue] )]];
+  }
+  snapshot[@"largestRegionsMB"] = largest;
+  // How many regions of 150 MB and up: about one per full-size photo decoded
+  NSUInteger huge = 0;
+  for ( NSDictionary *region in regions ) {
+    if ( [region[@"bytes"] unsignedLongLongValue] >= 150 * 1048576ull ) huge++;
+  }
+  snapshot[@"regionsOver150MB"] = @( huge );
+
+  // Bytes in use per malloc zone (the default zone, and any a library made)
+  vm_address_t *zoneAddresses = NULL;
+  unsigned zoneCount = 0;
+  if ( malloc_get_all_zones( mach_task_self( ), NULL, &zoneAddresses, &zoneCount )
+       == KERN_SUCCESS ) {
+    NSMutableDictionary *zones = [NSMutableDictionary new];
+    for ( unsigned i = 0; i < zoneCount; i++ ) {
+      malloc_zone_t *zone = (malloc_zone_t *)zoneAddresses[i];
+      malloc_statistics_t stats = { 0 };
+      malloc_zone_statistics( zone, &stats );
+      if ( stats.size_in_use < 4 * 1048576 ) continue;
+      NSString *name = zone->zone_name
+        ? @( zone->zone_name )
+        : [NSString stringWithFormat:@"zone%u", i];
+      zones[name] = @{ @"inUseMB": roundedMB( stats.size_in_use ),
+                       @"heldMB": roundedMB( stats.size_allocated ),
+                       @"blocks": @( stats.blocks_in_use ) };
+    }
+    snapshot[@"mallocZones"] = zones;
+  }
+  return snapshot;
+}
+
+// Where the last snapshot taken at a high footprint is kept, so the launch
+// after an out-of-memory kill can say what the killed session held.
+static NSString *memorySnapshotPath( void )
+{
+  NSString *caches = NSSearchPathForDirectoriesInDomains(
+    NSCachesDirectory, NSUserDomainMask, YES ).firstObject;
+  return [caches stringByAppendingPathComponent:@"lastHighMemorySnapshot.json"];
+}
+
+// Snapshots run on their own queue: the region walk takes a few ms to tens
+// of ms, and this module's shared method queue may be busy with a bulk crop.
+static dispatch_queue_t memorySnapshotQueue( void )
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    queue = dispatch_queue_create( "org.inat.memorysnapshot", DISPATCH_QUEUE_SERIAL );
+  } );
+  return queue;
+}
+
+// The footprint (what iOS's memory limit is measured on) and what may still
+// be allocated: cheap, for memoryWatermark.ts to sample often.
 RCT_EXPORT_METHOD( memoryStats
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSMutableDictionary *stats = [@{
+  resolve( @{
     @"footprintMB": @( footprintMB( ) ),
     @"freeMB":      @( freeMB( ) ),
-  } mutableCopy];
-  task_vm_info_data_t    vm;
-  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
-  if ( task_info( mach_task_self( ), TASK_VM_INFO, (task_info_t)&vm, &count ) == KERN_SUCCESS ) {
-    stats[@"internalMB"]   = @( vm.internal >> 20 );
-    stats[@"compressedMB"] = @( vm.compressed >> 20 );
-    // The ledger tags are only filled in by kernels that know them
-    size_t filled = count * sizeof( natural_t );
-    if ( filled >= offsetof( task_vm_info_data_t, ledger_tag_neural_footprint_compressed )
-                   + sizeof( vm.ledger_tag_neural_footprint_compressed ) ) {
-      stats[@"graphicsMB"] = @( ( vm.ledger_tag_graphics_footprint
-                                  + vm.ledger_tag_graphics_footprint_compressed ) >> 20 );
-      stats[@"mediaMB"]    = @( ( vm.ledger_tag_media_footprint
-                                  + vm.ledger_tag_media_footprint_compressed ) >> 20 );
-      stats[@"neuralMB"]   = @( ( vm.ledger_tag_neural_footprint
-                                  + vm.ledger_tag_neural_footprint_compressed ) >> 20 );
+  } );
+}
+
+// The full snapshot above. With `context` (what the app was doing, from JS),
+// also keeps it on disk as the last high-memory snapshot of this launch.
+RCT_EXPORT_METHOD( memorySnapshot
+                  : ( NSDictionary * )context resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( memorySnapshotQueue( ), ^{
+    NSMutableDictionary *snapshot = [memorySnapshot( ) mutableCopy];
+    if ( context ) {
+      NSMutableDictionary *saved = [snapshot mutableCopy];
+      saved[@"context"] = context;
+      saved[@"pid"] = @( getpid( ) );
+      saved[@"at"] = @( [NSDate date].timeIntervalSince1970 * 1000 );
+      NSData *json = [NSJSONSerialization dataWithJSONObject:saved options:0 error:nil];
+      [json writeToFile:memorySnapshotPath( ) atomically:YES];
     }
-  }
-  resolve( stats );
+    resolve( snapshot );
+  } );
+}
+
+// The last high-memory snapshot of an earlier launch, then forgotten; null if
+// there is none. pid tells it apart from this launch's.
+RCT_EXPORT_METHOD( takePreviousMemorySnapshot
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( memorySnapshotQueue( ), ^{
+    NSData *data = [NSData dataWithContentsOfFile:memorySnapshotPath( )];
+    NSDictionary *saved = data
+      ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+      : nil;
+    if ( ![saved isKindOfClass:[NSDictionary class]] || [saved[@"pid"] intValue] == getpid( ) ) {
+      resolve( [NSNull null] );
+      return;
+    }
+    [[NSFileManager defaultManager] removeItemAtPath:memorySnapshotPath( ) error:nil];
+    resolve( saved );
+  } );
 }
 
 // Decodes a camera raw through Core Image's RAW pipeline and writes it as a
