@@ -122,6 +122,6 @@ describe( "ExploreV2UsersView", ( ) => {
     renderUsers( { enabled: false } );
 
     expect( mockUseInfiniteScroll.mock.calls.at( -1 )[3] )
-      .toEqual( { enabled: false, persist: true } );
+      .toEqual( { enabled: false, cacheable: true } );
   } );
 } );

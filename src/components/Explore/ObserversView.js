@@ -39,7 +39,7 @@ const ObserversView = ( {
     },
     {
       enabled: canFetch,
-      persist: true,
+      cacheable: true,
     },
   );
 

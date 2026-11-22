@@ -39,7 +39,7 @@ const IdentifiersView = ( {
     },
     {
       enabled: canFetch,
-      persist: true,
+      cacheable: true,
     },
   );
 

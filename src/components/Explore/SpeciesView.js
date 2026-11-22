@@ -85,7 +85,7 @@ const SpeciesView = ( {
     },
     {
       enabled: canFetch,
-      persist: true,
+      cacheable: true,
     },
   );
 

@@ -74,7 +74,8 @@ const useInfiniteExploreScroll = (
         login: true,
       },
     },
-    ttl: -1,
+    // No ttl: -1, which would make the API send no-store and keep these out of
+    // the HTTP cache; useAuthenticatedInfiniteQuery's cacheable
   } ), [newInputParams] );
 
   const queryKey = ["useInfiniteExploreScroll", newInputParams];
@@ -107,9 +108,9 @@ const useInfiniteExploreScroll = (
     {
       getNextPageParam,
       enabled,
-      // Shown again after leaving Explore or restarting the app, until pulled
-      // to refresh or PERSISTED_QUERY_TTL_MS passes
-      persist: true,
+      // Shown again after leaving Explore, and from the HTTP cache after a
+      // restart, until pulled to refresh
+      cacheable: true,
     },
   );
 

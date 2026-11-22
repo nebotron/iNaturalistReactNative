@@ -8,13 +8,16 @@ const useInfiniteScroll = (
   newInputParams: Object,
   options?: {
     enabled: boolean,
-    // Keep the results on disk, as Explore does; see useAuthenticatedInfiniteQuery
-    persist?: boolean
+    // Keep the results, as Explore does; see useAuthenticatedInfiniteQuery
+    cacheable?: boolean
   },
 ): Object => {
   const baseParams = {
     per_page: 20,
-    ttl: -1,
+    // ttl: -1 makes the API send no-store, keeping it out of the HTTP cache
+    ...( options?.cacheable
+      ? {}
+      : { ttl: -1 } ),
     ...newInputParams,
   };
 
@@ -52,7 +55,7 @@ const useInfiniteScroll = (
       },
 
       enabled: options?.enabled,
-      persist: options?.persist,
+      cacheable: options?.cacheable,
     },
     /* eslint-enable consistent-return */
   );

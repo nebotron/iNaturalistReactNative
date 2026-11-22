@@ -63,7 +63,7 @@ const ExploreV2UsersView = ( {
       ...params,
       ...extraParams,
     },
-    { enabled, persist: true },
+    { enabled, cacheable: true },
   );
 
   useEffect( ( ) => {

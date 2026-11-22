@@ -6,23 +6,24 @@ import { useCallback, useEffect, useRef } from "react";
 import {
   createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
 } from "sharedHelpers/logging";
-import {
-  PERSISTED_QUERY_META,
-  PERSISTED_QUERY_TTL_MS,
-  readPersistedQuery,
-  readPersistedQueryUpdatedAt,
-} from "sharedHelpers/persistedQueries";
 import { useCurrentUser } from "sharedHooks";
+
+// How long a cacheable query's results stay in memory, shown without asking
+// again, after its screen is left. Pulling to refresh fetches new ones sooner.
+const CACHEABLE_RESULTS_MS = 48 * 60 * 60 * 1000;
 
 // Should work like React Query's useInfiniteQuery with our custom reactQueryRetry
 // and authentication.
 //
-// With `persist: true` the results are saved to disk and shown again after a
-// restart, and are only fetched again after PERSISTED_QUERY_TTL_MS or when
-// refreshFirstPage is called.
+// With `cacheable: true` the results are kept in memory for CACHEABLE_RESULTS_MS
+// rather than dropped soon after their screen is left. Across a restart they
+// come from the HTTP cache, which stores the responses natively for as long
+// as the API's Cache-Control allows, as long as the caller doesn't send
+// ttl: -1 (which makes the API send no-store). refreshFirstPage sends it, so a
+// refresh is always fresh.
 interface AuthenticatedInfiniteQueryOptions {
   allowAnonymousJWT?: boolean;
-  persist?: boolean;
+  cacheable?: boolean;
   [option: string]: unknown;
 }
 
@@ -35,15 +36,15 @@ const useAuthenticatedInfiniteQuery = (
   const route = useRoute( );
   const currentUser = useCurrentUser( );
   const queryClient = useQueryClient( );
-  const { persist, ...infiniteQueryOptions } = queryOptions;
+  const { cacheable, ...infiniteQueryOptions } = queryOptions;
 
   // Use locale in case there is no user session
   const locale = i18n?.language ?? "en";
 
-  // A persisted query's key has to survive a restart, so it holds only what
-  // changes the results rather than the whole user, whose counts change all
-  // the time
-  const userKey = persist
+  // A cacheable query's key holds only what changes the results rather than
+  // the whole user, whose counts change all the time and would otherwise
+  // start the query over
+  const userKey = cacheable
     ? {
       id: currentUser?.id ?? null,
       locale: currentUser?.locale ?? locale,
@@ -75,14 +76,10 @@ const useAuthenticatedInfiniteQuery = (
     }
   };
 
-  // Read only when React Query first creates the query, so once per key
-  const persistOptions = persist
+  const cacheOptions = cacheable
     ? {
-      meta: PERSISTED_QUERY_META,
-      staleTime: PERSISTED_QUERY_TTL_MS,
-      gcTime: PERSISTED_QUERY_TTL_MS,
-      initialData: ( ) => readPersistedQuery( fullQueryKey ),
-      initialDataUpdatedAt: ( ) => readPersistedQueryUpdatedAt( fullQueryKey ),
+      staleTime: CACHEABLE_RESULTS_MS,
+      gcTime: CACHEABLE_RESULTS_MS,
     }
     : {};
 
@@ -95,7 +92,7 @@ const useAuthenticatedInfiniteQuery = (
       routeParams: route?.params,
     } ),
     retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
-    ...persistOptions,
+    ...cacheOptions,
     ...infiniteQueryOptions,
   } );
 
@@ -109,7 +106,8 @@ const useAuthenticatedInfiniteQuery = (
   } );
   const refreshFirstPage = useCallback( async ( ) => {
     const { queryFn: fetchPage, fullQueryKey: key } = latestRef.current;
-    const firstPage = await fetchPage( { queryKey: key, pageParam: undefined } );
+    // ttl: -1 so the API answers afresh rather than the HTTP cache
+    const firstPage = await fetchPage( { queryKey: key, pageParam: undefined, ttl: -1 } );
     if ( firstPage == null ) {
       throw new Error( "No results from refreshing the first page" );
     }

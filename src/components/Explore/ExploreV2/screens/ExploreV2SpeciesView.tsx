@@ -58,7 +58,7 @@ const ExploreV2SpeciesView = ( { enabled, isConnected, params }: Props ) => {
         taxon: Taxon.LIMITED_TAXON_FIELDS,
       },
     },
-    { enabled, persist: true },
+    { enabled, cacheable: true },
   );
 
   const taxonIds = ( data as SpeciesCountResult[] ).map( r => r.taxon.id as number );

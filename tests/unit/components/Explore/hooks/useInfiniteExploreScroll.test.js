@@ -3,10 +3,6 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
 import inatjs from "inaturalistjs";
 import React from "react";
-import {
-  clearPersistedQueries,
-  persistQueries,
-} from "sharedHelpers/persistedQueries";
 
 jest.mock( "sharedHooks/useCurrentUser", ( ) => ( {
   __esModule: true,
@@ -26,14 +22,9 @@ const response = uuids => ( {
   results: uuids.map( ( uuid, i ) => ( { id: i + 1, uuid } ) ),
 } );
 
-// A fresh client stands in for the app restarting: nothing is in memory, and
-// only what was written to disk remains
 let queryClient;
-let stopPersisting;
 const startApp = ( ) => {
-  stopPersisting?.( );
   queryClient = new QueryClient( { defaultOptions: { queries: { retry: false } } } );
-  stopPersisting = persistQueries( queryClient, { writeDelayMs: 0 } );
 };
 
 let rendered = [];
@@ -53,14 +44,13 @@ const renderExploreScroll = ( ) => {
 
 const uuidsOf = result => result.current.observations.map( obs => obs.uuid );
 
-// Lets the write to disk, on a timer, happen
-const flushPersistence = ( ) => act( async ( ) => {
+// Gives the hook the chance to re-render
+const flushRenders = ( ) => act( async ( ) => {
   await new Promise( resolve => { setTimeout( resolve, 10 ); } );
 } );
 
 describe( "useInfiniteExploreScroll", ( ) => {
   beforeEach( ( ) => {
-    clearPersistedQueries( );
     startApp( );
     inatjs.observations.search.mockReset( );
   } );
@@ -70,25 +60,38 @@ describe( "useInfiniteExploreScroll", ( ) => {
     // timers would keep Jest from exiting
     rendered.forEach( utils => utils.unmount( ) );
     rendered = [];
-    stopPersisting( );
     queryClient.clear( );
   } );
 
-  it( "shows the results it fetched before a restart without fetching again", async ( ) => {
+  it( "shows the results it fetched before leaving Explore without fetching again", async ( ) => {
     inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
     const { result: firstResult, unmount } = renderExploreScroll( );
     await waitFor( ( ) => expect( uuidsOf( firstResult ) ).toEqual( ["a", "b"] ) );
-    await flushPersistence( );
     unmount( );
     rendered = [];
-    queryClient.clear( );
 
-    startApp( );
     inatjs.observations.search.mockClear( );
     const { result } = renderExploreScroll( );
     expect( uuidsOf( result ) ).toEqual( ["a", "b"] );
     expect( result.current.totalResults ).toEqual( 2 );
     expect( inatjs.observations.search ).not.toHaveBeenCalled( );
+  } );
+
+  it( "asks for results the HTTP cache can keep", async ( ) => {
+    inatjs.observations.search.mockResolvedValue( response( ["a"] ) );
+    const { result } = renderExploreScroll( );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["a"] ) );
+    expect( inatjs.observations.search.mock.calls[0][0] ).not.toHaveProperty( "ttl" );
+  } );
+
+  it( "asks the API afresh when pulling to refresh", async ( ) => {
+    inatjs.observations.search.mockResolvedValue( response( ["a"] ) );
+    const { result } = renderExploreScroll( );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["a"] ) );
+
+    inatjs.observations.search.mockClear( );
+    await act( ( ) => result.current.handlePullToRefresh( ) );
+    expect( inatjs.observations.search.mock.calls[0][0] ).toHaveProperty( "ttl", -1 );
   } );
 
   it( "replaces the results when pulling to refresh works", async ( ) => {
@@ -109,7 +112,7 @@ describe( "useInfiniteExploreScroll", ( ) => {
     inatjs.observations.search.mockRejectedValue( new Error( "Network request failed" ) );
     await act( ( ) => result.current.handlePullToRefresh( ) );
     // Given the chance to re-render, it still shows the old results
-    await flushPersistence( );
+    await flushRenders( );
     expect( uuidsOf( result ) ).toEqual( ["a", "b"] );
     expect( result.current.status ).toEqual( "success" );
   } );
