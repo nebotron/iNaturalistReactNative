@@ -37,7 +37,7 @@ interface PreloadTiming {
 export interface PreloadResult {
   // The untouched original, which is what a crop is finally applied to.
   localUri: string;
-  // The display-sized file decoded from it, which is what the cropper draws.
+  // What the cropper draws: a file decoded from it, or for a HEIC, localUri.
   displayUri: string;
   size: { w: number; h: number };
   crop: NormalizedCrop;
@@ -340,7 +340,14 @@ export function aliasPreload( fromUri: string, toUri: string ) {
     if ( !result ) {
       return null;
     }
-    const aliased = { ...result, localUri: toUri };
+    // A HEIC is drawn from its source file itself, so its display moves too.
+    const aliased = {
+      ...result,
+      localUri: toUri,
+      displayUri: result.displayUri === result.localUri
+        ? toUri
+        : result.displayUri,
+    };
     preloadCache.set( toUri, aliased );
     // The file the preload decoded is superseded by the copy at toUri, which
     // holds the same bytes. Only a scratch export is removed, never a staged

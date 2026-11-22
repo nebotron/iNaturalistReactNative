@@ -1,7 +1,8 @@
-import { QueryClient } from "@tanstack/react-query";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
 import {
   clearPersistedQueries,
   PERSISTED_QUERY_META,
+  PERSISTED_QUERY_OFFLINE_TTL_MS,
   PERSISTED_QUERY_TTL_MS,
   persistQueries,
   readPersistedQuery,
@@ -67,6 +68,37 @@ describe( "persistedQueries", ( ) => {
     jest.setSystemTime( fetchedAt + PERSISTED_QUERY_TTL_MS );
     expect( readPersistedQuery( KEY ) ).toBeUndefined( );
     expect( readPersistedQueryUpdatedAt( KEY ) ).toBeUndefined( );
+  } );
+
+  describe( "offline", ( ) => {
+    beforeEach( ( ) => onlineManager.setOnline( false ) );
+    afterEach( ( ) => onlineManager.setOnline( true ) );
+
+    it( "still restores results older than the TTL, with when they were fetched", ( ) => {
+      onlineManager.setOnline( true );
+      const fetchedAt = store( KEY, infiniteData( 1 ) );
+      onlineManager.setOnline( false );
+      jest.setSystemTime( fetchedAt + PERSISTED_QUERY_TTL_MS + 1 );
+      expect( readPersistedQuery( KEY ) ).toEqual( infiniteData( 1 ) );
+      expect( readPersistedQueryUpdatedAt( KEY ) ).toEqual( fetchedAt );
+    } );
+
+    it( "drops results older than the offline TTL", ( ) => {
+      onlineManager.setOnline( true );
+      const fetchedAt = store( KEY, infiniteData( 1 ) );
+      onlineManager.setOnline( false );
+      jest.setSystemTime( fetchedAt + PERSISTED_QUERY_OFFLINE_TTL_MS );
+      expect( readPersistedQuery( KEY ) ).toBeUndefined( );
+    } );
+
+    it( "keeps results past the TTL on disk when newer ones are saved", ( ) => {
+      onlineManager.setOnline( true );
+      const fetchedAt = store( KEY, infiniteData( 1 ) );
+      jest.setSystemTime( fetchedAt + PERSISTED_QUERY_TTL_MS + 1 );
+      store( ["exploreResults", { taxon_id: 2 }], infiniteData( 1 ) );
+      onlineManager.setOnline( false );
+      expect( readPersistedQuery( KEY ) ).toEqual( infiniteData( 1 ) );
+    } );
   } );
 
   it( "keeps a separate entry for each key", ( ) => {
