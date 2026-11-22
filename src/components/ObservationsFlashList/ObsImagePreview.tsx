@@ -416,6 +416,12 @@ const ObsImagePreview = ( {
             style={carouselWidthStyle}
             className="h-full"
             getItemLayout={carouselGetItemLayout}
+            // Only the photo on screen and its neighbors: FlatList otherwise
+            // mounts the first ten at once, loading every photo of the
+            // observation for each tile in the grid.
+            initialNumToRender={1}
+            maxToRenderPerBatch={1}
+            windowSize={3}
             extraData={containerWidth}
           />
         )}

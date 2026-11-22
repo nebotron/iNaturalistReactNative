@@ -13,6 +13,7 @@ import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop"
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect, isSameCrop } from "sharedHelpers/normalizedCropTypes";
+import photoUriForPixelSize from "sharedHelpers/photoUriForPixelSize";
 
 const MAX_SCALE = 100;
 // A framed photo is drawn sharper than the tile once it's this much larger
@@ -208,11 +209,17 @@ const ObsImageZoomable = ( {
     // Bucketed so a reframing doesn't re-decode for a few pixels' difference
     detail = Math.ceil( framedPx / 256 ) * 256;
   }
+  // Download only the size the framing needs too: an original is up to 2048px
+  // and often over a megabyte. The original loads once the user pinches, with
+  // CachedImage showing the smaller size meanwhile.
+  const loadUri = pinched
+    ? uri
+    : photoUriForPixelSize( uri, framedPx );
 
   return (
     <SharedZoomableImage
       ref={zoomRef}
-      uri={uri}
+      uri={loadUri}
       fullResolution={fullResolution}
       maxPixelSize={tilePx}
       detail={detail}

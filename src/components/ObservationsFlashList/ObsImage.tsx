@@ -6,7 +6,9 @@ import React, {
   useCallback, useState,
 } from "react";
 import type { LayoutChangeEvent } from "react-native";
+import { PixelRatio } from "react-native";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import photoUriForPixelSize from "sharedHelpers/photoUriForPixelSize";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 
 import ObsImageZoomable from "./ObsImageZoomable";
@@ -114,6 +116,10 @@ const ObsImage = ( {
     !showZoomable
     || ( plainShownUri === displayUri && zoomLoadedUri !== displayUri )
   );
+  // A measured tile only needs the size it's drawn at (see ObsImageZoomable)
+  const plainUri = displayUri && containerSize && zoomEnabled && !cropControlled
+    ? photoUriForPixelSize( displayUri, containerSize * PixelRatio.get( ) )
+    : displayUri;
 
   return (
     <View
@@ -146,7 +152,7 @@ const ObsImage = ( {
           testID={showZoomable
             ? undefined
             : "ObsList.photo"}
-          source={{ uri: displayUri }}
+          source={{ uri: plainUri }}
           onError={onError}
           resizeMode={fitImage
             ? "contain"
