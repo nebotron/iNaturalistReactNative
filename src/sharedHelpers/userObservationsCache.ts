@@ -126,28 +126,60 @@ const migrateV2 = ( userId: number ) => {
 // a write from anywhere (or a test clearing storage) invalidates it on its own.
 const parsedBuckets = new Map<string, { raw: string; entries: CachedObservation[] }>( );
 
+const readBucket = ( key: string ): CachedObservation[] => {
+  const raw = store.getString( key );
+  if ( !raw ) return [];
+  let parsed = parsedBuckets.get( key );
+  if ( parsed?.raw !== raw ) {
+    try {
+      const tuples = JSON.parse( raw ) as CachedObservationTuple[];
+      parsed = { raw, entries: tuples.map( fromTuple ) };
+    } catch ( error ) {
+      logger.warn( "Discarding an unreadable observation cache bucket", error );
+      parsed = { raw, entries: [] };
+    }
+    parsedBuckets.set( key, parsed );
+  }
+  return parsed.entries;
+};
+
+const writeBucket = ( key: string, entries: CachedObservation[] ) => {
+  const raw = JSON.stringify( entries.map( toTuple ) );
+  store.set( key, raw );
+  parsedBuckets.set( key, { raw, entries } );
+};
+
 export const readUserObservationsCache = ( userId: number ): UserObservationsCache => {
   migrateV2( userId );
   const cache: UserObservationsCache = new Map( );
   for ( let i = 0; i < BUCKETS; i += 1 ) {
-    const key = bucketKey( userId, i );
-    const raw = store.getString( key );
-    if ( raw ) {
-      let parsed = parsedBuckets.get( key );
-      if ( parsed?.raw !== raw ) {
-        try {
-          const tuples = JSON.parse( raw ) as CachedObservationTuple[];
-          parsed = { raw, entries: tuples.map( fromTuple ) };
-        } catch ( error ) {
-          logger.warn( "Discarding an unreadable observation cache bucket", error );
-          parsed = { raw, entries: [] };
-        }
-        parsedBuckets.set( key, parsed );
-      }
-      parsed.entries.forEach( entry => cache.set( entry.uuid, entry ) );
-    }
+    readBucket( bucketKey( userId, i ) ).forEach( entry => cache.set( entry.uuid, entry ) );
   }
   return cache;
+};
+
+// One observation's entry, reading only the bucket it is in rather than the
+// whole history.
+export const readCachedObservation = (
+  userId: number,
+  uuid: string,
+): CachedObservation | undefined => {
+  migrateV2( userId );
+  return readBucket( bucketKey( userId, bucketOf( uuid ) ) )
+    .find( entry => entry.uuid === uuid );
+};
+
+// Told the uuids whose fave the cache now records differently, whether faved
+// here or learned from a sync, so the deletion album can refile just those.
+type FavesChangedListener = ( uuids: string[] ) => void;
+const favesChangedListeners = new Set<FavesChangedListener>( );
+export const onCachedFavesChanged = ( listener: FavesChangedListener ) => {
+  favesChangedListeners.add( listener );
+  return ( ) => { favesChangedListeners.delete( listener ); };
+};
+const notifyFavesChanged = ( uuids: string[] ) => {
+  if ( uuids.length === 0 ) return;
+  favesChangedListeners.forEach( listener => listener( uuids ) );
 };
 
 export const clearUserObservationsCache = ( ) => store.clearAll( );
@@ -164,11 +196,7 @@ const writeUserObservationsCache = (
   const dirty = new Set( [...changed].map( bucketOf ) );
   const buckets = new Map<number, CachedObservation[]>( [...dirty].map( b => [b, []] ) );
   cache.forEach( observation => buckets.get( bucketOf( observation.uuid ) )?.push( observation ) );
-  buckets.forEach( ( entries, bucket ) => {
-    const raw = JSON.stringify( entries.map( toTuple ) );
-    store.set( bucketKey( userId, bucket ), raw );
-    parsedBuckets.set( bucketKey( userId, bucket ), { raw, entries } );
-  } );
+  buckets.forEach( ( entries, bucket ) => writeBucket( bucketKey( userId, bucket ), entries ) );
 };
 
 // Applies a fave toggled in the app now, rather than at the next sync, so
@@ -179,11 +207,16 @@ export const setCachedFave = (
   faved: boolean,
 ) => {
   if ( !userId ) return;
-  const cache = readUserObservationsCache( userId );
-  const entry = cache.get( uuid );
-  if ( !entry || entry.faved === faved ) return;
-  cache.set( uuid, { ...entry, faved } );
-  writeUserObservationsCache( userId, cache, new Set( [uuid] ) );
+  migrateV2( userId );
+  // Only the bucket holding it: a fave is one entry, not the whole history
+  const key = bucketKey( userId, bucketOf( uuid ) );
+  const entries = readBucket( key );
+  const index = entries.findIndex( entry => entry.uuid === uuid );
+  if ( index === -1 || entries[index].faved === faved ) return;
+  const next = [...entries];
+  next[index] = { ...entries[index], faved };
+  writeBucket( key, next );
+  notifyFavesChanged( [uuid] );
 };
 
 const toCachedObservation = ( observation: ApiObservation ): CachedObservation => ( {
@@ -266,10 +299,15 @@ export const syncUserObservations = async (
   let hasMorePages = true;
   // Observations whose cached entry this sync actually changed
   const changed = new Set<string>( );
+  // Of those, the ones whose fave changed, or that the cache didn't hold
+  const favesChanged = new Set<string>( );
   // Anything already merged into the cache is worth keeping even if a later
   // page never arrives, so persist it — without recording the sync, which is
   // what makes the next run re-fetch from the top.
-  const savePartial = ( ) => writeUserObservationsCache( userId, cache, changed );
+  const savePartial = ( ) => {
+    writeUserObservationsCache( userId, cache, changed );
+    notifyFavesChanged( [...favesChanged] );
+  };
   while ( hasMorePages && pages < MAX_PAGES ) {
     pages += 1;
     let response;
@@ -319,6 +357,7 @@ export const syncUserObservations = async (
       ) return;
       cache.set( entry.uuid, entry );
       changed.add( entry.uuid );
+      if ( old?.faved !== entry.faved ) favesChanged.add( entry.uuid );
     } );
     onPage?.( results );
     syncedCount += results.length;
@@ -332,6 +371,7 @@ export const syncUserObservations = async (
   }
 
   writeUserObservationsCache( userId, cache, changed );
+  notifyFavesChanged( [...favesChanged] );
   store.set( lastSyncKey( userId ), syncStartedAt );
   return cache;
 };

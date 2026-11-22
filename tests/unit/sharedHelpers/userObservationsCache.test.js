@@ -1,8 +1,11 @@
 import { searchObservations } from "api/observations";
 import {
   clearUserObservationsCache,
+  onCachedFavesChanged,
+  readCachedObservation,
   readLastSync,
   readUserObservationsCache,
+  setCachedFave,
   speciesIdFromTaxon,
   syncUserObservations,
 } from "sharedHelpers/userObservationsCache";
@@ -258,6 +261,50 @@ describe( "syncUserObservations", ( ) => {
   it( "does nothing without a signed in user", async ( ) => {
     await expect( syncUserObservations( null, OPTS ) ).resolves.toEqual( new Map( ) );
     expect( searchObservations ).not.toHaveBeenCalled( );
+  } );
+} );
+
+describe( "fave changes", ( ) => {
+  it( "tells listeners which observations a sync found faved or unfaved", async ( ) => {
+    mockPages( [
+      makeApiObservation( { uuid: "a", observedAt: "2026-07-16T12:00:00Z", votes: [FAVE_VOTE] } ),
+      makeApiObservation( { uuid: "b", observedAt: "2026-07-16T12:00:00Z" } ),
+    ] );
+    await syncUserObservations( USER_ID, OPTS );
+
+    const listener = jest.fn( );
+    const stop = onCachedFavesChanged( listener );
+    mockPages( [
+      makeApiObservation( { uuid: "a", observedAt: "2026-07-16T12:00:00Z" } ),
+      makeApiObservation( {
+        uuid: "b", observedAt: "2026-07-16T12:00:00Z", qualityGrade: "research",
+      } ),
+    ] );
+    await syncUserObservations( USER_ID, OPTS );
+    stop( );
+
+    // b changed, but not its fave
+    expect( listener.mock.calls ).toEqual( [[["a"]]] );
+  } );
+
+  it( "records a fave made here in that observation alone, and says so", async ( ) => {
+    mockPages( [
+      makeApiObservation( { uuid: "c", observedAt: "2026-07-16T12:00:00Z" } ),
+      makeApiObservation( { uuid: "d", observedAt: "2026-07-16T12:00:00Z" } ),
+    ] );
+    await syncUserObservations( USER_ID, OPTS );
+
+    const listener = jest.fn( );
+    const stop = onCachedFavesChanged( listener );
+    setCachedFave( USER_ID, "c", true );
+    // Already unfaved: nothing to say
+    setCachedFave( USER_ID, "d", false );
+    stop( );
+
+    expect( listener.mock.calls ).toEqual( [[["c"]]] );
+    expect( readCachedObservation( USER_ID, "c" ).faved ).toBe( true );
+    expect( readCachedObservation( USER_ID, "d" ).faved ).toBe( false );
+    expect( readUserObservationsCache( USER_ID ).size ).toEqual( 2 );
   } );
 } );
 

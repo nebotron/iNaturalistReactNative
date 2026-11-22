@@ -1,5 +1,5 @@
 import {
-  readDir, unlink,
+  exists, readDir, unlink,
 } from "@dr.pogodin/react-native-fs";
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
@@ -164,8 +164,6 @@ export const saveLocalPhotoToLibrary = async ( path: string, crop?: NormalizedCr
     : undefined;
 };
 
-let sweeping = false;
-
 let breakdownLoggedAt = 0;
 
 // What is holding the staging folder's space, at most once a day: photos
@@ -201,99 +199,110 @@ const logStagingBreakdown = (
   } );
 };
 
-// favoritedUris: device photo URIs on observations the user has faved.
-// uploadedOrRemovedUris: device photos whose upload to iNaturalist finished,
-// faved or not, or removed in the photo picker, Group Photos or the cropper.
-// Their retention clock starts the first time a sweep sees them here.
-// onSavedToPhotos: the library URIs of faved photos just saved to Photos, which
-// are new assets the photo picker would otherwise offer again.
-// crops: device photo URI → its crop on the observation.
-export const sweepUsbStaging = async (
-  favoritedUris: string[],
-  uploadedOrRemovedUris: string[],
-  onSavedToPhotos?: ( uris: string[] ) => void,
-  crops: Record<string, NormalizedCrop> = {},
-) => {
-  if ( sweeping ) return;
-  sweeping = true;
-  try {
-    const favorited = new Set( favoritedUris.map( stagedNameFromUri ).filter( Boolean ) );
-    const importCrops = getImportCrops( );
-    const cropsByName = Object.fromEntries( Object.entries( crops )
-      .map( ( [uri, crop] ) => [stagedNameFromUri( uri ), crop] ) );
+// Starts the retention clock of each staged photo among these: device photos
+// whose upload to iNaturalist just finished, or that were just removed in the
+// photo picker, Group Photos or the cropper. A clock already running is left.
+export const startUsbStagingClocks = ( uris: string[] ) => {
+  const names = uris.map( stagedNameFromUri ).filter( ( name ): name is string => !!name );
+  if ( names.length === 0 ) return;
+  const clocks = getClocks( );
+  const unclocked = names.filter( name => clocks[name] === undefined );
+  if ( unclocked.length === 0 ) return;
+  unclocked.forEach( name => { clocks[name] = Date.now( ); } );
+  store.set( CLOCK_KEY, JSON.stringify( clocks ) );
+};
+
+// Saves to Photos, once each, the staged photos on an observation that is
+// faved, each with its crop on the observation (else its import crop).
+// Resolves the new assets' URIs, which the photo picker would otherwise offer
+// for import again, and whether Photos refused one: the rest wait for the
+// next try, and expiry keeps them until they're saved.
+export const saveFavedStagedPhotos = async (
+  photos: { uri: string; crop?: NormalizedCrop }[],
+): Promise<{ saved: string[]; refused: boolean }> => {
+  const saved: string[] = [];
+  let refused = false;
+  for ( const photo of photos ) {
+    const name = stagedNameFromUri( photo.uri );
+    const path = `${usbStagingPath}/${name}`;
+    // eslint-disable-next-line no-continue, no-await-in-loop
+    if ( !name || name in getSaved( ) || !await exists( path ).catch( ( ) => false ) ) continue;
     // Photos cropped before importCrops existed: the crop log has them by the
     // staged file's URI.
-    const cropFor = ( item: { name: string; path: string } ) => cropsByName[item.name]
-      ?? importCrops[item.name]
-      ?? getAnimalCrop( `file://${item.path}` )
+    const crop = photo.crop
+      ?? getImportCrops( )[name]
+      ?? getAnimalCrop( `file://${path}` )
       ?? undefined;
+    // eslint-disable-next-line no-await-in-loop
+    const ok = await enqueuePhotoLibraryWrite(
+      ( ) => saveLocalPhotoToLibrary( path, crop ),
+    ).then( uri => {
+      if ( uri ) saved.push( uri );
+      // Recorded even without a URI, so it's saved once, not every time.
+      store.set( SAVED_KEY, JSON.stringify( { ...getSaved( ), [name]: uri ?? "" } ) );
+      return true;
+    }, error => {
+      logger.error( "Could not save a faved USB photo to Photos", error );
+      return false;
+    } );
+    if ( !ok ) {
+      refused = true;
+      break;
+    }
+  }
+  if ( saved.length > 0 ) {
+    logger.info( `USB staging: saved ${saved.length} faved photo(s) to Photos` );
+  }
+  return { saved, refused };
+};
+
+let expiring = false;
+
+// Deletes the staged photos whose retention clock ran out, but never a faved
+// one before it's saved to Photos. Reads the folder, and asks isFaved only
+// about photos past their time, so it costs nothing per observation.
+// isFaved: whether the photo with this staged name is on a faved observation.
+export const expireUsbStaging = async (
+  isFaved: ( stagedName: string ) => boolean = ( ) => false,
+) => {
+  if ( expiring ) return;
+  expiring = true;
+  try {
     const retentionMs = getTunable( "usbStagingRetentionDays" ) * DAY_MS;
     const staged = await readStaged( );
     const stagedNames = new Set( staged.map( item => item.name ) );
-    const clocks = Object.fromEntries( Object.entries( getClocks( ) )
-      .filter( ( [name] ) => stagedNames.has( name ) ) );
-    uploadedOrRemovedUris.forEach( uri => {
-      const name = stagedNameFromUri( uri );
-      if ( name && stagedNames.has( name ) && clocks[name] === undefined ) {
-        clocks[name] = Date.now( );
-      }
-    } );
+    const startClocks = getClocks( );
     const savedNames = getSaved( );
     const removed = new Set<string>( );
-    const savedUris: string[] = [];
-    let saved = 0;
-    let libraryRefused = false;
     for ( const item of staged ) {
-      if ( favorited.has( item.name ) && !( item.name in savedNames ) ) {
-        // eslint-disable-next-line no-continue
-        if ( libraryRefused ) continue;
-        // eslint-disable-next-line no-await-in-loop
-        const ok = await enqueuePhotoLibraryWrite(
-          ( ) => saveLocalPhotoToLibrary( item.path, cropFor( item ) ),
-        ).then( uri => {
-          if ( uri ) savedUris.push( uri );
-          // Recorded even without a URI, so it's saved once, not every sweep.
-          store.set( SAVED_KEY, JSON.stringify( { ...getSaved( ), [item.name]: uri ?? "" } ) );
-          return true;
-        }, error => {
-          logger.error( "Could not save a faved USB photo to Photos", error );
-          return false;
-        } );
-        if ( !ok ) {
-          // The library refused. Keep this one staged, unsaved, for the next
-          // sweep, but go on expiring the rest rather than stopping here.
-          libraryRefused = true;
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-        saved += 1;
-      }
+      const startedAt = startClocks[item.name];
       if (
-        clocks[item.name] !== undefined
-        && Date.now( ) - clocks[item.name] > retentionMs
+        startedAt !== undefined
+        && Date.now( ) - startedAt > retentionMs
+        && ( item.name in savedNames || !isFaved( item.name ) )
       ) {
         // eslint-disable-next-line no-await-in-loop
         await unlink( item.path ).catch( ( ) => undefined );
         removed.add( item.name );
       }
     }
-    if ( savedUris.length > 0 ) onSavedToPhotos?.( savedUris );
-    removed.forEach( name => delete clocks[name] );
+    // Read again: a clock may have started while the folder was read
+    const clocks = getClocks( );
+    Object.keys( startClocks ).forEach( name => {
+      if ( removed.has( name ) || !stagedNames.has( name ) ) delete clocks[name];
+    } );
     store.set( CLOCK_KEY, JSON.stringify( clocks ) );
     if ( removed.size > 0 ) {
       const keptCrops = Object.entries( getImportCrops( ) )
         .filter( ( [name] ) => !removed.has( name ) );
       store.set( IMPORT_CROPS_KEY, JSON.stringify( Object.fromEntries( keptCrops ) ) );
-    }
-    if ( removed.size > 0 ) setOffered( getOffered( ).filter( name => !removed.has( name ) ) );
-    if ( saved > 0 || removed.size > 0 ) {
-      logger.info( `USB staging: saved ${saved} faved photo(s) to Photos, `
-        + `expired ${removed.size}` );
+      setOffered( getOffered( ).filter( name => !removed.has( name ) ) );
+      logger.info( `USB staging: expired ${removed.size}` );
     }
     logStagingBreakdown( staged.filter( item => !removed.has( item.name ) ), clocks );
   } catch ( error ) {
-    logger.error( "USB staging sweep failed", error );
+    logger.error( "USB staging expiry failed", error );
   } finally {
-    sweeping = false;
+    expiring = false;
   }
 };

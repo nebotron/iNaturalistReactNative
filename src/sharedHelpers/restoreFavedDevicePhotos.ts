@@ -124,7 +124,7 @@ export const restoreFavedDevicePhotos = async (
 ): Promise<{ saved: string[]; failed: boolean }> => {
   const none = { saved: [], failed: false };
   if ( Platform.OS !== "ios" || !ImageCropper?.existingAssets ) return none;
-  // Staged USB photos not yet saved are sweepUsbStaging's to save.
+  // Staged USB photos not yet saved are saveFavedStagedPhotos's to save.
   const candidates = [...new Set( deviceUris )]
     .filter( uri => libraryUriFor( uri ).startsWith( "ph://" ) );
   if ( candidates.length === 0 ) return none;

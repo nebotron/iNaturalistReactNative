@@ -14,7 +14,7 @@ import { PRELOAD_LOOKAHEAD } from "sharedHelpers/imageCropPreload";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import { requestWriteMediaPermission } from "sharedHelpers/permissions";
-import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
+import { requestUsbStagingExpiry } from "sharedHelpers/queuedDeletionAlbum";
 import { stagedPathFor } from "sharedHelpers/usbStaging";
 import {
   addPendingUsbDeletes,
@@ -631,7 +631,7 @@ const useUsbImport = ( ) => {
     void refreshUsbCardState( );
     const subscription = AppState.addEventListener( "change", state => {
       if ( state !== "active" ) return;
-      requestQueuedDeletionAlbumSync( );
+      requestUsbStagingExpiry( );
       void refreshUsbCardState( );
     } );
     return ( ) => subscription.remove( );

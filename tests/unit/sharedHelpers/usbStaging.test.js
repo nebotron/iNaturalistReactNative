@@ -1,6 +1,11 @@
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import { usbStagingPath } from "appConstants/paths";
-import { readableUriForDevicePhoto, sweepUsbStaging } from "sharedHelpers/usbStaging";
+import {
+  expireUsbStaging,
+  readableUriForDevicePhoto,
+  saveFavedStagedPhotos,
+  startUsbStagingClocks,
+} from "sharedHelpers/usbStaging";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 let mockFiles = [];
@@ -14,6 +19,7 @@ jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
   mkdir: async ( ) => undefined,
   copyFile: async ( ) => undefined,
   unlink: path => mockUnlink( path ),
+  exists: async path => mockFiles.some( name => path.endsWith( `/${name}` ) ),
   readDir: async ( ) => mockFiles.map( name => ( {
     name,
     path: `/docs/usbStaging/${name}`,
@@ -32,66 +38,82 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
 
 const uri = name => `file:///old/container/usbStaging/${name}`;
 
-describe( "sweepUsbStaging", ( ) => {
+describe( "USB staging", ( ) => {
   beforeEach( ( ) => { jest.useFakeTimers( { now: 0 } ); } );
   afterEach( ( ) => { jest.useRealTimers( ); } );
 
   it( "saves a faved photo once, and expires it three days after it uploads", async ( ) => {
     const faved = uri( "1_FAVED.JPG" );
+    const isFaved = name => name === "1_FAVED.JPG";
     mockFiles = ["1_FAVED.JPG"];
     // Faved before its upload finished: saved to Photos, but no clock yet.
-    await sweepUsbStaging( [faved], [] );
+    await saveFavedStagedPhotos( [{ uri: faved }] );
     expect( CameraRoll.saveAsset ).toHaveBeenCalledWith(
-      "file:///docs/usbStaging/1_FAVED.JPG",
+      `file://${usbStagingPath}/1_FAVED.JPG`,
       { type: "photo", album: "→ Shared Library" },
     );
     jest.setSystemTime( 10 * DAY_MS );
-    await sweepUsbStaging( [faved], [] );
+    await expireUsbStaging( isFaved );
     expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
 
     // Uploaded at day 10.
-    await sweepUsbStaging( [faved], [faved] );
+    startUsbStagingClocks( [faved] );
     jest.setSystemTime( 12 * DAY_MS );
-    await sweepUsbStaging( [faved], [faved] );
+    await saveFavedStagedPhotos( [{ uri: faved }] );
+    await expireUsbStaging( isFaved );
     expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
 
     jest.setSystemTime( 14 * DAY_MS );
-    await sweepUsbStaging( [faved], [faved] );
+    await expireUsbStaging( isFaved );
     expect( CameraRoll.saveAsset ).toHaveBeenCalledTimes( 1 );
     expect( mockFiles ).toEqual( [] );
   } );
 
   it( "expires uploaded and removed photos three days on, and keeps the rest", async ( ) => {
     mockFiles = ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"];
-    const expirable = [uri( "1_UPLOADED.JPG" ), uri( "1_REMOVED.JPG" )];
-    await sweepUsbStaging( [], expirable );
+    startUsbStagingClocks( [uri( "1_UPLOADED.JPG" ), uri( "1_REMOVED.JPG" )] );
 
     jest.setSystemTime( 2 * DAY_MS );
-    await sweepUsbStaging( [], expirable );
+    // Asked again later, the clock keeps its start
+    startUsbStagingClocks( [uri( "1_UPLOADED.JPG" )] );
+    await expireUsbStaging( );
     expect( mockFiles ).toEqual( ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"] );
 
     jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [], expirable );
+    await expireUsbStaging( );
     expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
 
     // Never uploaded or removed: kept indefinitely.
     jest.setSystemTime( 400 * DAY_MS );
-    await sweepUsbStaging( [], [] );
+    await expireUsbStaging( );
     expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
   } );
 
-  it( "goes on expiring photos when Photos refuses to save a faved one", async ( ) => {
+  it( "keeps a faved photo Photos refused to save, and expires the rest", async ( ) => {
     CameraRoll.saveAsset.mockRejectedValue( new Error( "denied" ) );
-    // Read in name order, so the faved photo comes before the expiring one.
     mockFiles = ["1_REFUSED.JPG", "2_EXPIRED.JPG"];
-    await sweepUsbStaging( [uri( "1_REFUSED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
+    const { refused } = await saveFavedStagedPhotos( [{ uri: uri( "1_REFUSED.JPG" ) }] );
+    expect( refused ).toBe( true );
+    startUsbStagingClocks( [uri( "1_REFUSED.JPG" ), uri( "2_EXPIRED.JPG" )] );
 
     jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [uri( "1_REFUSED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
+    const isFaved = jest.fn( name => name === "1_REFUSED.JPG" );
+    await expireUsbStaging( isFaved );
     // Past its time, but a faved photo is only deleted once it's saved.
     expect( mockFiles ).toEqual( ["1_REFUSED.JPG"] );
     CameraRoll.saveAsset.mockReset( );
     CameraRoll.saveAsset.mockResolvedValue( {} );
+  } );
+
+  it( "asks whether a photo is faved only once its time is up", async ( ) => {
+    mockFiles = ["1_EARLY.JPG", "2_LATE.JPG", "3_UNCLOCKED.JPG"];
+    startUsbStagingClocks( [uri( "1_EARLY.JPG" )] );
+    jest.setSystemTime( 3.5 * DAY_MS );
+    startUsbStagingClocks( [uri( "2_LATE.JPG" )] );
+    jest.setSystemTime( 4 * DAY_MS );
+    const isFaved = jest.fn( ( ) => false );
+    await expireUsbStaging( isFaved );
+    expect( isFaved.mock.calls ).toEqual( [["1_EARLY.JPG"]] );
   } );
 
   it( "saves a faved photo with its import crop when the observation lost it", async ( ) => {
@@ -105,7 +127,7 @@ describe( "sweepUsbStaging", ( ) => {
       const staging = jest.requireActual( "sharedHelpers/usbStaging" );
       mockFiles = ["1_CROPPED.JPG"];
       staging.recordStagedImportCrop( uri( "1_CROPPED.JPG" ), crop );
-      await staging.sweepUsbStaging( [uri( "1_CROPPED.JPG" )], [], undefined, {} );
+      await staging.saveFavedStagedPhotos( [{ uri: uri( "1_CROPPED.JPG" ) }] );
     } );
     delete NativeModules.ImageCropper;
 
@@ -117,7 +139,7 @@ describe( "readableUriForDevicePhoto", ( ) => {
   it( "reads a faved photo from the Photos asset it was saved as", async ( ) => {
     CameraRoll.saveAsset.mockResolvedValueOnce( { node: { id: "SAVED" } } );
     mockFiles = ["2_SAVED.HIF"];
-    await sweepUsbStaging( [uri( "2_SAVED.HIF" )], [] );
+    await saveFavedStagedPhotos( [{ uri: uri( "2_SAVED.HIF" ) }] );
     expect( readableUriForDevicePhoto( uri( "2_SAVED.HIF" ) ) ).toBe( "ph://SAVED" );
   } );
 

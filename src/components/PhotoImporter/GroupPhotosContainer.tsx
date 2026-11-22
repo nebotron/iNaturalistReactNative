@@ -40,7 +40,6 @@ import type { PrefetchTimings } from "sharedHelpers/prefetchObservationSuggestio
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
-import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import logRawImportMetadata, {
   localFileUrisForObservations,
 } from "sharedHelpers/rawImportMetadataLog";
@@ -339,15 +338,6 @@ const GroupPhotosContainer = ( ) => {
     }
   };
 
-  // Filing removed photos in the imported album means classifying every
-  // device photo in Realm and writing to the Photos library, which stalled the
-  // grid shortly after each removal. The removed URIs are recorded right away,
-  // so the album can catch up once the user leaves this screen instead.
-  const removedAnyPhotos = useRef( false );
-  useEffect( ( ) => ( ) => {
-    if ( removedAnyPhotos.current ) requestQueuedDeletionAlbumSync( );
-  }, [] );
-
   const removeObservations = ( observations: GroupedPhoto[] ) => {
     const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
     const removedPhotos = new Set( orderedPhotos );
@@ -366,7 +356,6 @@ const GroupPhotosContainer = ( ) => {
     if ( deviceUrisToDelete.length > 0 ) {
       addPendingGroupPhotoDeletionUris( deviceUrisToDelete );
       addRemovedGroupPhotoUris( deviceUrisToDelete );
-      removedAnyPhotos.current = true;
     }
 
     // No line here: this fires on every photo the user removes (317 times in

@@ -68,7 +68,7 @@ jest.mock( "sharedHelpers/permissions", ( ) => ( {
 } ) );
 
 jest.mock( "sharedHelpers/queuedDeletionAlbum", ( ) => ( {
-  requestQueuedDeletionAlbumSync: jest.fn( ),
+  requestUsbStagingExpiry: jest.fn( ),
 } ) );
 
 jest.mock( "sharedHelpers/installData", ( ) => ( {
