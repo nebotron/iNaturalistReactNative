@@ -1,15 +1,11 @@
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
-import { purgeableUsbStagingPath, usbStagingPath } from "appConstants/paths";
+import { usbStagingPath } from "appConstants/paths";
 import { readableUriForDevicePhoto, sweepUsbStaging } from "sharedHelpers/usbStaging";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 let mockFiles = [];
-// Staged name → the folder it is in, when not Documents/usbStaging.
-let mockFolders = {};
-const mockFolderOf = name => mockFolders[name]
-  ?? jest.requireActual( "appConstants/paths" ).usbStagingPath;
 const mockUnlink = jest.fn( async path => {
-  mockFiles = mockFiles.filter( name => path !== `${mockFolderOf( name )}/${name}` );
+  mockFiles = mockFiles.filter( name => !path.endsWith( `/${name}` ) );
 } );
 
 jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
@@ -18,19 +14,12 @@ jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
   mkdir: async ( ) => undefined,
   copyFile: async ( ) => undefined,
   unlink: path => mockUnlink( path ),
-  moveFile: async ( from, to ) => {
-    const name = from.split( "/" ).pop( );
-    mockFolders[name] = to.slice( 0, to.lastIndexOf( "/" ) );
-  },
-  readDir: async folder => mockFiles
-    .filter( name => mockFolderOf( name ) === folder )
-    .map( name => ( {
-      name,
-      path: `${folder}/${name}`,
-      isFile: ( ) => true,
-      mtime: new Date( 0 ),
-      size: 1,
-    } ) ),
+  readDir: async ( ) => mockFiles.map( name => ( {
+    name,
+    path: `/docs/usbStaging/${name}`,
+    isFile: ( ) => true,
+    mtime: new Date( 0 ),
+  } ) ),
 } ) );
 
 jest.mock( "@react-native-camera-roll/camera-roll", ( ) => ( {
@@ -44,10 +33,7 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
 const uri = name => `file:///old/container/usbStaging/${name}`;
 
 describe( "sweepUsbStaging", ( ) => {
-  beforeEach( ( ) => {
-    jest.useFakeTimers( { now: 0 } );
-    mockFolders = {};
-  } );
+  beforeEach( ( ) => { jest.useFakeTimers( { now: 0 } ); } );
   afterEach( ( ) => { jest.useRealTimers( ); } );
 
   it( "saves a faved photo once, and expires it three days after it uploads", async ( ) => {
@@ -56,7 +42,7 @@ describe( "sweepUsbStaging", ( ) => {
     // Faved before its upload finished: saved to Photos, but no clock yet.
     await sweepUsbStaging( [faved], [] );
     expect( CameraRoll.saveAsset ).toHaveBeenCalledWith(
-      `file://${usbStagingPath}/1_FAVED.JPG`,
+      "file:///docs/usbStaging/1_FAVED.JPG",
       { type: "photo", album: "→ Shared Library" },
     );
     jest.setSystemTime( 10 * DAY_MS );
@@ -92,38 +78,6 @@ describe( "sweepUsbStaging", ( ) => {
     jest.setSystemTime( 400 * DAY_MS );
     await sweepUsbStaging( [], [] );
     expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
-  } );
-
-  it( "moves photos whose clock is running to Caches, where iOS may purge them", async ( ) => {
-    mockFiles = ["1_UPLOADED.JPG", "1_UNUSED.JPG", "5_FAVED.JPG"];
-    const uploaded = uri( "1_UPLOADED.JPG" );
-    await sweepUsbStaging( [], [uploaded] );
-    expect( mockFolderOf( "1_UPLOADED.JPG" ) ).toBe( purgeableUsbStagingPath );
-    expect( readableUriForDevicePhoto( uploaded ) )
-      .toBe( `file://${purgeableUsbStagingPath}/1_UPLOADED.JPG` );
-    // Never uploaded or removed: stays where iOS won't purge it.
-    expect( mockFolderOf( "1_UNUSED.JPG" ) ).toBe( usbStagingPath );
-
-    // A faved photo moves only once it's saved to Photos.
-    CameraRoll.saveAsset.mockRejectedValueOnce( new Error( "denied" ) );
-    await sweepUsbStaging( [uri( "5_FAVED.JPG" )], [uploaded, uri( "5_FAVED.JPG" )] );
-    expect( mockFolderOf( "5_FAVED.JPG" ) ).toBe( usbStagingPath );
-    await sweepUsbStaging( [uri( "5_FAVED.JPG" )], [uploaded, uri( "5_FAVED.JPG" )] );
-    expect( mockFolderOf( "5_FAVED.JPG" ) ).toBe( purgeableUsbStagingPath );
-
-    // Still expired from Caches.
-    jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [], [] );
-    expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
-  } );
-
-  it( "forgets a photo iOS purged from Caches", async ( ) => {
-    mockFiles = ["1_PURGED.JPG"];
-    await sweepUsbStaging( [], [uri( "1_PURGED.JPG" )] );
-    mockFiles = [];
-    await expect( sweepUsbStaging( [], [] ) ).resolves.toBeUndefined( );
-    expect( readableUriForDevicePhoto( uri( "1_PURGED.JPG" ) ) )
-      .toBe( `file://${usbStagingPath}/1_PURGED.JPG` );
   } );
 
   it( "goes on expiring photos when Photos refuses to save a faved one", async ( ) => {

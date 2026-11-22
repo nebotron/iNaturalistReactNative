@@ -1,9 +1,9 @@
 import {
-  mkdir, moveFile, readDir, unlink,
+  readDir, unlink,
 } from "@dr.pogodin/react-native-fs";
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
-import { purgeableUsbStagingPath, usbStagingPath } from "appConstants/paths";
+import { usbStagingPath } from "appConstants/paths";
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import { getAnimalCrop } from "sharedHelpers/animalCropLog";
@@ -24,11 +24,6 @@ const logger = log.extend( "usbStaging" );
 // deleted before that save succeeds. Staged names are "<stagedAtMs>_<file
 // name>", and photos are matched to observations by that name alone: the app
 // container's absolute path changes across app updates.
-//
-// Once a photo's clock is running, and it is saved to Photos if faved, the
-// sweep moves it from Documents to Caches (purgeableUsbStagingPath), where iOS
-// may delete it when the device runs low on space. Nothing then depends on it:
-// it's uploaded or removed, and is deleted at expiry anyway.
 
 const SHARED_LIBRARY_ALBUM_TITLE = "→ Shared Library";
 
@@ -51,10 +46,6 @@ const getSaved = ( ): Record<string, string> => JSON.parse( store.getString( SAV
 // Staged name → its import crop. The observation's copy of the crop is
 // local-only and can be lost (e.g. to a re-download), so a faved photo would
 // otherwise be saved to Photos uncropped.
-// Staged names moved to purgeableUsbStagingPath.
-const PURGEABLE_KEY = "purgeableNames";
-const getPurgeable = ( ): string[] => JSON.parse( store.getString( PURGEABLE_KEY ) ?? "[]" );
-
 const IMPORT_CROPS_KEY = "importCrops";
 const getImportCrops = ( ): Record<string, NormalizedCrop> => JSON.parse(
   store.getString( IMPORT_CROPS_KEY ) ?? "{}",
@@ -84,24 +75,11 @@ export const libraryUriForDevicePhoto = ( uri: string ) => {
 export const readableUriForDevicePhoto = ( uri: string ) => {
   const name = stagedNameFromUri( uri );
   if ( !name ) return uri;
-  const folder = getPurgeable( ).includes( name )
-    ? purgeableUsbStagingPath
-    : usbStagingPath;
-  return getSaved( )[name] || `file://${folder}/${name}`;
+  return getSaved( )[name] || `file://${usbStagingPath}/${name}`;
 };
 
-const readStagedIn = async ( folder: string ) => ( await readDir( folder ).catch( ( ) => [] ) )
+const readStaged = async ( ) => ( await readDir( usbStagingPath ).catch( ( ) => [] ) )
   .filter( item => item.isFile( ) && !item.name.endsWith( ".partial" ) );
-
-// Both folders; a photo found in both (a move interrupted after the copy) is
-// listed once, from Documents.
-const readStaged = async ( ) => {
-  const kept = await readStagedIn( usbStagingPath );
-  const keptNames = new Set( kept.map( item => item.name ) );
-  const purgeable = ( await readStagedIn( purgeableUsbStagingPath ) )
-    .filter( item => !keptNames.has( item.name ) );
-  return [...kept, ...purgeable];
-};
 
 // Identifies a device photo URI across app updates, which move the app
 // container and so every staged photo's absolute path.
@@ -188,7 +166,6 @@ let breakdownLoggedAt = 0;
 const logStagingBreakdown = (
   staged: { name: string; size: number | string }[],
   clocks: Record<string, number>,
-  purgeable: Set<string>,
 ) => {
   if ( Date.now( ) - breakdownLoggedAt < DAY_MS ) return;
   breakdownLoggedAt = Date.now( );
@@ -207,7 +184,6 @@ const logStagingBreakdown = (
       : "expiring";
     add( state, bytes );
     add( `${state}.${ext}`, bytes );
-    if ( purgeable.has( item.name ) ) add( "purgeable", bytes );
   } );
   const rounded = Object.fromEntries( Object.entries( tally )
     .map( ( [key, { n, mb }] ) => [key, { n, mb: Math.round( mb ) }] ) );
@@ -242,7 +218,6 @@ export const sweepUsbStaging = async (
     const cropFor = ( item: { name: string; path: string } ) => cropsByName[item.name]
       ?? importCrops[item.name]
       ?? getAnimalCrop( `file://${item.path}` )
-      ?? getAnimalCrop( `file://${usbStagingPath}/${item.name}` )
       ?? undefined;
     const retentionMs = getTunable( "usbStagingRetentionDays" ) * DAY_MS;
     const staged = await readStaged( );
@@ -257,8 +232,6 @@ export const sweepUsbStaging = async (
     } );
     const savedNames = getSaved( );
     const removed = new Set<string>( );
-    const purgeable = new Set( getPurgeable( ).filter( name => stagedNames.has( name ) ) );
-    let movedBytes = 0;
     const savedUris: string[] = [];
     let saved = 0;
     let libraryRefused = false;
@@ -294,29 +267,7 @@ export const sweepUsbStaging = async (
         // eslint-disable-next-line no-await-in-loop
         await unlink( item.path ).catch( ( ) => undefined );
         removed.add( item.name );
-      } else if (
-        clocks[item.name] !== undefined
-        && item.path.startsWith( usbStagingPath )
-        && ( !favorited.has( item.name ) || item.name in getSaved( ) )
-      ) {
-        // eslint-disable-next-line no-await-in-loop
-        const moved = await mkdir( purgeableUsbStagingPath )
-          .then( ( ) => moveFile( item.path, `${purgeableUsbStagingPath}/${item.name}` ) )
-          .then( ( ) => true, error => {
-            logger.error( "Could not move a staged USB photo to Caches", error );
-            return false;
-          } );
-        if ( moved ) {
-          purgeable.add( item.name );
-          movedBytes += Number( item.size ) || 0;
-        }
       }
-    }
-    removed.forEach( name => purgeable.delete( name ) );
-    store.set( PURGEABLE_KEY, JSON.stringify( [...purgeable] ) );
-    if ( movedBytes > 0 ) {
-      logger.info( `USB staging: moved ${Math.round( movedBytes / 1024 / 1024 )}MB `
-        + "of expiring photos to Caches" );
     }
     if ( savedUris.length > 0 ) onSavedToPhotos?.( savedUris );
     removed.forEach( name => delete clocks[name] );
@@ -331,7 +282,7 @@ export const sweepUsbStaging = async (
       logger.info( `USB staging: saved ${saved} faved photo(s) to Photos, `
         + `expired ${removed.size}` );
     }
-    logStagingBreakdown( staged.filter( item => !removed.has( item.name ) ), clocks, purgeable );
+    logStagingBreakdown( staged.filter( item => !removed.has( item.name ) ), clocks );
   } catch ( error ) {
     logger.error( "USB staging sweep failed", error );
   } finally {
