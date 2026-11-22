@@ -16,7 +16,14 @@
 //   overlap the screen's, so their figures repeat part of a screen's.
 //
 // Safe to call from any thread.
+// Declared as C so Objective-C++ callers (CpuProfiler.mm) link against them
+#ifdef __cplusplus
+extern "C" {
+#endif
 void INatPowerSetScreen( NSString *_Nullable screen );
 void INatPowerSetActivity( NSString *_Nonnull activity, BOOL active );
 // The screen interval open now: the screen in front, or "Background"
 NSString *_Nullable INatPowerCurrentScreen( void );
+#ifdef __cplusplus
+}
+#endif

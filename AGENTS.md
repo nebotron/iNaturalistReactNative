@@ -307,11 +307,13 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
   `ios/iNaturalistReactNative/PowerProfile.h`), and the CPU and disk-write
   exception reports with their stacks. Those stacks are summarized from
   every sample (top self and inclusive functions, heaviest whole stacks), but
-  their JavaScript is all Hermes interpreter frames; for that, `cpu_profile`
-  entries (`ios/iNaturalistReactNative/CpuProfiler.mm`) are written while the
-  app is using over ~60% of a core for half a minute: per-thread CPU plus a
-  Hermes sampling profile naming the hot JS functions, with `main.jsbundle`
-  line:column positions (`python3 scripts/app_log.py --grep cpu_profile`).
+  their JavaScript is all Hermes interpreter frames. For that, Hermes's
+  sampling profiler runs continuously at 5 Hz while the app is in front
+  (`ios/iNaturalistReactNative/CpuProfiler.mm`): `js_cpu_summary` every 15
+  minutes in front and on backgrounding, and a faster `cpu_profile` burst
+  when the app uses over ~60% of a core for half a minute. Both name the hot
+  JS functions and stacks, with per-thread CPU and `main.jsbundle`
+  line:column positions (`python3 scripts/app_log.py --grep 'js_cpu|cpu_prof'`).
 - **UI responsiveness markers**, written by `sharedHelpers/uiDelayTracker.ts`
   and searchable in that log: `slow_screen_transition` (tap to rendered
   screen) and `slow_ui_work`. `button_stuck_processing` and
