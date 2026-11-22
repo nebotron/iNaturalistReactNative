@@ -418,8 +418,6 @@ Copy-coordinates = Copy Coordinates
 # heading to describe general information about rights, attribution, and
 # licensing
 Copyright = Copyright
-# Error message when original photos could not be deleted from the device
-Could-not-delete-original-photos = Could not delete the original photos from your device. This is a known iOS issue — try restarting your iPhone, then delete the photo from the Photos app.
 # Error message when no camera can be found
 Could-not-find-a-camera-on-this-device = Could not find a camera on this device
 # Error message when none of the selected photos could be copied off the device
@@ -1570,8 +1568,6 @@ Photo-X-is-better = { $number } is better
 # Under two swipeable photos being compared, e.g. "Photo 1 of 2 — swipe to compare"
 Photo-X-of-Y-swipe-to-compare = Photo { $number } of { $total } — swipe to compare
 Photos = Photos
-# Error message when the iOS Photos library has stopped answering write requests, so nothing was deleted
-Photos-stopped-responding-restart-the-app = Photos stopped responding on this device, so nothing was deleted. Close and reopen the app, then try again.
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Settings option: the green observation button opens the photo picker
 Pick-photos = Pick photos
