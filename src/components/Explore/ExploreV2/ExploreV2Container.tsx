@@ -1,5 +1,6 @@
-import { useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { HOTSPOTS_TAB } from "appConstants/tabs";
+import { useLoadSavedSearch } from "components/Explore/ExploreV2/hooks/useApplySavedSearch";
 import ExploreStackNavigator
   from "navigation/StackNavigators/ExploreStackNavigator";
 import type { TabStackScreenProps } from "navigation/types";
@@ -64,6 +65,24 @@ const HotspotLinkViewPersister = ( ) => {
   return null;
 };
 
+// Loads a saved search sent here from an Explore opened from a hotspot link,
+// which closes itself so the saved search replaces the Hotspots view outright
+const SavedSearchLoader = ( ) => {
+  const { params } = useRoute<TabStackScreenProps<"Explore" | "RootExplore">["route"]>( );
+  const navigation = useNavigation<TabStackScreenProps<"Explore">["navigation"]>( );
+  const loadSavedSearch = useLoadSavedSearch( );
+  const savedSearch = params?.loadSavedSearch;
+
+  useEffect( ( ) => {
+    if ( !savedSearch ) return;
+    loadSavedSearch( savedSearch );
+    // So it isn't loaded again over later changes when this screen remounts
+    navigation.setParams( { loadSavedSearch: undefined } );
+  }, [savedSearch, loadSavedSearch, navigation] );
+
+  return null;
+};
+
 const ExploreV2Container = ( ) => {
   const { name, params } = useRoute<TabStackScreenProps<"Explore" | "RootExplore">["route"]>( );
   const isRootExplore = name === "RootExplore";
@@ -102,6 +121,7 @@ const ExploreV2Container = ( ) => {
     <ExploreV2Provider initialState={initialState} fromHotspot={fromHotspot}>
       {isRootExplore && <LastSearchPersister />}
       {fromHotspot && <HotspotLinkViewPersister />}
+      <SavedSearchLoader />
       <ExploreStackNavigator showBackButton={!isRootExplore} />
     </ExploreV2Provider>
   );

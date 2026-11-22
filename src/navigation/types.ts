@@ -19,6 +19,7 @@ import type {
 } from "providers/ExploreV2Context";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import type { SharedData } from "sharedHooks/useShare";
+import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
 
 export interface ExploreV2EntryParams {
   search?: ExploreV2Search;
@@ -30,6 +31,9 @@ export interface ExploreV2EntryParams {
   // Opened from a link on the Hotspots view, so it opens on the view and sort
   // last chosen from a hotspot link
   fromHotspot?: boolean;
+  // A saved search to load into this Explore, sent when one is loaded in an
+  // Explore opened from a hotspot link on this one's Hotspots view
+  loadSavedSearch?: SavedSearch;
 }
 
 // Params sent to ExploreV1, read in components/Explore/hooks/useParams.js
@@ -323,6 +327,7 @@ export type BaseTabStackParamList = {
     // Set when a taxon is selected on TaxonDetails (opened from the Explore taxon
     // filter search, or a relative drill-down from it) to add it to the taxon filters
     selectedTaxonForFilter?: object;
+    loadSavedSearch?: ExploreV2EntryParams["loadSavedSearch"];
   } | undefined;
   // Explore opened from another screen (TaxonDetails, UserProfile,
   // ProjectDetails, ProjectRequirements) rather than from the Explore tab.

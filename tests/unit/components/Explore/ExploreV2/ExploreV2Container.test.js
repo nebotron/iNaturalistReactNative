@@ -7,11 +7,15 @@ import { EXPLORE_V2_ACTION } from "providers/ExploreV2Context";
 import React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import useStore from "stores/useStore";
+import { savedSearch as buildSavedSearch } from "tests/helpers/savedSearch";
 
 let mockRoute;
+const mockSetParams = jest.fn( );
+const mockNavigation = { setParams: mockSetParams };
 jest.mock( "@react-navigation/native", ( ) => ( {
   ...jest.requireActual( "@react-navigation/native" ),
   useRoute: ( ) => mockRoute,
+  useNavigation: ( ) => mockNavigation,
 } ) );
 
 // Stands in for the Explore screens, exposing the Explore state they'd see
@@ -81,5 +85,20 @@ describe( "ExploreV2Container opened from a hotspot link", ( ) => {
       tab: SPECIES_TAB,
     } ) );
     expect( useStore.getState( ).layout.hotspotLinkView.activeTab ).toBe( OBSERVATIONS_TAB );
+  } );
+} );
+
+describe( "ExploreV2Container sent a saved search", ( ) => {
+  it( "loads it, replacing the Hotspots view, and clears the request", ( ) => {
+    const search = buildSavedSearch( { activeTab: SPECIES_TAB } );
+    mockRoute = {
+      name: "RootExplore",
+      params: { activeTab: HOTSPOTS_TAB, loadSavedSearch: search },
+    };
+    render( <ExploreV2Container /> );
+    expect( mockExplore.state.activeTab ).toBe( SPECIES_TAB );
+    expect( mockExplore.state.appliedSearchCount ).toBe( 1 );
+    expect( mockExplore.state.backStack ).toEqual( [] );
+    expect( mockSetParams ).toHaveBeenCalledWith( { loadSavedSearch: undefined } );
   } );
 } );
