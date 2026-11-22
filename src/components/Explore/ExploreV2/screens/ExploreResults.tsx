@@ -127,6 +127,9 @@ const DROP_SHADOW = getShadow( {
 const ExploreResults = ( ) => {
   const { dispatch, state } = useExploreV2( );
   const { params } = useRoute<ExploreStackScreenProps<"ExploreResults">["route"]>( );
+  // The Explore tab itself, rather than an Explore opened from somewhere else. Only the tab
+  // is put back as the user left it when they return to it.
+  const isRootExplore = !params?.showBackButton;
   const currentUser = useCurrentUser( );
   const currentUserId = currentUser?.id;
   const {
@@ -180,7 +183,18 @@ const ExploreResults = ( ) => {
   );
 
   const isNearby = state.location.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY;
-  const [nearbyCoords, setNearbyCoords] = useState<NearbyCoords | undefined>( undefined );
+  // Kept for the session, so coming back to the tab shows the same nearby results
+  // and map rather than re-resolving the location
+  const setExploreNearbyCoords = useStore( s => s.setExploreNearbyCoords );
+  const [nearbyCoords, setNearbyCoordsState] = useState<NearbyCoords | undefined>(
+    ( ) => ( isRootExplore
+      ? useStore.getState( ).exploreNearbyCoords ?? undefined
+      : undefined ),
+  );
+  const setNearbyCoords = useCallback( ( coords: NearbyCoords ) => {
+    setNearbyCoordsState( coords );
+    if ( isRootExplore ) setExploreNearbyCoords( coords );
+  }, [isRootExplore, setExploreNearbyCoords] );
   // Applying a saved search re-resolves Nearby against the latest location
   const { appliedSearchCount } = state;
   const coordsSearchCountRef = useRef( appliedSearchCount );
@@ -208,7 +222,13 @@ const ExploreResults = ( ) => {
     }
     return ( ) => { cancelled = true; };
   }, [
-    isNearby, hasPermissions, hasBlockedPermissions, nearbyCoords, appliedSearchCount, dispatch,
+    isNearby,
+    hasPermissions,
+    hasBlockedPermissions,
+    nearbyCoords,
+    appliedSearchCount,
+    dispatch,
+    setNearbyCoords,
   ] ) );
 
   const handleRedoSearchPress = useCallback(
@@ -377,6 +397,14 @@ const ExploreResults = ( ) => {
     ...speciesSortToSpeciesCountsParams( state.speciesSortBy ),
   } ), [baseSearchParams, state.speciesSortBy] );
 
+  // Lists in the Explore tab scroll back to where they were when the user returns,
+  // as long as the search they show hasn't changed
+  const scrollRestoreKey = ( list: string, listParams: object ) => (
+    isRootExplore
+      ? `explore:${list}:${JSON.stringify( listParams )}`
+      : undefined
+  );
+
   const speciesCount = useSpeciesCount(
     baseSearchParams,
     // Only shown in the species view's header
@@ -502,6 +530,7 @@ const ExploreResults = ( ) => {
                     ? state.location.place.id
                     : undefined}
                   queryParams={queryParams}
+                  restoreView={isRootExplore}
                   totalBounds={totalBounds}
                 />
               )
@@ -523,6 +552,7 @@ const ExploreResults = ( ) => {
                   hideObsUploadStatus={layout !== "list"}
                   obsListKey="ExploreV2Observations"
                   onEndReached={fetchNextPage}
+                  scrollRestoreKey={scrollRestoreKey( `observations-${layout}`, queryParams )}
                   selectable
                   showNoResults={hasNoResults}
                   testID="ExploreV2ObservationsList"
@@ -563,6 +593,7 @@ const ExploreResults = ( ) => {
               enabled={canFetch}
               isConnected={isConnected}
               params={speciesListParams}
+              scrollRestoreKey={scrollRestoreKey( "species", speciesListParams )}
             />
             {/* Nothing to sort when there are no results */}
             {!speciesHasNoResults && (
@@ -597,6 +628,7 @@ const ExploreResults = ( ) => {
             isConnected={Boolean( isConnected )}
             queryParams={baseSearchParams}
             handleUpdateCount={handleLifeListCount}
+            scrollRestoreKey={scrollRestoreKey( "lifelist", baseSearchParams )}
           />
         );
       case OBSERVERS_TAB:
@@ -607,6 +639,7 @@ const ExploreResults = ( ) => {
             enabled={canFetch}
             isConnected={isConnected}
             params={baseSearchParams}
+            scrollRestoreKey={scrollRestoreKey( state.activeTab, baseSearchParams )}
             tab={state.activeTab}
             onCount={state.activeTab === OBSERVERS_TAB
               ? setObserversCount
@@ -619,6 +652,7 @@ const ExploreResults = ( ) => {
             enabled={canFetch}
             params={baseSearchParams}
             onCount={setIdentificationsCount}
+            scrollRestoreKey={scrollRestoreKey( "identifications", baseSearchParams )}
           />
         );
       case CAMERA_STATS_TAB:

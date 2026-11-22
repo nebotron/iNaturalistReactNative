@@ -170,12 +170,15 @@ interface Props {
   enabled: boolean;
   params: ExploreV2BaseQueryParams;
   onCount: ( count: number ) => void;
+  // See CustomFlashList
+  scrollRestoreKey?: string;
 }
 
 const ExploreV2IdentificationsView = ( {
   enabled,
   params,
   onCount,
+  scrollRestoreKey,
 }: Props ) => {
   const { t } = useTranslation( );
   const [mavericksOnly, setMavericksOnly] = useState( false );
@@ -257,6 +260,7 @@ const ExploreV2IdentificationsView = ( {
       renderItem={renderItem}
       onEndReached={( ) => fetchNextPage( )}
       onEndReachedThreshold={0.5}
+      scrollRestoreKey={scrollRestoreKey && `${scrollRestoreKey}:${mavericksOnly}`}
       ListEmptyComponent={(
         <View className="self-center mt-5 p-4">
           <Body1 className="align-center text-center">

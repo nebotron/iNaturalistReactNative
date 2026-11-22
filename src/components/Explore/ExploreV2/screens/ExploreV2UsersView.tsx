@@ -40,6 +40,8 @@ interface Props {
   tab: UsersTab;
   // Total from the list's own first page, so the header needs no extra request
   onCount?: ( count: number ) => void;
+  // See CustomFlashList
+  scrollRestoreKey?: string;
 }
 
 const ExploreV2UsersView = ( {
@@ -48,6 +50,7 @@ const ExploreV2UsersView = ( {
   params,
   tab,
   onCount,
+  scrollRestoreKey,
 }: Props ) => {
   const { queryKey, fetchUsers, extraParams } = TAB_CONFIG[tab];
 
@@ -79,6 +82,7 @@ const ExploreV2UsersView = ( {
       isFetchingNextPage={isFetchingNextPage}
       isConnected={isConnected}
       layout="user"
+      scrollRestoreKey={scrollRestoreKey}
       totalResults={totalResults}
     />
   );

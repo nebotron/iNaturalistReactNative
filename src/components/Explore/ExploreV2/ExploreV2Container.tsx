@@ -17,6 +17,7 @@ import useStore from "stores/useStore";
 const LastSearchPersister = ( ) => {
   const { state } = useExploreV2( );
   const setLastExploreSearch = useStore( s => s.setLastExploreSearch );
+  const setExploreSessionState = useStore( s => s.setExploreSessionState );
   const {
     subject, location, sortBy, speciesSortBy, filters, activeTab,
   } = state;
@@ -26,6 +27,11 @@ const LastSearchPersister = ( ) => {
       subject, location, sortBy, speciesSortBy, filters, activeTab,
     } );
   }, [setLastExploreSearch, subject, location, sortBy, speciesSortBy, filters, activeTab] );
+
+  // The whole state, back stack included, for coming back to the tab this session
+  useEffect( ( ) => {
+    setExploreSessionState( state );
+  }, [setExploreSessionState, state] );
 
   return null;
 };
@@ -64,6 +70,13 @@ const ExploreV2Container = ( ) => {
   const fromHotspot = !isRootExplore && !!params?.fromHotspot;
   const restoreLastSearch = isRootExplore && !params?.subject && !params?.location;
   const [initialState] = React.useState( ( ) => {
+    // Coming back to the tab: pick up exactly where the user left it
+    const { exploreSessionState } = useStore.getState( );
+    if ( restoreLastSearch && exploreSessionState ) {
+      return params?.activeTab
+        ? { ...exploreSessionState, activeTab: params.activeTab }
+        : exploreSessionState;
+    }
     const storedSearch = useStore.getState( ).lastExploreSearch;
     const lastSearch = storedSearch && withoutUnobservedFilter( storedSearch );
     if ( restoreLastSearch && lastSearch ) {

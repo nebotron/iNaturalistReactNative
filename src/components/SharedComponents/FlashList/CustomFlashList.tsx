@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import type { NativeScrollEvent, NativeSyntheticEvent, ViewabilityConfig } from "react-native";
 import flashListTracker from "sharedHelpers/flashListPerformanceTracker";
+import useStore from "stores/useStore";
 
 const defaultViewabilityConfig: ViewabilityConfig = {
   minimumViewTime: 0,
@@ -14,7 +15,18 @@ const defaultViewabilityConfig: ViewabilityConfig = {
   waitForInteraction: false,
 };
 
-const CustomFlashList = <T, >( props: FlashListProps<T> & { ref?: React.Ref<FlashListRef<T>>} ) => {
+// How long after mounting a saved scroll offset may still be restored, while
+// the content it needs loads. Past that, jumping would surprise the user.
+const RESTORE_WINDOW_MS = 5000;
+
+type Props<T> = FlashListProps<T> & {
+  ref?: React.Ref<FlashListRef<T>>;
+  // Remembers where the list was scrolled to under this key and scrolls back
+  // there when the list mounts again with it, e.g. after leaving a tab
+  scrollRestoreKey?: string;
+};
+
+const CustomFlashList = <T, >( props: Props<T> ) => {
   const isFirstRender = useRef( true );
   const lastContentOffset = useRef( 0 );
 
@@ -28,12 +40,46 @@ const CustomFlashList = <T, >( props: FlashListProps<T> & { ref?: React.Ref<Flas
 
   const {
     ref,
+    onContentSizeChange,
     onMomentumScrollEnd,
     onScroll,
     onViewableItemsChanged,
     onEndReached,
+    scrollRestoreKey,
     ...otherProps
   } = props;
+
+  const setListScrollOffset = useStore( state => state.setListScrollOffset );
+  // Offset waiting for enough content to scroll to, and until when it may be
+  const pendingRestore = useRef<{ offset: number; until: number } | null>( null );
+
+  useEffect( ( ) => {
+    if ( !scrollRestoreKey ) return ( ) => undefined;
+    const offset = useStore.getState( ).listScrollOffsets[scrollRestoreKey];
+    pendingRestore.current = offset
+      ? { offset, until: Date.now( ) + RESTORE_WINDOW_MS }
+      : null;
+    return ( ) => {
+      // Never restored, so keep what was saved rather than the top of the list
+      if ( !pendingRestore.current ) {
+        setListScrollOffset( scrollRestoreKey, lastContentOffset.current );
+      }
+    };
+  }, [scrollRestoreKey, setListScrollOffset] );
+
+  const handleContentSizeChange = useCallback( ( width: number, height: number ) => {
+    const pending = pendingRestore.current;
+    if ( pending ) {
+      if ( Date.now( ) > pending.until ) {
+        pendingRestore.current = null;
+      } else if ( height >= pending.offset ) {
+        pendingRestore.current = null;
+        lastContentOffset.current = pending.offset;
+        internalRef.current?.scrollToOffset( { offset: pending.offset, animated: false } );
+      }
+    }
+    onContentSizeChange?.( width, height );
+  }, [onContentSizeChange] );
 
   useEffect( ( ) => {
     if ( isFirstRender.current ) {
@@ -75,6 +121,8 @@ const CustomFlashList = <T, >( props: FlashListProps<T> & { ref?: React.Ref<Flas
 
   const handleScrollBeginDrag = useCallback(
     ( event: NativeSyntheticEvent<NativeScrollEvent> ) => {
+      // The user has scrolled since mounting, so don't jump them anywhere
+      pendingRestore.current = null;
       if ( ignoreInitialEvents.current ) return;
 
       const { y } = event.nativeEvent.contentOffset;
@@ -166,6 +214,7 @@ const CustomFlashList = <T, >( props: FlashListProps<T> & { ref?: React.Ref<Flas
       onEndReached={handleEndReached}
       onEndReachedThreshold={0.2}
       onViewableItemsChanged={handleViewableItemsChanged}
+      onContentSizeChange={handleContentSizeChange}
       onScroll={handleScroll}
       onScrollBeginDrag={handleScrollBeginDrag}
       onScrollEndDrag={handleScrollEndDrag}

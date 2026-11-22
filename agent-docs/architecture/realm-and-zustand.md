@@ -177,7 +177,7 @@ export function useMyThing( ) {
 }
 ```
 
-`src/providers/MyObservationsContext.ts` is the worked example. Consumers keep the same `{ state, dispatch }` shape, so converting a context is close to a no-op at the call sites. **`src/providers/ExploreV2Context.tsx` has the same problem and has not been converted yet.**
+`src/providers/MyObservationsContext.ts` is the worked example. Consumers keep the same `{ state, dispatch }` shape, so converting a context is close to a no-op at the call sites. `src/providers/ExploreV2Context.tsx` still lives in a context, but the Explore tab copies its whole state into `createExploreSessionSlice` (`exploreSessionState`) and starts from that when it remounts. The same in-memory slice keeps the tab's nearby coordinates, map viewport (`exploreMapView`) and list scroll offsets (`listScrollOffsets`, written by `CustomFlashList` for any list given a `scrollRestoreKey`), so leaving the tab and coming back puts the user where they were.
 
 Two rules this depends on:
 

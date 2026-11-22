@@ -3,6 +3,8 @@ import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { ExploreSessionSlice } from "./createExploreSessionSlice";
+import createExploreSessionSlice from "./createExploreSessionSlice";
 import type { ExploreSlice } from "./createExploreSlice";
 import createExploreSlice from "./createExploreSlice";
 import type { ExploreV2SearchesSlice } from "./createExploreV2SearchesSlice";
@@ -27,7 +29,8 @@ import createFieldStorage from "./fieldPersistStorage";
 import storage from "./zustandMMKVBackingStorage";
 
 type StoreState =
-  ExploreSlice
+  ExploreSessionSlice
+  & ExploreSlice
   & ExploreV2SearchesSlice
   & FeatureFlagSlice
   & FirebaseTraceSlice
@@ -69,6 +72,7 @@ const useStore = create<StoreState>()( persist(
     // Let's make our slices
     const slices = [
       createExploreV2SearchesSlice( ...args ),
+      createExploreSessionSlice( ...args ),
       createExploreSlice( ...args ),
       createFeatureFlagSlice( ...args ),
       createFirebaseTraceSlice( ...args ),

@@ -28,13 +28,17 @@ interface Props {
   enabled: boolean;
   isConnected: boolean | null;
   params: SpeciesCountQueryParams;
+  // See CustomFlashList
+  scrollRestoreKey?: string;
 }
 
 // One seen-query per infinite-scroll page: the seen-id chunks are sized to
 // SPECIES_PAGE_SIZE so each chunk aligns to exactly one loaded page
 const SPECIES_PAGE_SIZE = 10;
 
-const ExploreV2SpeciesView = ( { enabled, isConnected, params }: Props ) => {
+const ExploreV2SpeciesView = ( {
+  enabled, isConnected, params, scrollRestoreKey,
+}: Props ) => {
   const currentUser = useCurrentUser( );
   const { flashListStyle, gridItemStyle, numColumns } = useGridLayout( );
 
@@ -145,6 +149,7 @@ const ExploreV2SpeciesView = ( { enabled, isConnected, params }: Props ) => {
       layout="grid"
       numColumns={numColumns}
       renderItem={renderItem}
+      scrollRestoreKey={scrollRestoreKey}
       totalResults={totalResults}
       testID="ExploreV2SpeciesList"
     />

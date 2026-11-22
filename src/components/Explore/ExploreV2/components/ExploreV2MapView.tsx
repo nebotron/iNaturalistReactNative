@@ -17,11 +17,12 @@ import Map from "components/SharedComponents/Map/Map";
 import { View } from "components/styledComponents";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import React, {
-  useCallback, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import type MapView from "react-native-maps";
 import type { Region } from "react-native-maps";
 import { useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
 // matching v1 explore: ~50km around the current location
@@ -71,6 +72,9 @@ interface Props {
   // The place a PLACE search is filtered to; the map frames its bounding box
   placeId?: number;
   queryParams: ExploreV2QueryParams;
+  // Put the map back where the user left it when it mounts again, e.g. on
+  // returning to the Explore tab
+  restoreView?: boolean;
   totalBounds?: ApiTotalBounds;
 }
 
@@ -83,6 +87,7 @@ const ExploreV2MapView = ( {
   placeMode,
   placeId,
   queryParams,
+  restoreView = false,
   totalBounds,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -186,11 +191,51 @@ const ExploreV2MapView = ( {
     [cameraRegion, appliedSearchCount],
   );
 
-  const initialRegion = mapAreaRegion || cameraRegion || WORLDWIDE_REGION;
+  // Where the map was left the last time it was on screen, read once on mount
+  const [savedView] = useState( ( ) => (
+    restoreView
+      ? useStore.getState( ).exploreMapView
+      : null
+  ) );
+  const setExploreMapView = useStore( s => s.setExploreMapView );
+  // The search being shown, leaving out the sort and paging, which don't move the map.
+  // Unlike the region it frames, this doesn't change when the results are refetched.
+  const targetKey = useMemo( ( ) => {
+    const { order_by: _orderBy, order: _order, ...searchParams } = queryParams;
+    return JSON.stringify( [searchParams, appliedSearchCount] );
+  }, [queryParams, appliedSearchCount] );
+  // The search the saved view belongs to. While the map is still showing that
+  // search it stays where the user left it, rather than moving to frame it again.
+  const [restoredTargetKey, setRestoredTargetKey] = useState( savedView?.targetKey );
+  const isRestoredTarget = restoredTargetKey !== undefined && targetKey === restoredTargetKey;
+  // Once the search moves on, the saved view no longer applies, even if the search
+  // comes back to it
+  if ( restoredTargetKey !== undefined && targetKey !== restoredTargetKey ) {
+    setRestoredTargetKey( undefined );
+  }
+  const regionToAnimate = isRestoredTarget
+    ? undefined
+    : targetRegion;
 
-  const showRedoSearch = pannedFrom !== null
+  const initialRegion = savedView?.region || mapAreaRegion || cameraRegion || WORLDWIDE_REGION;
+
+  const showRedoSearch = ( pannedFrom !== null
     && pannedFrom.placeMode === placeMode
-    && pannedFrom.targetRegion === targetRegion;
+    && pannedFrom.targetRegion === targetRegion )
+    || ( isRestoredTarget && !!savedView?.panned );
+
+  // The map moves to each new search on its own, and Android doesn't report
+  // where it ends up, so remember the search's region as where the map is
+  useEffect( ( ) => {
+    if ( !restoreView || !regionToAnimate || !cameraRegion ) return;
+    setExploreMapView( { region: cameraRegion, targetKey, panned: false } );
+  }, [restoreView, regionToAnimate, cameraRegion, targetKey, setExploreMapView] );
+
+  // Fires after the user moves the map, which shows the redo button by then
+  const handleRegionChangeComplete = useCallback( ( region: Region ) => {
+    if ( !restoreView ) return;
+    setExploreMapView( { region, targetKey, panned: showRedoSearch } );
+  }, [restoreView, targetKey, showRedoSearch, setExploreMapView] );
 
   const handlePanDrag = useCallback( ( ) => {
     setPannedFrom( previous => (
@@ -202,6 +247,7 @@ const ExploreV2MapView = ( {
 
   const handleRedoSearchPress = useCallback( async ( ) => {
     setPannedFrom( null );
+    setRestoredTargetKey( undefined );
     const bounds = await mapRef.current?.getMapBoundaries( );
     if ( !bounds ) return;
     setRedoAppliedSearchCount( appliedSearchCount );
@@ -220,7 +266,8 @@ const ExploreV2MapView = ( {
         initialRegion={initialRegion}
         isLoading={isLoading}
         onPanDrag={handlePanDrag}
-        regionToAnimate={targetRegion}
+        onRegionChangeComplete={handleRegionChangeComplete}
+        regionToAnimate={regionToAnimate}
         showCurrentLocationButton
         showsCompass={false}
         showSwitchMapTypeButton

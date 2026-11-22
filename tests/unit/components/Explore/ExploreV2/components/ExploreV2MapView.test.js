@@ -6,6 +6,7 @@ import i18next from "i18next";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import React from "react";
 import { animateToRegion } from "react-native-maps";
+import useStore from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 
 // Map asks for location permission on mount. Without this the real hook
@@ -548,6 +549,88 @@ describe( "ExploreV2MapView", ( ) => {
       }, rerender );
 
       expect( redoSearchButton( ) ).toBeNull( );
+    } );
+  } );
+
+  describe( "returning to the Explore tab", ( ) => {
+    const pannedRegion = {
+      latitude: 46,
+      longitude: -93,
+      latitudeDelta: 6,
+      longitudeDelta: 8,
+    };
+    const placeSearch = {
+      placeMode: EXPLORE_V2_PLACE_MODE.PLACE,
+      totalBounds: mockTotalBounds,
+      restoreView: true,
+    };
+    const redoSearchButton = ( ) => screen.queryByText(
+      i18next.t( "REDO-SEARCH-IN-MAP-AREA" ),
+    );
+
+    // The user pans the map and leaves the tab, which unmounts it
+    const panAndLeave = async ( props = placeSearch ) => {
+      const { unmount } = renderMapView( props );
+      act( ( ) => mapProps( ).onPanDrag( ) );
+      await act( async ( ) => mapProps( ).onRegionChangeComplete( pannedRegion, {} ) );
+      unmount( );
+      animateToRegion.mockClear( );
+    };
+
+    beforeEach( ( ) => {
+      useStore.setState( { exploreMapView: null } );
+    } );
+
+    it( "puts the map back where the user left it", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( placeSearch );
+
+      expect( mapProps( ).initialRegion ).toEqual( pannedRegion );
+      expect( animateToRegion ).not.toHaveBeenCalled( );
+    } );
+
+    it( "shows the redo button again if the user had panned away", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( placeSearch );
+
+      expect( redoSearchButton( ) ).toBeVisible( );
+    } );
+
+    it( "still frames a new search after coming back", async ( ) => {
+      await panAndLeave( );
+      const { rerender } = renderMapView( placeSearch );
+
+      renderMapView( {
+        ...placeSearch,
+        queryParams: { ...mockQueryParams, taxon_id: 7 },
+        totalBounds: {
+          swlat: 43, swlng: -97, nelat: 49, nelng: -89,
+        },
+      }, rerender );
+
+      expect( animateToRegion ).toHaveBeenCalled( );
+      expect( redoSearchButton( ) ).toBeNull( );
+    } );
+
+    it( "frames the search if it changed while the map was away", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( {
+        ...placeSearch,
+        queryParams: { ...mockQueryParams, taxon_id: 7 },
+      } );
+
+      expect( animateToRegion ).toHaveBeenCalled( );
+    } );
+
+    it( "does not restore the map for an Explore opened from elsewhere", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( { ...placeSearch, restoreView: false } );
+
+      expect( mapProps( ).initialRegion ).not.toEqual( pannedRegion );
     } );
   } );
 } );

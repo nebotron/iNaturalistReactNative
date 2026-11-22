@@ -21,6 +21,7 @@ type Props = {
   numColumns?: number,
   renderItem?: Function,
   renderItemSeparator?: Function,
+  scrollRestoreKey?: string,
   testID?: string,
   totalResults: number
 };
@@ -38,6 +39,7 @@ const ExploreFlashList = ( {
   numColumns,
   renderItem,
   renderItemSeparator,
+  scrollRestoreKey,
   testID,
   totalResults,
 }: Props ): Node => {
@@ -79,6 +81,7 @@ const ExploreFlashList = ( {
         users={data}
         onEndReached={fetchNextPage}
         refreshing={isFetchingNextPage}
+        scrollRestoreKey={scrollRestoreKey}
       />
     )
     : (
@@ -93,6 +96,7 @@ const ExploreFlashList = ( {
         onEndReached={fetchNextPage}
         refreshing={isFetchingNextPage}
         renderItem={renderItem}
+        scrollRestoreKey={scrollRestoreKey}
         testID={testID}
       />
     );

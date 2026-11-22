@@ -68,6 +68,8 @@ interface Props {
   // TODO: type data / observations
   ref?: React.Ref<FlashListRef<( { uuid: string} )>>;
   listHeaderContent?: React.ReactElement | null;
+  // See CustomFlashList
+  scrollRestoreKey?: string;
   showNoResults?: boolean;
   fullWidthGrid?: boolean;
   selectable?: boolean;
@@ -96,6 +98,7 @@ const ObservationsFlashList = ( {
   onScroll,
   ref,
   listHeaderContent,
+  scrollRestoreKey,
   showNoResults,
   fullWidthGrid = false,
   selectable = false,
@@ -415,6 +418,7 @@ const ObservationsFlashList = ( {
       onViewableItemsChanged={handleViewableItemsChanged}
       renderItem={renderItem}
       refreshControl={refreshControl}
+      scrollRestoreKey={scrollRestoreKey}
       testID={testID}
     />
   );

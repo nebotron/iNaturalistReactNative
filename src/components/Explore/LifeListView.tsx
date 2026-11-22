@@ -16,6 +16,8 @@ interface Props {
   handleUpdateCount: ( view: string, count: number ) => void;
   // Room for the old Explore header that overlays the list
   paddingTop?: number;
+  // See CustomFlashList
+  scrollRestoreKey?: string;
 }
 
 // Every matching observation, grouped by species and keeping the earliest, so
@@ -27,6 +29,7 @@ const LifeListView = ( {
   queryParams,
   handleUpdateCount,
   paddingTop = 0,
+  scrollRestoreKey,
 }: Props ) => {
   const { flashListStyle, gridItemStyle, numColumns } = useGridLayout( );
   const cacheKey = lifeListCacheKey( queryParams );
@@ -89,6 +92,7 @@ const LifeListView = ( {
       keyExtractor={( item: Lifer ) => item.uuid}
       layout="grid"
       numColumns={numColumns}
+      scrollRestoreKey={scrollRestoreKey}
       renderItem={( { item }: ListRenderItemInfo<Lifer> ) => (
         <LiferGridItem item={item} style={gridItemStyle} />
       )}
