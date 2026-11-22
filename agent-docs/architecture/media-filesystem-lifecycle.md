@@ -50,6 +50,10 @@ All paths are defined in `src/appConstants/paths.ts` and rooted at `DocumentDire
 | `soundUploadPath` | `soundUploads` | Sound recordings for upload |
 | `rollbackPhotosPath` | `rollbackPhotos` | Temporary backup copies during observation edit cancel |
 | `sentinelFilePath` | `sentinelFiles` | Debug/sentinel files (not media) |
+| `usbStagingPath` | `usbStaging` | Originals copied off a USB drive, not yet uploaded or removed (or faved and not yet saved to Photos) |
+| `purgeableUsbStagingPath` | `Caches/usbStaging` | Staged USB originals whose retention clock is running; iOS may purge them when space is low |
+
+**USB staging:** `sweepUsbStaging` (`src/sharedHelpers/usbStaging.ts`) moves a staged photo from Documents to `Caches/usbStaging` once its retention clock starts and, if faved, it has been saved to Photos, then deletes it after `usbStagingRetentionDays`. Both folders keep the `usbStaging` name because photos are matched to observations by their `/usbStaging/<name>` path; `readableUriForDevicePhoto` resolves which folder a photo is in now.
 
 **Note:** `photoLibraryPhotosPath` still uses the `galleryPhotos` folder name on disk (intentionally unchanged in MOB-431 to avoid cache-cleanup regressions).
 

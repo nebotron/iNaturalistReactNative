@@ -6,6 +6,7 @@ import {
   readDir,
   TemporaryDirectoryPath,
 } from "@dr.pogodin/react-native-fs";
+import { purgeableUsbStagingPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import Config from "react-native-config";
 import { directoryBytes } from "sharedHelpers/storageMetrics";
@@ -84,8 +85,14 @@ const getStorageBreakdown = async ( ): Promise<StorageBreakdown> => {
   // On Android the temporary directory is the cache directory
   const cacheRoots = [...new Set( [CachesDirectoryPath, TemporaryDirectoryPath] )]
     .filter( Boolean );
+  // USB imports awaiting expiry sit in Caches so iOS can purge them, but are
+  // still USB imports
   const caches = ( ) => Promise.all( cacheRoots.map( async root => {
-    add( "cache", await directoryBytes( root ) );
+    const staging = root === CachesDirectoryPath
+      ? await directoryBytes( purgeableUsbStagingPath )
+      : 0;
+    add( "usbImports", staging );
+    add( "cache", await directoryBytes( root ) - staging );
   } ) );
 
   // iOS Library holds Caches (counted above) plus preferences and the like

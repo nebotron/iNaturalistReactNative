@@ -20,6 +20,11 @@ export const rollbackPhotosPath = `${DocumentDirectoryPath}/rollbackPhotos`;
 // Originals copied off a USB drive, kept until faved or expired (usbStaging.ts)
 export const usbStagingPath = `${DocumentDirectoryPath}/usbStaging`;
 
+// Staged USB photos whose retention clock is running, which iOS may purge when
+// the device runs low on space. The folder keeps the name "usbStaging" because
+// photos are matched to observations by their "/usbStaging/<name>" path.
+export const purgeableUsbStagingPath = `${CachesDirectoryPath}/usbStaging`;
+
 export const videoLibraryPath = `${DocumentDirectoryPath}/videoLibrary`;
 
 export const cropSourcesPath = `${CachesDirectoryPath}/inatCropSources`;
