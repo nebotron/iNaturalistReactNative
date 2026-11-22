@@ -41,6 +41,26 @@ const { useRealm } = RealmContext;
 // whole photo; share the original untouched rather than re-encode it.
 const FULL_FRAME = 0.995;
 
+// A crop of a region that is itself a crop of the photo, in the photo's
+// coordinates.
+const cropWithin = ( outer: NormalizedCrop, inner?: NormalizedCrop ): NormalizedCrop => (
+  inner
+    ? {
+      x: outer.x + inner.x * outer.w,
+      y: outer.y + inner.y * outer.h,
+      w: inner.w * outer.w,
+      h: inner.h * outer.h,
+    }
+    : outer
+);
+
+// A prepared share file, and the crop that makes it the photo as uploaded:
+// the library original is uncropped, so it carries the photo's saved crop.
+interface SharePhotoFile {
+  path: string;
+  uploadCrop?: NormalizedCrop;
+}
+
 // Cut the prepared share file down to the part of the photo visible on
 // screen, at full resolution. Null when the whole photo is visible or the
 // crop can't be made (e.g. Android, which has no native cropper), in which
@@ -218,7 +238,7 @@ const MediaViewer = ( {
   // Build a local, metadata-embedded copy of a photo we can hand to the share
   // sheet. This is the slow part (copy/download + EXIF write), so it runs ahead
   // of time (see the pre-warm effect below) rather than blocking the share button.
-  const buildSharePhoto = useCallback( async ( photoUri: string ): Promise<string> => {
+  const buildSharePhoto = useCallback( async ( photoUri: string ): Promise<SharePhotoFile> => {
     // Unique per prep so an in-flight prep for a previous photo can't clobber
     // the file mid-write, which would produce a broken image iOS can't save.
     const tempBase = `${TemporaryDirectoryPath}/share_photo_${Date.now()}`
@@ -231,15 +251,17 @@ const MediaViewer = ( {
     const photo = photos.find(
       item => Photo.displayLocalOrRemoteOriginalPhoto( item ) === photoUri,
     );
-    const library = photo
+    const found = photo
       ? findObservationPhoto( realm, {
         uri: Photo.getLocalPhotoUri( photo.localFilePath ),
         url: photo.url,
-      } )?.library
+      } )
       : null;
-    if ( library ) {
-      const original = await copyLibraryOriginal( library, tempBase );
-      if ( original ) return original;
+    if ( found ) {
+      // The observation photo is cropped to the saved crop, the original isn't.
+      const uploadCrop = Photo.savedNormalizedCrop( found.obsPhoto.photo ) ?? undefined;
+      const original = await copyLibraryOriginal( found.library, tempBase );
+      if ( original ) return { path: original, uploadCrop };
     }
 
     // Get a local file we can annotate and share
@@ -269,14 +291,14 @@ const MediaViewer = ( {
       }
     }
 
-    return tempPath;
+    return { path: tempPath };
   }, [latitude, longitude, photos, realm, timeObservedAt] );
 
   // Cache of the in-flight/prepared share file for a single photo uri so the
   // share button can present the sheet without waiting on file work.
-  const sharePrepRef = useRef<{ uri: string; promise: Promise<string> } | null>( null );
+  const sharePrepRef = useRef<{ uri: string; promise: Promise<SharePhotoFile> } | null>( null );
 
-  const prepareSharePhoto = useCallback( ( photoUri: string ): Promise<string> => {
+  const prepareSharePhoto = useCallback( ( photoUri: string ): Promise<SharePhotoFile> => {
     if ( sharePrepRef.current?.uri === photoUri ) {
       return sharePrepRef.current.promise;
     }
@@ -286,7 +308,7 @@ const MediaViewer = ( {
     // Clean up the previously prepared temp file once it has finished writing.
     if ( previous ) {
       previous.promise
-        .then( path => unlink( path ).catch( ( ) => undefined ) )
+        .then( ( { path } ) => unlink( path ).catch( ( ) => undefined ) )
         .catch( ( ) => undefined );
     }
     return promise;
@@ -310,8 +332,14 @@ const MediaViewer = ( {
   const handleSharePhoto = useCallback( async ( photoUri: string, crop?: NormalizedCrop ) => {
     let croppedPath: string | null = null;
     try {
-      const tempPath = await prepareSharePhoto( photoUri );
-      croppedPath = await cropShareFile( tempPath, crop );
+      const { path: tempPath, uploadCrop } = await prepareSharePhoto( photoUri );
+      // The on-screen crop is of the photo as displayed, i.e. as uploaded.
+      croppedPath = await cropShareFile(
+        tempPath,
+        uploadCrop
+          ? cropWithin( uploadCrop, crop )
+          : crop,
+      );
       // Await so a share failure (e.g. Save Image failing) is actually
       // caught here instead of becoming an unhandled rejection.
       await Share.share( { url: `file://${croppedPath ?? tempPath}` } );
