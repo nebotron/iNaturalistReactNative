@@ -5,6 +5,8 @@
 import "react-native-get-random-values";
 // React Native doesn't have a functional URL as of Feb 2024
 import "react-native-url-polyfill/auto";
+// Before inatjs is imported, so its requests go through the cache
+import "sharedHelpers/installHttpCache";
 
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Alert, AppRegistry, Platform } from "react-native";
@@ -34,6 +36,7 @@ import {
   store as installDataMMKVStorage,
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
+import { setHttpCacheErrorHandler } from "sharedHelpers/httpCache";
 import { reactQueryRetry } from "sharedHelpers/logging";
 import { persistQueries } from "sharedHelpers/persistedQueries";
 import DeviceInfo from "react-native-device-info";
@@ -44,6 +47,10 @@ import { log } from "./react-native-logs.config";
 import { getUserAgent } from "./src/api/userAgent";
 
 const logger = log.extend( "index.js" );
+
+setHttpCacheErrorHandler( ( message, error ) => {
+  log.extend( "httpCache" ).warn( `HTTP cache ${message} failed`, error );
+} );
 
 this.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
 
@@ -168,6 +175,9 @@ const queryClient = new QueryClient( {
   defaultOptions: {
     queries: {
       retry: reactQueryRetry,
+      // Queries run offline too, so responses in the HTTP cache (see
+      // sharedHelpers/httpCache) can be shown. Only retries wait to be online.
+      networkMode: "offlineFirst",
     },
   },
 } );

@@ -27,7 +27,7 @@ const NotificationsContainer = ( {
   const {
     fetchNextPage,
     isError,
-    isFetching,
+    isFetchingNextPage,
     isInitialLoading,
     showStillLoadingMessage,
     notifications,
@@ -59,7 +59,9 @@ const NotificationsContainer = ( {
       data={notifications}
       followingTabIsActive={followingTabIsActive}
       isError={isError}
-      isFetching={isFetching}
+      // Only the next page: the refetch on focus runs behind the cached list
+      // and shouldn't look like it's still loading
+      isFetching={isFetchingNextPage}
       isInitialLoading={isInitialLoading}
       isConnected={isConnected}
       showStillLoadingMessage={showStillLoadingMessage}

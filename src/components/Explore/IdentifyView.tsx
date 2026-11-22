@@ -1,4 +1,5 @@
 import { prefetch } from "@candlefinance/faster-image";
+import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { createIdentification } from "api/identifications";
 import { markAsReviewed } from "api/observations";
@@ -20,6 +21,7 @@ import {
   Button,
   INatIcon,
   INatIconButton,
+  OfflineNotice,
 } from "components/SharedComponents";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { Pressable, View } from "components/styledComponents";
@@ -96,6 +98,7 @@ const IdentifyView = ( {
   const currentUser = useCurrentUser( );
   const windowWidth = Dimensions.get( "window" ).width;
   const photoRef = useRef<IdentifyPhotoHandle | null>( null );
+  const { isConnected } = useNetInfo( );
 
   const {
     observations,
@@ -244,6 +247,15 @@ const IdentifyView = ( {
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size={40} />
+      </View>
+    );
+  }
+
+  if ( !observation && isConnected === false ) {
+    // Nothing cached for this search, and nothing can load until back online
+    return (
+      <View className="flex-1 justify-center">
+        <OfflineNotice onPress={( ) => { refresh( ); }} />
       </View>
     );
   }

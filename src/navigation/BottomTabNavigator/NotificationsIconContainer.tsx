@@ -13,8 +13,13 @@ const NotificationsIconContainer = ( {
   icon,
   active,
 }: Props ) => {
-  const { ownerUnviewedCount, followingUnviewedCount } = useUnviewedNotificationsCount( );
-  const hasUnread = ( ownerUnviewedCount ?? 0 ) > 0 || ( followingUnviewedCount ?? 0 ) > 0;
+  const {
+    ownerUnviewedCount, followingUnviewedCount, ownerReady, followingReady,
+  } = useUnviewedNotificationsCount( { preload: true } );
+  // Only once the notifications behind the dot are loaded, so following it
+  // never lands on a spinner
+  const hasUnread = ( ownerReady && ( ownerUnviewedCount ?? 0 ) > 0 )
+    || ( followingReady && ( followingUnviewedCount ?? 0 ) > 0 );
 
   return (
     <NotificationsIcon
