@@ -316,7 +316,9 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
   line:column positions (`python3 scripts/app_log.py --grep 'js_cpu|cpu_prof'`).
 - **UI responsiveness markers**, written by `sharedHelpers/uiDelayTracker.ts`
   and searchable in that log: `slow_screen_transition` (tap to rendered
-  screen) and `slow_ui_work`. `button_stuck_processing` and
+  screen), `slow_ui_work`, and `js_stall` (the JS thread blocked 300 ms or
+  more in front, so any tap then waited; match it against `js_cpu_summary`).
+  `button_stuck_processing` and
   `button_stuck_loading` cover a responsive thread and a control that has
   latched.
 - **Sentinel files** (`sharedHelpers/sentinelFiles.ts`) - Debug difficult hardware issues:
