@@ -48,6 +48,7 @@ import {
   OfflineSpeciesView,
   useOfflineExploreResults,
 } from "components/Explore/OfflineExplore";
+import CombineObservationsBar from "components/MyObservations/CombineObservationsBar";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
   ActivityIndicator,
@@ -554,6 +555,7 @@ const ExploreResults = ( ) => {
                   hideObsUploadStatus={layout !== "list"}
                   obsListKey="ExploreV2Observations"
                   onEndReached={fetchNextPage}
+                  selectable
                   showNoResults={hasNoResults}
                   testID="ExploreV2ObservationsList"
                 />
@@ -581,6 +583,7 @@ const ExploreResults = ( ) => {
                 style={DROP_SHADOW}
               />
             )}
+            {!showMap && <CombineObservationsBar />}
           </>
         );
       }

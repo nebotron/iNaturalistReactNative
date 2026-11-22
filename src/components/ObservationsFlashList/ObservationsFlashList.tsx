@@ -134,7 +134,9 @@ const ObservationsFlashList = ( {
   );
   const { t } = useTranslation( );
 
-  const renderItem = useCallback( ( { item }: { item: { uuid: string; empty: boolean } } ) => {
+  const renderItem = useCallback( ( {
+    item,
+  }: { item: { uuid: string; empty: boolean; user?: { id?: number } } } ) => {
     // Empty box
     if ( item.empty ) {
       return (
@@ -210,7 +212,10 @@ const ObservationsFlashList = ( {
         unsynced={obsNeedsSync}
         uploadProgress={uploadProgress}
         squareCorners={squareCorners}
-        selectable={selectable}
+        // Explore shows other people's observations too; only the user's own can be selected
+        selectable={selectable && ( !explore || (
+          !!currentUser && item.user?.id === currentUser.id && !isEbirdObservation( item )
+        ) )}
       />
     );
   }, [
