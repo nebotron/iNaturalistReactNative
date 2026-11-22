@@ -1,5 +1,4 @@
 import type { QueryStatus } from "@tanstack/react-query";
-import { useQueryClient } from "@tanstack/react-query";
 import { searchObservations } from "api/observations";
 import type {
   ApiObservation,
@@ -11,12 +10,15 @@ import flatten from "lodash/flatten";
 import { useCallback, useMemo } from "react";
 import Observation from "realmModels/Observation";
 import Vote from "realmModels/Vote";
+import { log } from "sharedHelpers/logger";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 import {
   addPageParamsForExplore,
   getNextPageParamForExplore,
 } from "../helpers/exploreParams";
+
+const logger = log.extend( "useInfiniteExploreScroll" );
 
 interface UseInfiniteExploreScrollParams {
   params: ApiObservationsSearchParams;
@@ -40,8 +42,6 @@ interface UseInfiniteExploreScrollReturn {
 const useInfiniteExploreScroll = (
   { params: newInputParams, enabled }: UseInfiniteExploreScrollParams,
 ): UseInfiniteExploreScrollReturn => {
-  const queryClient = useQueryClient( );
-
   const baseParams = useMemo( () => ( {
     ...newInputParams,
     // Only what Explore's list, grid and Identify views draw. ObsDetails gets
@@ -93,7 +93,7 @@ const useInfiniteExploreScroll = (
     isFetchingNextPage,
     isLoading,
     fetchNextPage,
-    refetch,
+    refreshFirstPage,
     isRefetching,
     status,
     error,
@@ -107,13 +107,21 @@ const useInfiniteExploreScroll = (
     {
       getNextPageParam,
       enabled,
+      // Shown again after leaving Explore or restarting the app, until pulled
+      // to refresh or PERSISTED_QUERY_TTL_MS passes
+      persist: true,
     },
   );
 
-  const handlePullToRefresh = async ( ) => {
-    queryClient.removeQueries( { queryKey } );
-    await refetch( );
-  };
+  // The results already shown stay while the new ones load, and if they
+  // can't be fetched
+  const handlePullToRefresh = useCallback( async ( ) => {
+    try {
+      await refreshFirstPage( );
+    } catch ( error ) {
+      logger.warn( "Pull to refresh failed, keeping the results shown", error );
+    }
+  }, [refreshFirstPage] );
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 

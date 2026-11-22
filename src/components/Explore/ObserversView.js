@@ -39,6 +39,7 @@ const ObserversView = ( {
     },
     {
       enabled: canFetch,
+      persist: true,
     },
   );
 
