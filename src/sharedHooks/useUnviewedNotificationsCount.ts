@@ -1,7 +1,7 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
-import { useQueryClient } from "@tanstack/react-query";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { fetchUnviewedObservationUpdatesCount } from "api/observations";
-import type { ApiObservationsUpdatesParams, ApiOpts } from "api/types";
+import type { ApiObservationsUpdatesParams } from "api/types";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import { prefetchImageData } from "components/SharedComponents/CachedImage";
 import { RealmContext } from "providers/contexts";
@@ -12,6 +12,7 @@ import { AppState, Image } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import Photo from "realmModels/Photo";
 import type { UserPojo } from "realmModels/User";
+import { requireNetworkResponse } from "sharedHelpers/httpCache";
 import {
   PERSISTED_QUERY_META,
   PERSISTED_QUERY_TTL_MS,
@@ -37,6 +38,18 @@ const TAB_PARAMS: Record<"owner" | "following", ApiObservationsUpdatesParams> = 
 };
 
 const NOTIFICATIONS_COUNT_KEY = "notificationsCount";
+
+// Online, a count request that fails or times out must not be answered from
+// the HTTP cache: the saved count is from before anything since was read, and
+// would put the dot back until the next refetch. The last count stays instead.
+// Offline, the saved count is all there is.
+const fetchCount = (
+  observationsBy: "owner" | "following",
+  optsWithAuth: { api_token: string | null; signal: AbortSignal },
+) => {
+  if ( onlineManager.isOnline( ) ) requireNetworkResponse( optsWithAuth.signal );
+  return fetchUnviewedObservationUpdatesCount( { observations_by: observationsBy }, optsWithAuth );
+};
 
 // The server marks every update on an observation viewed at once. Mirror that
 // in the cached notification lists and take the same updates off the cached
@@ -70,13 +83,15 @@ export const markObservationNotificationsViewedLocally = (
 
   Object.entries( cleared ).forEach( ( [tab, ids] ) => {
     if ( ids.size === 0 ) return;
+    // A prefix: useAuthenticatedQuery adds the auth state to the key, and
+    // setQueryData would only write an exact key nobody reads
     const queryKey = [NOTIFICATIONS_COUNT_KEY, tab];
     // A count request already in flight started before this observation was
     // marked viewed, and would put the stale number back when it lands
     // (cancelling reverts it asynchronously, so write only after that)
     queryClient.cancelQueries( { queryKey } ).then( ( ) => {
-      queryClient.setQueryData<number>(
-        queryKey,
+      queryClient.setQueriesData<number>(
+        { queryKey },
         count => ( typeof count === "number"
           ? Math.max( 0, count - ids.size )
           : count ),
@@ -206,19 +221,13 @@ const useUnviewedNotificationsCount = ( { preload = false }: Options = {} ) => {
 
   const { data: ownerUnviewedCount, refetch: refetchOwner } = useAuthenticatedQuery(
     [NOTIFICATIONS_COUNT_KEY, "owner"],
-    ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
-      { observations_by: "owner" },
-      optsWithAuth,
-    ),
+    optsWithAuth => fetchCount( "owner", optsWithAuth ),
     { enabled: !!currentUser, requireLoggedIn: true },
   );
 
   const { data: followingUnviewedCount, refetch: refetchFollowing } = useAuthenticatedQuery(
     [NOTIFICATIONS_COUNT_KEY, "following"],
-    ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
-      { observations_by: "following" },
-      optsWithAuth,
-    ),
+    optsWithAuth => fetchCount( "following", optsWithAuth ),
     { enabled: !!currentUser, requireLoggedIn: true },
   );
 

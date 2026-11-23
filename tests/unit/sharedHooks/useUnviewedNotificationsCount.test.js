@@ -6,7 +6,9 @@ import {
   readPersistedQuery,
 } from "sharedHelpers/persistedQueries";
 import { getNotificationsFullQueryKey } from "sharedHooks/useInfiniteNotificationsScroll";
-import useUnviewedNotificationsCount from "sharedHooks/useUnviewedNotificationsCount";
+import useUnviewedNotificationsCount, {
+  markObservationNotificationsViewedLocally,
+} from "sharedHooks/useUnviewedNotificationsCount";
 import factory, { makeResponse } from "tests/factory";
 import { queryClient, renderHookInApp } from "tests/helpers/render";
 
@@ -90,6 +92,27 @@ describe( "useUnviewedNotificationsCount with preload", ( ) => {
     );
     const ownerList = cachedLists.find( ( [key] ) => key[1].includes( "owner" ) );
     expect( ownerList[1].pages[0][0].resource.uuid ).toEqual( mockObservation.uuid );
+  } );
+
+  it( "takes a notification off the count as soon as it's opened", async ( ) => {
+    const { result } = renderHookInApp(
+      ( ) => useUnviewedNotificationsCount( { preload: true } ),
+    );
+    await waitFor( ( ) => {
+      expect( resolveList ).toBeDefined( );
+    } );
+    resolveList( );
+    await waitFor( ( ) => {
+      expect( result.current.ownerReady ).toBe( true );
+    } );
+    expect( result.current.ownerUnviewedCount ).toEqual( 1 );
+
+    await act( async ( ) => {
+      markObservationNotificationsViewedLocally( queryClient, mockObservation.uuid );
+    } );
+    await waitFor( ( ) => {
+      expect( result.current.ownerUnviewedCount ).toEqual( 0 );
+    } );
   } );
 
   it( "shows the tab ready straight away after a restart when nothing is new", async ( ) => {
