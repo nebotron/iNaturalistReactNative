@@ -314,6 +314,9 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
   when the app uses over ~60% of a core for half a minute. Both name the hot
   JS functions and stacks, with per-thread CPU and `main.jsbundle`
   line:column positions (`python3 scripts/app_log.py --grep 'js_cpu|cpu_prof'`).
+  The `symbols-<build>` artifact also holds that build's Metro source map
+  (`<build>.jsbundle.map.gz`), and `python3 scripts/symbolicate.py --js`
+  rewrites those positions as source files and lines.
 - **UI responsiveness markers**, written by `sharedHelpers/uiDelayTracker.ts`
   and searchable in that log: `slow_screen_transition` (tap to rendered
   screen) and `slow_ui_work`. `button_stuck_processing` and

@@ -291,10 +291,16 @@ jobs:
     #
     # COMPILER_INDEX_STORE_ENABLE=NO drops the index-while-building work, which
     # only feeds Xcode's editor; nothing opens this archive in an editor.
+    # EXTRA_PACKAGER_ARGS has Metro write the JS bundle's source map as well.
+    # The Hermes profiler names JS frames by line:column in that bundle
+    # (CpuProfiler.mm), so the map is what turns them into source files. Not
+    # SOURCEMAP_FILE: with Hermes that keeps only a map composed for bytecode
+    # offsets and deletes this one.
     - name: Archive
       run: |
         set -o pipefail
         ccache --zero-stats
+        mkdir -p "$RUNNER_TEMP/jsmap"
         xcodebuild archive \
           -workspace ios/iNaturalistReactNative.xcworkspace \
           -scheme iNaturalistReactNative \
@@ -307,6 +313,7 @@ jobs:
           -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
           COMPILER_INDEX_STORE_ENABLE=NO \
           METRO_CACHE_DIR="$HOME/.metro-cache" \
+          EXTRA_PACKAGER_ARGS="--sourcemap-output $RUNNER_TEMP/jsmap/main.jsbundle.map" \
           CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
         {
           echo '### ccache'
@@ -328,12 +335,19 @@ jobs:
         mkdir -p "$RUNNER_TEMP/symbols"
         xcrun nm -n -U "$DWARF" | c++filt | xcrun swift-demangle --simplified \
           | gzip -9 > "$RUNNER_TEMP/symbols/$BUILD_NUMBER.txt.gz"
+        # For the JS frames in the app log's CPU profiles (scripts/symbolicate.py --js)
+        if [ -f "$RUNNER_TEMP/jsmap/main.jsbundle.map" ]; then
+          gzip -9 -c "$RUNNER_TEMP/jsmap/main.jsbundle.map" \
+            > "$RUNNER_TEMP/symbols/$BUILD_NUMBER.jsbundle.map.gz"
+        else
+          echo "::warning::Metro wrote no JS source map; JS profile frames stay unnamed"
+        fi
     - name: Upload the symbol table
       continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         name: symbols-${{ env.BUILD_NUMBER }}
-        path: ${{ runner.temp }}/symbols/${{ env.BUILD_NUMBER }}.txt.gz
+        path: ${{ runner.temp }}/symbols/${{ env.BUILD_NUMBER }}.*
         retention-days: 90
 
     # destination=upload has the export sign the IPA and send it to App Store

@@ -15,7 +15,15 @@ Usage:
                                                           # text or a device's .ips JSON
     python3 scripts/symbolicate.py --log                  # MetricKit stacks in the app log
     python3 scripts/symbolicate.py --log metrickit_hang   # only these
+    python3 scripts/symbolicate.py --js                   # JS frames in the app log's
+                                                          # CPU profiles (js_cpu|cpu_prof)
     python3 scripts/symbolicate.py --symbols DIR ...      # default scripts/.symbols
+
+The JS frames in cpu_profile and js_cpu_summary entries are positions in the
+Metro bundle (main.jsbundle:line:column). TestFlight builds save that bundle's
+source map next to the symbol table, as <build>.jsbundle.map.gz in the same
+symbols-<build> artifact; --js rewrites each position as the source file, line
+and column it came from.
 
 For a crash log Apple already symbolicated, each frame shows Apple's name next
 to the rebuilt one and the run ends with how many agree, which is how to check
@@ -288,6 +296,120 @@ def symbolicate_log( directory: Path, pattern: str, dump: Path | None ) -> None:
         print()
 
 
+# Source map "mappings": base64 VLQ, one group per generated line, segments
+# separated by commas, each relative to the one before.
+VLQ_DIGITS = {c: i for i, c in enumerate(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" )}
+
+
+def decode_vlq_segment( segment: str ) -> list[int]:
+    values, shift, value = [], 0, 0
+    for char in segment:
+        digit = VLQ_DIGITS[char]
+        value += ( digit & 31 ) << shift
+        if digit & 32:
+            shift += 5
+            continue
+        values.append( -( value >> 1 ) if value & 1 else value >> 1 )
+        shift, value = 0, 0
+    return values
+
+
+class JsSourceMap:
+    """Generated (line, column) -> (source, line, column), all 1-based."""
+
+    def __init__( self, path: Path ):
+        opener = gzip.open if path.suffix == ".gz" else open
+        with opener( path, "rt" ) as f:
+            data = json.load( f )
+        self.lines: list[list[tuple[int, int, int, int]]] = []
+        self.sources: list[str] = []
+        if "sections" in data:
+            for section in data["sections"]:
+                self._add( section["map"], section["offset"]["line"] )
+        else:
+            self._add( data, 0 )
+
+    def _add( self, data: dict, line_offset: int ) -> None:
+        base = len( self.sources )
+        self.sources += [re.sub( r"^.*?/(src|node_modules)/", r"\1/", src )
+                         for src in data.get( "sources", [] )]
+        source = src_line = src_col = 0
+        for index, group in enumerate( data.get( "mappings", "" ).split( ";" ) ):
+            line = line_offset + index
+            while len( self.lines ) <= line:
+                self.lines.append( [] )
+            col = 0
+            for segment in group.split( "," ):
+                if not segment:
+                    continue
+                values = decode_vlq_segment( segment )
+                col += values[0]
+                if len( values ) < 4:
+                    continue
+                source += values[1]
+                src_line += values[2]
+                src_col += values[3]
+                self.lines[line].append( ( col, base + source, src_line, src_col ) )
+
+    def lookup( self, line: int, column: int ) -> str | None:
+        # Hermes positions are 1-based; source map ones 0-based
+        segments = self.lines[line - 1] if 0 < line <= len( self.lines ) else []
+        cols = [segment[0] for segment in segments]
+        if not segments:
+            return None
+        # Before the line's first mapped column (its indentation): that one
+        index = max( bisect.bisect_right( cols, column - 1 ) - 1, 0 )
+        _, source, src_line, src_col = segments[index]
+        return f"{self.sources[source]}:{src_line + 1}:{src_col + 1}"
+
+
+def find_js_source_map( directory: Path, build: str ) -> JsSourceMap | None:
+    for folder in ( directory, directory / f"symbols-{build}" ):
+        for name in ( f"{build}.jsbundle.map.gz", f"{build}.jsbundle.map" ):
+            if ( folder / name ).exists():
+                return JsSourceMap( folder / name )
+    return None
+
+
+# "fn (12:34)" (a function's start) and "fn(main.jsbundle:12:34)" (a sampled
+# position), as CpuProfiler.mm writes them
+JS_POSITION = re.compile( r"\((?:main\.jsbundle:)?(\d+):(\d+)\)" )
+
+
+def symbolicate_js_profiles( directory: Path, pattern: str, dump: Path | None ) -> None:
+    if dump:
+        entries = json.loads( dump.read_text() )
+        entries = entries if isinstance( entries, list ) else list( entries.values() )
+    else:
+        from app_log import fetch_entries
+        from firebase_auth import firebase_base_url, load_env
+        load_env()
+        entries = fetch_entries( firebase_base_url(), None )
+    regex = re.compile( pattern )
+    found = [e for e in entries if regex.search( str( e.get( "message", "" ) ) )
+             and e.get( "profile" )]
+    if not found:
+        print( f"No entries matching {pattern} have a JS profile" )
+    maps: dict[str, JsSourceMap | None] = {}
+    for e in found:
+        build = e.get( "appBuild" ) or re.sub( r"^build-", "", str( e.get( "commit", "" ) ) )
+        if build not in maps:
+            maps[build] = find_js_source_map( directory, build )
+        source_map = maps[build]
+        print( f"{e.get( 'timestamp', '' )[:19]}  {e['message']}  build {build}"
+               + ( f"  screen {e['screen']}" if e.get( "screen" ) else "" )
+               + ( "" if source_map else "  (no JS source map for this build)" ) )
+
+        def name( match: re.Match, source_map: JsSourceMap | None = source_map ) -> str:
+            where = source_map and source_map.lookup( int( match.group( 1 ) ),
+                                                      int( match.group( 2 ) ) )
+            return f"({where})" if where else match.group( 0 )
+
+        print( JS_POSITION.sub( name, str( e["profile"] ) ) )
+        print()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter )
@@ -297,14 +419,20 @@ def main() -> None:
     parser.add_argument( "--log", nargs="?", const=r"^metrickit_", metavar="REGEX",
                          help="symbolicate app-log stacks whose message matches "
                               "(default all MetricKit ones)" )
+    parser.add_argument( "--js", nargs="?", const=r"^(js_cpu_summary|cpu_profile)$",
+                         metavar="REGEX",
+                         help="name the JS frames in app-log CPU profiles whose message "
+                              "matches (default js_cpu_summary and cpu_profile)" )
     parser.add_argument( "--file", type=Path, help="an app_log.py --dump file instead of the log" )
     args = parser.parse_args()
-    if not args.crash_logs and not args.log:
-        parser.error( "give a crash log or --log" )
+    if not args.crash_logs and not args.log and not args.js:
+        parser.error( "give a crash log, --log or --js" )
     for path in args.crash_logs:
         symbolicate_crash_log( path, args.symbols )
     if args.log:
         symbolicate_log( args.symbols, args.log, args.file )
+    if args.js:
+        symbolicate_js_profiles( args.symbols, args.js, args.file )
 
 
 if __name__ == "__main__":
