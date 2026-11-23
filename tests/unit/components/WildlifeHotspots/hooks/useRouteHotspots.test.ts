@@ -32,12 +32,17 @@ describe( "useRouteHotspots", ( ) => {
     global.fetch = mockFetch as unknown as typeof fetch;
   } );
 
-  it( "doesn't search iNaturalist again for the same route", async ( ) => {
+  // The HTTP cache answers a repeated request, so what matters is that the same
+  // question is asked the same way, and asked cache-first
+  it( "asks iNaturalist the same question for the same route", async ( ) => {
+    const mockSearch = searchObservations as jest.Mock;
     const { result } = renderHook( ( ) => useRouteHotspots( ) );
     await act( async ( ) => {
       await result.current.findHotspots( stops, { taxon_id: 3 } );
     } );
-    expect( searchObservations ).toHaveBeenCalledTimes( 1 );
+    expect( mockSearch ).toHaveBeenCalledTimes( 1 );
+    const [firstParams, firstOpts] = mockSearch.mock.calls[0];
+    expect( firstOpts.signal ).toBeInstanceOf( AbortSignal );
 
     // A slightly different start a few meters away, and a setting that only
     // changes clustering, still ask the same question
@@ -47,11 +52,11 @@ describe( "useRouteHotspots", ( ) => {
         { taxon_id: 3, hotspotClusterRadiusKm: 3 },
       );
     } );
-    expect( searchObservations ).toHaveBeenCalledTimes( 1 );
+    expect( mockSearch.mock.calls[1][0] ).toEqual( firstParams );
 
     await act( async ( ) => {
       await result.current.findHotspots( stops, { taxon_id: 4 } );
     } );
-    expect( searchObservations ).toHaveBeenCalledTimes( 2 );
+    expect( mockSearch.mock.calls[2][0] ).not.toEqual( firstParams );
   } );
 } );
