@@ -28,8 +28,6 @@ export interface HotspotSettings {
   hotspotParkingMinutes: number;
   hotspotBboxPaddingKm: number;
   hotspotRecentAddresses: number;
-  hotspotTimeStepMinutes: number;
-  hotspotMaxPlanCandidates: number;
 }
 
 // Configured only from the gear button on the Wildlife Hotspots map
@@ -40,8 +38,6 @@ export const DEFAULT_HOTSPOT_SETTINGS: HotspotSettings = {
   hotspotParkingMinutes: 5,
   hotspotBboxPaddingKm: 80,
   hotspotRecentAddresses: 10,
-  hotspotTimeStepMinutes: 15,
-  hotspotMaxPlanCandidates: 40,
 };
 
 export interface ExploreGridOverlays {

@@ -53,6 +53,7 @@ import {
   updatePhotoImportProgress,
 } from "sharedHelpers/photoImportMarker";
 import { preloadPickerPhoto } from "sharedHelpers/pickerCropPreload";
+import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import {
   addRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
@@ -420,6 +421,7 @@ const PhotoGallery = ( {
       .map( getDeviceUriFromNode )
       .filter( ( uri ): uri is string => !!uri );
     addRemovedGroupPhotoUris( deviceUris );
+    requestQueuedDeletionAlbumSync( );
     setDeletedUris( prev => new Set( [...prev, ...deviceUris.map( devicePhotoKey )] ) );
     setSelectedUris( new Set( ) );
   }, [photos, selectedUris] );

@@ -60,7 +60,7 @@ const App = ( { children }: PropsWithChildren ) => {
   useDeferredStartup( );
   useResumeGroupPhotos( );
   useUsbImport( );
-  useQueuedDeletionAlbum( currentUser?.id );
+  useQueuedDeletionAlbum( );
   useDefaultSavedSearches( currentUser );
 
   // this children prop is here for the sake of testing with jest

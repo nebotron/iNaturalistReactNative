@@ -39,6 +39,7 @@ export interface RealmSound extends RealmObject {
 }
 
 export interface RealmObservationPhotoPojo extends RealmObject {
+  _synced_at?: Date;
   uuid: string;
   id?: number;
   originalPhotoUri?: string;

@@ -1,5 +1,6 @@
 import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ApiTotalBounds } from "api/types";
 import {
   CAMERA_STATS_TAB,
@@ -93,6 +94,8 @@ import useSpeciesCount from "sharedHooks/useSpeciesCount";
 import useStoredLayout from "sharedHooks/useStoredLayout";
 import useSubjectDistances, { sortBySubjectDistance } from "sharedHooks/useSubjectDistances";
 import { useLineages } from "sharedHooks/useTaxonomicLineages";
+import type { HotspotSettings } from "stores/createLayoutSlice";
+import { DEFAULT_HOTSPOT_SETTINGS } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
@@ -102,6 +105,8 @@ import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLo
 import {
   getLatestTrackedLocation,
 } from "../../../../sharedHelpers/locationHistoryTracker";
+
+const SPECIES_COUNT_KEY = "exploreV2SpeciesCount";
 
 // The most observations the API returns in a page
 const TAXONOMIC_PER_PAGE = 200;
@@ -438,12 +443,12 @@ const ExploreResults = ( ) => {
 
   const hotspotSettings = useStore( s => s.layout.hotspotSettings );
   const hotspotParams = useMemo( ( ) => {
-    // Leave out the settings that don't change the search, so editing them
-    // doesn't rerun it
-    const {
-      hotspotRecentAddresses, hotspotTimeStepMinutes, hotspotMaxPlanCandidates,
-      ...searchSettings
-    } = hotspotSettings;
+    // Only the settings that change the search, so editing the others doesn't
+    // rerun it. Picked by key, since settings removed from the app can linger
+    // in persisted state.
+    const searchSettings = Object.fromEntries( Object.keys( DEFAULT_HOTSPOT_SETTINGS )
+      .filter( key => key !== "hotspotRecentAddresses" )
+      .map( key => [key, hotspotSettings[key as keyof HotspotSettings]] ) );
     return { ...baseSearchParams, ...searchSettings };
   }, [baseSearchParams, hotspotSettings] );
 
@@ -463,8 +468,14 @@ const ExploreResults = ( ) => {
   const speciesCount = useSpeciesCount(
     baseSearchParams,
     // Only shown in the species view's header
-    { enabled: canFetch && state.activeTab === SPECIES_TAB, keyPrefix: "exploreV2SpeciesCount" },
+    { enabled: canFetch && state.activeTab === SPECIES_TAB, keyPrefix: SPECIES_COUNT_KEY },
   );
+  const queryClient = useQueryClient( );
+  // Pulling the species list to refresh updates its count too, so a search that
+  // had no results can find some
+  const refreshSpeciesCount = useCallback( ( ) => {
+    queryClient.invalidateQueries( { queryKey: [SPECIES_COUNT_KEY] } );
+  }, [queryClient] );
 
   const exploreViews: Record<ExploreV2Tab, {
     buttonText: string;
@@ -665,6 +676,7 @@ const ExploreResults = ( ) => {
               byTaxonomy={state.speciesSortBy === SPECIES_SORT.TAXONOMY}
               enabled={canFetch}
               isConnected={isConnected}
+              onRefresh={refreshSpeciesCount}
               params={speciesListParams}
               scrollRestoreKey={scrollRestoreKey( "species", speciesListParams )}
             />

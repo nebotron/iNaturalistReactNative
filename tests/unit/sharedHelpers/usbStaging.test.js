@@ -1,6 +1,4 @@
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
-import { usbStagingPath } from "appConstants/paths";
-import { readableUriForDevicePhoto, sweepUsbStaging } from "sharedHelpers/usbStaging";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 let mockFiles = [];
@@ -13,6 +11,7 @@ jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
   CachesDirectoryPath: "/caches",
   mkdir: async ( ) => undefined,
   copyFile: async ( ) => undefined,
+  exists: async path => mockFiles.some( name => path.endsWith( `/${name}` ) ),
   unlink: path => mockUnlink( path ),
   readDir: async ( ) => mockFiles.map( name => ( {
     name,
@@ -20,6 +19,40 @@ jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
     isFile: ( ) => true,
     mtime: new Date( 0 ),
   } ) ),
+} ) );
+
+// Instances with the same id share their values, as on a device
+const mockStores = new Map( );
+jest.mock( "react-native-mmkv", ( ) => ( {
+  MMKV: class {
+    constructor( { id } = { id: "mmkv.default" } ) {
+      if ( !mockStores.has( id ) ) mockStores.set( id, new Map( ) );
+      this.values = mockStores.get( id );
+    }
+
+    getString( key ) {
+      const value = this.values.get( key );
+      return typeof value === "string"
+        ? value
+        : undefined;
+    }
+
+    getNumber( key ) {
+      const value = this.values.get( key );
+      return typeof value === "number"
+        ? value
+        : undefined;
+    }
+
+    set( key, value ) { this.values.set( key, value ); }
+
+    delete( key ) { this.values.delete( key ); }
+
+    getAllKeys( ) { return [...this.values.keys( )]; }
+
+    // eslint-disable-next-line class-methods-use-this
+    addOnValueChangedListener( ) { return { remove: ( ) => undefined }; }
+  },
 } ) );
 
 jest.mock( "@react-native-camera-roll/camera-roll", ( ) => ( {
@@ -32,66 +65,42 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
 
 const uri = name => `file:///old/container/usbStaging/${name}`;
 
-describe( "sweepUsbStaging", ( ) => {
-  beforeEach( ( ) => { jest.useFakeTimers( { now: 0 } ); } );
-  afterEach( ( ) => { jest.useRealTimers( ); } );
+// A fresh module and store for each test
+const loadStaging = ( ) => {
+  let staging;
+  jest.isolateModules( ( ) => {
+    staging = jest.requireActual( "sharedHelpers/usbStaging" );
+  } );
+  return staging;
+};
 
-  it( "saves a faved photo once, and expires it three days after it uploads", async ( ) => {
-    const faved = uri( "1_FAVED.JPG" );
+beforeEach( ( ) => {
+  mockStores.clear( );
+  CameraRoll.saveAsset.mockClear( );
+  jest.useFakeTimers( { now: 0 } );
+} );
+afterEach( ( ) => { jest.useRealTimers( ); } );
+
+describe( "saveFavedStagedPhotos", ( ) => {
+  it( "saves a faved photo to Photos once", async ( ) => {
+    const staging = loadStaging( );
     mockFiles = ["1_FAVED.JPG"];
-    // Faved before its upload finished: saved to Photos, but no clock yet.
-    await sweepUsbStaging( [faved], [] );
+    await staging.saveFavedStagedPhotos( [uri( "1_FAVED.JPG" )] );
+    await staging.saveFavedStagedPhotos( [uri( "1_FAVED.JPG" )] );
+    expect( CameraRoll.saveAsset ).toHaveBeenCalledTimes( 1 );
     expect( CameraRoll.saveAsset ).toHaveBeenCalledWith(
       "file:///docs/usbStaging/1_FAVED.JPG",
       { type: "photo", album: "→ Shared Library" },
     );
-    jest.setSystemTime( 10 * DAY_MS );
-    await sweepUsbStaging( [faved], [] );
-    expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
-
-    // Uploaded at day 10.
-    await sweepUsbStaging( [faved], [faved] );
-    jest.setSystemTime( 12 * DAY_MS );
-    await sweepUsbStaging( [faved], [faved] );
-    expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
-
-    jest.setSystemTime( 14 * DAY_MS );
-    await sweepUsbStaging( [faved], [faved] );
-    expect( CameraRoll.saveAsset ).toHaveBeenCalledTimes( 1 );
-    expect( mockFiles ).toEqual( [] );
   } );
 
-  it( "expires uploaded and removed photos three days on, and keeps the rest", async ( ) => {
-    mockFiles = ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"];
-    const expirable = [uri( "1_UPLOADED.JPG" ), uri( "1_REMOVED.JPG" )];
-    await sweepUsbStaging( [], expirable );
-
-    jest.setSystemTime( 2 * DAY_MS );
-    await sweepUsbStaging( [], expirable );
-    expect( mockFiles ).toEqual( ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"] );
-
-    jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [], expirable );
-    expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
-
-    // Never uploaded or removed: kept indefinitely.
-    jest.setSystemTime( 400 * DAY_MS );
-    await sweepUsbStaging( [], [] );
-    expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
-  } );
-
-  it( "goes on expiring photos when Photos refuses to save a faved one", async ( ) => {
-    CameraRoll.saveAsset.mockRejectedValue( new Error( "denied" ) );
-    // Read in name order, so the faved photo comes before the expiring one.
-    mockFiles = ["1_REFUSED.JPG", "2_EXPIRED.JPG"];
-    await sweepUsbStaging( [uri( "1_REFUSED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
-
-    jest.setSystemTime( 4 * DAY_MS );
-    await sweepUsbStaging( [uri( "1_REFUSED.JPG" )], [uri( "2_EXPIRED.JPG" )] );
-    // Past its time, but a faved photo is only deleted once it's saved.
-    expect( mockFiles ).toEqual( ["1_REFUSED.JPG"] );
-    CameraRoll.saveAsset.mockReset( );
-    CameraRoll.saveAsset.mockResolvedValue( {} );
+  it( "reports a refused save for another try", async ( ) => {
+    const staging = loadStaging( );
+    CameraRoll.saveAsset.mockRejectedValueOnce( new Error( "denied" ) );
+    mockFiles = ["1_REFUSED.JPG"];
+    const { failed } = await staging.saveFavedStagedPhotos( [uri( "1_REFUSED.JPG" )] );
+    expect( failed ).toEqual( [uri( "1_REFUSED.JPG" )] );
+    expect( staging.isUnsavedStagedPhoto( uri( "1_REFUSED.JPG" ) ) ).toBe( true );
   } );
 
   it( "saves a faved photo with its import crop when the observation lost it", async ( ) => {
@@ -101,32 +110,85 @@ describe( "sweepUsbStaging", ( ) => {
     const crop = {
       x: 0.1, y: 0.2, w: 0.5, h: 0.6,
     };
-    await jest.isolateModulesAsync( async ( ) => {
-      const staging = jest.requireActual( "sharedHelpers/usbStaging" );
-      mockFiles = ["1_CROPPED.JPG"];
-      staging.recordStagedImportCrop( uri( "1_CROPPED.JPG" ), crop );
-      await staging.sweepUsbStaging( [uri( "1_CROPPED.JPG" )], [], undefined, {} );
-    } );
+    const staging = loadStaging( );
+    mockFiles = ["1_CROPPED.JPG"];
+    staging.recordStagedImportCrop( uri( "1_CROPPED.JPG" ), crop );
+    await staging.saveFavedStagedPhotos( [uri( "1_CROPPED.JPG" )] );
     delete NativeModules.ImageCropper;
 
     expect( saveCroppedAsset ).toHaveBeenCalledWith( "file:///docs/usbStaging/1_CROPPED.JPG", crop );
   } );
 } );
 
+describe( "expireStagedPhotos", ( ) => {
+  it( "expires photos three days after their clock starts, and keeps the rest", async ( ) => {
+    const staging = loadStaging( );
+    mockFiles = ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"];
+    jest.setSystemTime( 10 * DAY_MS );
+    staging.startStagingClocks( [uri( "1_UPLOADED.JPG" ), uri( "1_REMOVED.JPG" )] );
+    // Started again later: the first start counts.
+    jest.setSystemTime( 11 * DAY_MS );
+    staging.startStagingClocks( [uri( "1_UPLOADED.JPG" )] );
+
+    jest.setSystemTime( 13 * DAY_MS );
+    await staging.expireStagedPhotos( );
+    expect( mockFiles ).toEqual( ["1_UPLOADED.JPG", "1_REMOVED.JPG", "1_UNUSED.JPG"] );
+
+    jest.setSystemTime( 14 * DAY_MS );
+    await staging.expireStagedPhotos( );
+    expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
+
+    // Never uploaded or removed: kept indefinitely.
+    jest.setSystemTime( 400 * DAY_MS );
+    await staging.expireStagedPhotos( );
+    expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
+  } );
+
+  it( "keeps a faved photo until it's been saved", async ( ) => {
+    const staging = loadStaging( );
+    mockFiles = ["1_FAVED.JPG", "2_EXPIRED.JPG"];
+    staging.startStagingClocks( [uri( "1_FAVED.JPG" ), uri( "2_EXPIRED.JPG" )] );
+    jest.setSystemTime( 4 * DAY_MS );
+    await staging.expireStagedPhotos( name => name === "1_FAVED.JPG" );
+    expect( mockFiles ).toEqual( ["1_FAVED.JPG"] );
+
+    // Looked at again the next day, once it's no longer held.
+    jest.setSystemTime( 5 * DAY_MS );
+    await staging.expireStagedPhotos( ( ) => false );
+    expect( mockFiles ).toEqual( [] );
+  } );
+
+  it( "carries clocks over from the single map earlier versions kept", async ( ) => {
+    mockFiles = ["1_OLD.JPG"];
+    loadStaging( );
+    const old = mockStores.get( "usb-staging" );
+    old.set( "uploadedOrRemovedAt", JSON.stringify( { "1_OLD.JPG": 0 } ) );
+    old.set( "savedUris", JSON.stringify( { "1_OLD.JPG": "ph://OLD" } ) );
+    const staging = loadStaging( );
+    expect( staging.readableUriForDevicePhoto( uri( "1_OLD.JPG" ) ) ).toBe( "ph://OLD" );
+    jest.setSystemTime( 4 * DAY_MS );
+    await staging.expireStagedPhotos( );
+    expect( mockFiles ).toEqual( [] );
+  } );
+} );
+
 describe( "readableUriForDevicePhoto", ( ) => {
   it( "reads a faved photo from the Photos asset it was saved as", async ( ) => {
+    const staging = loadStaging( );
     CameraRoll.saveAsset.mockResolvedValueOnce( { node: { id: "SAVED" } } );
     mockFiles = ["2_SAVED.HIF"];
-    await sweepUsbStaging( [uri( "2_SAVED.HIF" )], [] );
-    expect( readableUriForDevicePhoto( uri( "2_SAVED.HIF" ) ) ).toBe( "ph://SAVED" );
+    await staging.saveFavedStagedPhotos( [uri( "2_SAVED.HIF" )] );
+    expect( staging.readableUriForDevicePhoto( uri( "2_SAVED.HIF" ) ) ).toBe( "ph://SAVED" );
   } );
 
   it( "reads a still-staged photo from the current app container", ( ) => {
-    expect( readableUriForDevicePhoto( uri( "3_STAGED.HIF" ) ) )
-      .toBe( `file://${usbStagingPath}/3_STAGED.HIF` );
+    const staging = loadStaging( );
+    expect( staging.readableUriForDevicePhoto( uri( "3_STAGED.HIF" ) ) )
+      .toBe( "file:///docs/usbStaging/3_STAGED.HIF" );
   } );
 
   it( "leaves other device photos alone", ( ) => {
-    expect( readableUriForDevicePhoto( "ph://ASSET" ) ).toBe( "ph://ASSET" );
+    const staging = loadStaging( );
+    expect( staging.readableUriForDevicePhoto( "ph://ASSET" ) ).toBe( "ph://ASSET" );
   } );
 } );

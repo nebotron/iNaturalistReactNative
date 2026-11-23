@@ -16,7 +16,6 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
   testID="MyObservations.obsGridItem.00000000-0000-0000-0000-000000000000"
 >
   <View
-    onLayout={[Function]}
     style={
       {
         "aspectRatio": 1,
@@ -180,7 +179,6 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
   testID="MyObservations.obsGridItem.00000000-0000-0000-0000-000000000000"
 >
   <View
-    onLayout={[Function]}
     style={
       {
         "aspectRatio": 1,

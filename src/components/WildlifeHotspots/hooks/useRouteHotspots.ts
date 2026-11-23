@@ -81,7 +81,7 @@ export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<OSRMRou
 }
 
 // Driving times in seconds between every pair of points, Infinity where unroutable
-export async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
+async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
   const wStr = osrmCoords( points );
   const response = await fetch(
     `${OSRM_TABLE_BASE}/${wStr}?annotations=duration`,
@@ -442,8 +442,6 @@ function clusterByKMeans( observations: any[], maxRadiusKm: number ): Map<string
 
 export function useRouteHotspots() {
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
-  // Every hotspot whose detour was evaluated, for route planning
-  const [candidates, setCandidates] = useState<Hotspot[]>( [] );
   const [routeCoords, setRouteCoords] = useState<RoutePoint[]>( [] );
   const [routeDurationSec, setRouteDurationSec] = useState<number | null>( null );
   const [loading, setLoading] = useState( false );
@@ -464,7 +462,6 @@ export function useRouteHotspots() {
       setLoading( true );
       setError( null );
       setHotspots( [] );
-      setCandidates( [] );
       setRouteCoords( [] );
       setRouteDurationSec( null );
 
@@ -601,7 +598,6 @@ export function useRouteHotspots() {
 
         if ( isStale() ) return;
         setHotspots( withDetours.slice( 0, 10 ) );
-        setCandidates( withDetours );
       } catch ( err ) {
         if ( isStale() ) return;
         setError( err instanceof Error
@@ -616,7 +612,6 @@ export function useRouteHotspots() {
 
   return {
     hotspots,
-    candidates,
     routeCoords,
     routeDurationSec,
     loading,

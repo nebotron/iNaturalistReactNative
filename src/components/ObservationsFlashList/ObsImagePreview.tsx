@@ -55,8 +55,6 @@ interface Props extends PropsWithChildren {
   useShortGradient?: boolean;
   white?: boolean;
   width?: string;
-  // Lets a two-finger pinch zoom and pan the photo (see ObsImage)
-  zoomable?: boolean;
   // Caller-controlled framing for a single photo (see ObsImage)
   zoomCrop?: NormalizedCrop | null;
   onZoomCropChange?: ( crop: NormalizedCrop ) => void;
@@ -103,7 +101,6 @@ const ObsImagePreview = ( {
   useShortGradient,
   white = false,
   width = "w-[62px]",
-  zoomable = false,
   zoomCrop,
   onZoomCropChange,
   brightness,
@@ -371,7 +368,6 @@ const ObsImagePreview = ( {
           fitImage={fitImage}
           initialContainerSize={containerWidth ?? undefined}
           uri={info.item ?? undefined}
-          zoomable={zoomable}
           opaque={opaque}
           iconicTaxonName={iconicTaxonName}
           white={white}
@@ -392,7 +388,6 @@ const ObsImagePreview = ( {
       isSmall,
       opaque,
       white,
-      zoomable,
     ],
   );
 
@@ -440,7 +435,6 @@ const ObsImagePreview = ( {
           fitImage={fitImage}
           initialContainerSize={containerWidth ?? undefined}
           uri={source}
-          zoomable={zoomable}
           zoomCrop={zoomCrop}
           onZoomCropChange={onZoomCropChange}
           brightness={brightness}

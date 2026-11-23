@@ -27,8 +27,16 @@ const save = ( uris: string[] ): void => {
 // wedge (see promptDeleteOriginalDevicePhotos.ts). Instead they're recorded
 // here at the moment of removal and treated as "gone": hidden from the photo
 // picker (PhotoGallery.tsx), and filed in the imported album
-// (unfavoritedDevicePhotos.ts).
+// (queuedDeletionAlbum.ts, which listens here).
 export const getRemovedGroupPhotoUris = ( ): string[] => load( );
+
+type Listener = ( uris: string[] ) => void;
+const listeners = new Set<Listener>( );
+
+export const onRemovedGroupPhotoUris = ( listener: Listener ): ( ) => void => {
+  listeners.add( listener );
+  return ( ) => { listeners.delete( listener ); };
+};
 
 export const addRemovedGroupPhotoUris = ( uris: string[] ): void => {
   if ( uris.length === 0 ) {
@@ -37,4 +45,5 @@ export const addRemovedGroupPhotoUris = ( uris: string[] ): void => {
   const existing = new Set( load( ) );
   uris.forEach( uri => existing.add( uri ) );
   save( [...existing] );
+  listeners.forEach( listener => listener( uris ) );
 };
