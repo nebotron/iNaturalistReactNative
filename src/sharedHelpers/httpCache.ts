@@ -27,7 +27,7 @@ const INDEX_WRITE_DELAY_MS = 1000;
 // Responses that hand out credentials are never written to disk
 const UNCACHEABLE_URL = /api_token|oauth|\/token\b|jwt/i;
 
-export const HTTP_CACHE_PATH = `${CachesDirectoryPath}/inatHttpCache`;
+const HTTP_CACHE_PATH = `${CachesDirectoryPath}/inatHttpCache`;
 
 // Header set on responses served from the cache, holding when they were fetched
 export const CACHED_AT_HEADER = "x-inat-cached-at";
@@ -54,7 +54,7 @@ interface IndexEntry {
 
 type Index = Record<string, IndexEntry>;
 
-export interface HttpCacheStore {
+interface HttpCacheStore {
   read: ( file: string ) => Promise<string>;
   write: ( file: string, body: string ) => Promise<void>;
   remove: ( file: string ) => Promise<void>;
@@ -156,7 +156,7 @@ interface Options {
   onError?: ( message: string, error: unknown ) => void;
 }
 
-export interface HttpCache {
+interface HttpCache {
   fetch: typeof fetch;
   clear: ( ) => Promise<void>;
   // Saves the index now rather than after the write delay

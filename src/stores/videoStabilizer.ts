@@ -16,7 +16,7 @@ interface Busy {
   job?: number;
 }
 
-export interface VideoStabilizerState {
+interface VideoStabilizerState {
   videoPath: string | null;
   info: VideoInfo | null;
   // Where the output starts, in seconds.

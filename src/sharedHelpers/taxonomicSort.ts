@@ -6,7 +6,7 @@
 // Realm query for observations of a taxon and all its descendants, like the API's taxon_id
 export const TAXON_AND_DESCENDANTS_QUERY = "taxon.id == $0 OR taxon.ancestor_ids == $0";
 
-export interface LineageTaxon {
+interface LineageTaxon {
   id: number;
   ancestor_ids?: ArrayLike<number> | null;
 }

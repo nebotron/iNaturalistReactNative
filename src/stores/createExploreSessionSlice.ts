@@ -9,7 +9,7 @@ import type { StateCreator } from "zustand";
 // relaunch the search is restored from lastExploreSearch, but the viewport
 // and scroll positions start over.
 
-export interface ExploreMapView {
+interface ExploreMapView {
   // Where the user left the map
   region: Region;
   // Identifies the search the map was showing. While it is unchanged, the map

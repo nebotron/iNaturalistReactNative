@@ -37,7 +37,7 @@ export class ExcludedSavedSearchError extends Error {
   }
 }
 
-export interface ExcludedSpeciesContext {
+interface ExcludedSpeciesContext {
   savedSearches: SavedSearch[];
   apiToken: string | null;
   // The signed-in user, for the reviewed filter of a referenced saved search
@@ -50,7 +50,7 @@ export interface ExcludedSpeciesContext {
 // Max species_counts page size
 const SPECIES_PAGE_SIZE = 500;
 // The API won't page past 10,000 results
-export const MAX_EXCLUDED_SPECIES = 10000;
+const MAX_EXCLUDED_SPECIES = 10000;
 
 const SPECIES_FIELDS = {
   taxon: {

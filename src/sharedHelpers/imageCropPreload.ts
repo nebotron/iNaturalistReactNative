@@ -91,7 +91,7 @@ let cropSourceGeneration = 0;
 
 // Writes the file a preload decodes, where the default export
 // (ensureLocalImageForCrop) isn't the one wanted.
-export type PreloadExport = ( ) => Promise<string>;
+type PreloadExport = ( ) => Promise<string>;
 
 const fileExists = ( uri: string ) => exists( stripFilePrefix( uri ) ).catch( ( ) => false );
 

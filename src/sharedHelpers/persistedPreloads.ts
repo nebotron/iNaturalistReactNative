@@ -7,7 +7,7 @@ import { MMKV } from "react-native-mmkv";
 // at launch and drops any whose files are gone or that are too old.
 const store = new MMKV( { id: "crop-preloads" } );
 
-export interface PersistedPreload {
+interface PersistedPreload {
   savedAt: number;
   localUri: string;
   displayUri: string;

@@ -1,6 +1,7 @@
 import calculateConfidence from "components/Match/calculateConfidence";
-import { TaxonResult } from "components/SharedComponents";
-import { View } from "components/styledComponents";
+import {
+  TaxonResult,
+} from "components/SharedComponents";
 import React from "react";
 
 interface Props {
@@ -27,23 +28,21 @@ const Suggestion = ( {
   suggestion,
   onTaxonChosen,
 }: Props ) => (
-  <View testID={`Suggestion.${suggestion?.taxon?.id}`}>
-    <TaxonResult
-      accessibilityHint={accessibilityHint}
-      activeColor="bg-inatGreen"
-      confidencePercentage={calculateConfidence( suggestion )}
-      confidencePosition="text"
-      fetchRemote={fetchRemote}
-      first
-      handleTaxonOrEditPress={onTaxonChosen}
-      hideNavButtons
-      lastScreen="Suggestions"
-      onSelectGenus={onSelectGenus}
-      taxon={suggestion?.taxon}
-      testID={`SuggestionsList.taxa.${suggestion?.taxon?.id}`}
-      vision
-    />
-  </View>
+  <TaxonResult
+    accessibilityHint={accessibilityHint}
+    activeColor="bg-inatGreen"
+    confidencePercentage={calculateConfidence( suggestion )}
+    confidencePosition="text"
+    fetchRemote={fetchRemote}
+    first
+    handleTaxonOrEditPress={onTaxonChosen}
+    hideNavButtons
+    lastScreen="Suggestions"
+    onSelectGenus={onSelectGenus}
+    taxon={suggestion?.taxon}
+    testID={`SuggestionsList.taxa.${suggestion?.taxon?.id}`}
+    vision
+  />
 );
 
 export default Suggestion;

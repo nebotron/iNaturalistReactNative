@@ -18,7 +18,7 @@
 // and the crop window (center k, zoom z) maps that to the output. Only shifts
 // are measured and corrected: rotation and zoom are left as they were shot.
 
-export interface Affine {
+interface Affine {
   a: number;
   b: number;
   c: number;
@@ -28,7 +28,7 @@ export interface Affine {
 }
 
 // Row-major 3×3.
-export type Homography = number[];
+type Homography = number[];
 
 export interface Point {
   x: number;
@@ -65,7 +65,7 @@ export interface VideoAnalysis {
   frames: AnalysisFrame[];
 }
 
-export const IDENTITY: Affine = {
+const IDENTITY: Affine = {
   a: 1, b: 0, c: 0, d: 1, e: 0, f: 0,
 };
 
@@ -100,14 +100,14 @@ export const applyAffine = ( m: Affine, p: Point ): Point => ( {
 
 export const translation = ( x: number, y: number ): Affine => ( { ...IDENTITY, e: x, f: y } );
 
-export const scaling = ( s: number ): Affine => ( { ...IDENTITY, a: s, d: s } );
+const scaling = ( s: number ): Affine => ( { ...IDENTITY, a: s, d: s } );
 
-export const homographyFromAffine = ( m: Affine ): Homography => [
+const homographyFromAffine = ( m: Affine ): Homography => [
   m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1,
 ];
 
 // first ∘ second: apply `second`, then `first`.
-export const multiplyHomographies = ( first: Homography, second: Homography ): Homography => {
+const multiplyHomographies = ( first: Homography, second: Homography ): Homography => {
   const r: number[] = [];
   for ( let i = 0; i < 3; i += 1 ) {
     for ( let j = 0; j < 3; j += 1 ) {
@@ -119,7 +119,7 @@ export const multiplyHomographies = ( first: Homography, second: Homography ): H
   return r;
 };
 
-export const invertHomography = ( h: Homography ): Homography => {
+const invertHomography = ( h: Homography ): Homography => {
   const [a, b, c, d, e, f, g, k, l] = h;
   const det = a * ( e * l - f * k ) - b * ( d * l - f * g ) + c * ( d * k - e * g );
   if ( Math.abs( det ) < 1e-12 ) return [...IDENTITY_H];
@@ -141,28 +141,6 @@ export const applyHomography = ( h: Homography, p: Point ): Point => {
   };
 };
 
-// Gaussian smoothing with the ends held, sigma in samples.
-export const gaussianSmooth = ( values: number[], sigma: number ): number[] => {
-  if ( !( sigma > 0 ) || values.length < 2 ) return [...values];
-  const radius = Math.min( Math.ceil( sigma * 3 ), values.length );
-  const kernel: number[] = [];
-  for ( let k = -radius; k <= radius; k += 1 ) {
-    kernel.push( Math.exp( -( k * k ) / ( 2 * sigma * sigma ) ) );
-  }
-  const last = values.length - 1;
-  return values.map( ( _v, i ) => {
-    let sum = 0;
-    let weight = 0;
-    for ( let k = -radius; k <= radius; k += 1 ) {
-      const j = Math.min( last, Math.max( 0, i + k ) );
-      const w = kernel[k + radius];
-      sum += values[j] * w;
-      weight += w;
-    }
-    return sum / weight;
-  } );
-};
-
 const usableStep = ( frame: AnalysisFrame, i: number ) => (
   i > 0 && frame.ok && frame.m?.length === 9
 );
@@ -177,7 +155,7 @@ const shiftOf = ( m: number[], center: Point ): Affine => {
 };
 
 // Measured path P for every frame, as shifts.
-export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
+const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
   const { width, height, frames } = analysis;
   const center = { x: width / 2, y: height / 2 };
   const path: Affine[] = [];
@@ -195,7 +173,7 @@ export const measuredPath = ( analysis: VideoAnalysis ): Affine[] => {
 
 // Whether the analysis measured every frame against the first one, which
 // holding the background needs to keep it from drifting.
-export const hasReferencePath = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
+const hasReferencePath = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
   && analysis.frames.every( frame => frame.r?.length === 9 );
 
 // The robust fit's settings. Tukey widths are in pixels of a frame 960 px on
@@ -253,7 +231,7 @@ const present = ( tiles: ( Point | null )[] ): Point[] => tiles.filter(
 );
 
 // Whether the analysis measured tiles of every frame against the first frame.
-export const hasTiles = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
+const hasTiles = ( analysis: VideoAnalysis ) => analysis.frames.length > 0
   && analysis.frames.every( frame => Array.isArray( frame.tr ) );
 
 // Each tile's squared residual (null where it wasn't measured), averaged
@@ -402,7 +380,7 @@ export const fittedTilePath = ( analysis: VideoAnalysis ): Point[] => {
 };
 
 // L for every frame: the shift from the frame onto the first frame.
-export const lockPath = ( analysis: VideoAnalysis ): Affine[] => {
+const lockPath = ( analysis: VideoAnalysis ): Affine[] => {
   const center = { x: analysis.width / 2, y: analysis.height / 2 };
   if ( hasTiles( analysis ) ) {
     return fittedTilePath( analysis ).map( p => translation( p.x, p.y ) );
@@ -426,7 +404,7 @@ export interface StabilizationSettings {
   maxZoom?: number;
 }
 
-export interface StabilizationPlan {
+interface StabilizationPlan {
   // Per frame: source pixels → output pixels.
   transforms: Homography[];
   // The zoom actually used (≥ the requested one when avoiding edges).
@@ -438,7 +416,7 @@ export interface StabilizationPlan {
   firstFrameCrop: Point[];
 }
 
-export const DEFAULT_MAX_ZOOM = 6;
+const DEFAULT_MAX_ZOOM = 6;
 const EDGE_TOLERANCE_PX = 0.5;
 
 export const planStabilization = (

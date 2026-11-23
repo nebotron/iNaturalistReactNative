@@ -13,7 +13,7 @@ import { recordStagedImportCrop } from "sharedHelpers/usbStaging";
 import { resolveSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 import useStore from "stores/useStore";
 
-export interface GroupedPhotoImage {
+interface GroupedPhotoImage {
   uri: string;
   cropOriginalUri?: string;
   crop?: NormalizedCrop;

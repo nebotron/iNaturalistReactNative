@@ -18,17 +18,17 @@ export interface VideoInfo {
 
 // Starting an analysis or a render cancels the one before. `job` comes back
 // on progress events, so a superseded job's progress can be told apart.
-export interface AnalyzeOptions {
+interface AnalyzeOptions {
   start: number;
   job: number;
 }
 
-export interface NativeAnalysis extends VideoAnalysis {
+interface NativeAnalysis extends VideoAnalysis {
   // Frames the lock against the first frame could refine.
   refinedFrames: number;
 }
 
-export interface RenderOptions {
+interface RenderOptions {
   start: number;
   // Nine numbers per frame: the row-major homography from source pixels to
   // output pixels, top-left origin.
@@ -41,12 +41,12 @@ export interface RenderOptions {
   job: number;
 }
 
-export interface RenderResult {
+interface RenderResult {
   uri: string;
   frames: number;
 }
 
-export type ProgressPhase = "analyze" | "render";
+type ProgressPhase = "analyze" | "render";
 
 interface VideoStabilizerModule {
   pickVideo: ( ) => Promise<string | null>;

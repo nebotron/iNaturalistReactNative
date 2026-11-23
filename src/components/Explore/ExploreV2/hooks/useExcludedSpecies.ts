@@ -26,7 +26,7 @@ interface Options {
   enabled?: boolean;
 }
 
-export interface ExcludedSpecies {
+interface ExcludedSpecies {
   // Whether the search leaves any species out at all
   active: boolean;
   // Undefined until resolved after this screen mounted (or the search was last

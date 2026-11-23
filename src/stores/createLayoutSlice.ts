@@ -63,7 +63,7 @@ export interface ExploreGridOverlays {
 // View and sort for Explore opened from a link on the Hotspots view, kept so
 // every hotspot link opens the same way. Sorts are null until changed there,
 // falling back to the Explore search's.
-export interface HotspotLinkView {
+interface HotspotLinkView {
   activeTab: ExploreV2Tab;
   sortBy: OBSERVATIONS_SORT | null;
   speciesSortBy: SPECIES_SORT | null;

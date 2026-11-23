@@ -35,7 +35,7 @@ const RANK_LEVEL_TO_RANK: Record<number, string> = {
   5: "subspecies",
 };
 
-export interface OfflineTaxonEntry {
+interface OfflineTaxonEntry {
   id: number;
   name: string;
   rank_level: number;

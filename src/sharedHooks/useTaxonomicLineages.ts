@@ -43,7 +43,7 @@ const fetchNames = async ( ids: number[] ): Promise<Map<number, string>> => {
   return new Map( results.flat( ).filter( Boolean ).map( taxon => [taxon.id, taxon.name] ) );
 };
 
-export interface KeyedTaxon {
+interface KeyedTaxon {
   key: string;
   taxon: {
     id: number;

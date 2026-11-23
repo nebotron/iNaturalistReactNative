@@ -42,7 +42,7 @@ export const initialMyObservationsState: MyObservationsState = {
 // Taxonomic order sorts on device, so every observation the current search matches gets
 // downloaded first. filterKey names the search being downloaded; replacing or clearing this stops
 // the download
-export interface TaxonomicFetchProgress {
+interface TaxonomicFetchProgress {
   filterKey: string;
   fetched: number;
   total: number;
