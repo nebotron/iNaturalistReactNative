@@ -92,13 +92,13 @@ index 5cf4dba..c15b1a5 100644
  
    private fun setViewBorderRadius(view: AppCompatImageView, borderRadii: BorderRadii) {
 diff --git a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift b/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
-index e1cb690..a7a2235 100644
+index e1cb690..99dc5af 100644
 --- a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
 @@ -2,16 +2,34 @@
  enum CachePolicy: String {
      case memory, discWithCacheControl, discNoCacheControl, memoryAndDisc
- 
+     
 +    // Pipelines are shared instead of being rebuilt per view. Every
 +    // ImagePipeline owns its own operation queues and in-flight task pool, so
 +    // constructing one per mounted image (the upstream behavior) both
@@ -150,7 +150,7 @@ index a8401df..4856de2 100644
 +
  @end
 diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
-index d653e1c..b4ca78d 100644
+index d653e1c..cb215b0 100644
 --- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 @@ -15,6 +15,9 @@ final class FasterImageViewManager: RCTViewManager {
@@ -258,7 +258,19 @@ index d653e1c..b4ca78d 100644
          
          if let url = URL(string: options.url) {
            var urlRequestFromOptions = URLRequest(url: url)
-@@ -424,9 +491,21 @@ final class FasterImageView: UIView {
+@@ -284,6 +351,11 @@ final class FasterImageView: UIView {
+     
+   var colorMatrix = [[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0]] {
+       didSet {
++          // The identity matrix is the default and changes nothing, but as a
++          // processor it sent every image through a Core Image render pass,
++          // including each disk-cache hit (and it overwrote grayscale).
++          let identity: [[Double]] = [[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0]]
++          if colorMatrix == identity { return }
+           if !colorMatrix.isEmpty && colorMatrix.count == 4 && colorMatrix.allSatisfy(({ $0.count == 5 })) {
+               lazyImageView.processors = [
+                   ImageProcessors.CoreImageFilter(
+@@ -424,9 +496,21 @@ final class FasterImageView: UIView {
      }
    }
    
@@ -281,6 +293,26 @@ index d653e1c..b4ca78d 100644
      }
    }
    
+diff --git a/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift b/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift
+index 8a63cf1..e3dea8a 100644
+--- a/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift
++++ b/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift
+@@ -143,7 +143,14 @@ public final class DataCache: DataCaching, @unchecked Sendable {
+         guard let url = url(for: key) else {
+             return nil
+         }
+-        return try? decompressed(Data(contentsOf: url))
++        guard let data = try? Data(contentsOf: url) else {
++            return nil
++        }
++        // Mark the file as just used, so the app's own trim of this directory
++        // (which drops the oldest modification dates first) evicts the least
++        // recently used images rather than the least recently downloaded.
++        try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
++        return try? decompressed(data)
+     }
+ 
+     /// Returns `true` if the cache contains the data for the given key.
 diff --git a/node_modules/@candlefinance/faster-image/ios/Nuke/Internal/Graphics.swift b/node_modules/@candlefinance/faster-image/ios/Nuke/Internal/Graphics.swift
 index adb40b8..8f17197 100644
 --- a/node_modules/@candlefinance/faster-image/ios/Nuke/Internal/Graphics.swift

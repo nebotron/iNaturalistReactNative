@@ -135,8 +135,11 @@ const ObsGridItem = ( {
   const photoCountTop = explore && !showFaveButton;
   const reservePhotoCountSpace = !photoCountTop
     && photoCountFromObservation( observation ) > 1;
+  // Large rather than original: an original is up to 2048px and often over a
+  // megabyte, which costs a slow decode on every disk-cache hit, and large is
+  // what ObsDetails loads next. ObservationsFlashList prefetches the same size.
   const allPhotos = useMemo( ( ) => photosFromObservation( observation ).map(
-    p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
+    p => ( { uri: Photo.displayLocalOrRemoteLargePhoto( p ) } ),
   ), [observation] );
 
   return (
@@ -144,7 +147,7 @@ const ObsGridItem = ( {
       key={observation.uuid}
       fitImage={!explore || isOwnObs}
       source={{
-        uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
+        uri: Photo.displayLocalOrRemoteLargePhoto( photo ),
       }}
       photos={allPhotos}
       width={squareCorners

@@ -235,7 +235,10 @@ const clearExpiredCropSources = async ( ) => {
 
 // Nuke is meant to sweep this down to 150MB, but on device it grew from 0.5GB
 // to 3.7GB in three days without once shrinking. faster-image builds a new
-// pipeline, and so a new DataCache, per image view.
+// pipeline, and so a new DataCache, per image view. This keeps it least
+// recently used: our faster-image patch touches a file's modification date
+// whenever the DataCache reads it, so the oldest dates are the images not
+// shown for longest, not just the ones downloaded first.
 const trimRemoteImageCache = ( ) => trimDirectoryToSize(
   remoteImageCachePath,
   REMOTE_IMAGE_CACHE_MAX_BYTES,

@@ -24,6 +24,7 @@ import type {
 import { Animated, PixelRatio } from "react-native";
 import RealmObservation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
+import type { RealmPhoto } from "realmModels/types";
 import photoUriForPixelSize from "sharedHelpers/photoUriForPixelSize";
 import {
   useCurrentUser,
@@ -320,10 +321,15 @@ const ObservationsFlashList = ( {
     dataRef.current = data;
   }, [data] );
 
+  // The URL each layout's tile draws its photo from (before ObsImage picks a
+  // size for the tile), so a prefetch fills the cache entry the tile reads:
+  // ObsGridItem uses large, ObsListItem original.
+  const tilePhotoUri = useCallback( ( photo: RealmPhoto ) => ( layout === "grid"
+    ? Photo.displayLocalOrRemoteLargePhoto( photo )
+    : Photo.displayLocalOrRemoteOriginalPhoto( photo ) ), [layout] );
+
   const handleViewableItemsChanged = useCallback(
     ( { viewableItems }: { viewableItems: ViewToken<unknown>[] } ) => {
-      if ( !explore ) return;
-
       const maxVisibleIndex = viewableItems.reduce(
         ( max, token ) => Math.max( max, token.index ?? -1 ),
         -1,
@@ -345,7 +351,7 @@ const ObservationsFlashList = ( {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const photo = photoFromObservation( obs );
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const url = Photo.displayLocalOrRemoteOriginalPhoto( photo as any );
+          const url = tilePhotoUri( photo as any );
           if ( url ) nextItemUrls.push( url );
         }
       }
@@ -360,7 +366,7 @@ const ObservationsFlashList = ( {
           const photos = photosFromObservation( obs );
           for ( let i = 1; i < photos.length; i += 1 ) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const url = Photo.displayLocalOrRemoteOriginalPhoto( photos[i] as any );
+            const url = tilePhotoUri( photos[i] as any );
             if ( url ) carouselUrls.push( url );
           }
         }
@@ -370,14 +376,17 @@ const ObservationsFlashList = ( {
       const tilePx = layout !== "list" && typeof gridItemStyle?.width === "number"
         ? Math.ceil( gridItemStyle.width * PixelRatio.get( ) )
         : null;
-      const allUrls = [...nextItemUrls, ...carouselUrls].map( url => ( tilePx
-        ? photoUriForPixelSize( url, tilePx )
-        : url ) );
+      // Local files are already on disk
+      const allUrls = [...nextItemUrls, ...carouselUrls]
+        .filter( url => /^https?:\/\//i.test( url ) )
+        .map( url => ( tilePx
+          ? photoUriForPixelSize( url, tilePx )
+          : url ) );
       if ( allUrls.length > 0 ) {
         prefetchImageData( allUrls );
       }
     },
-    [explore, gridItemStyle, layout],
+    [gridItemStyle, layout, tilePhotoUri],
   );
 
   const handleEndReached = useCallback( ( ) => {
