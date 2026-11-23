@@ -147,6 +147,15 @@ const describeRequest = (
   return [requester, url, body].filter( Boolean ).join( " " );
 };
 
+const ANONYMOUS_PREFIX = `${requesterOf( null )} `;
+
+// What an anonymous request's key asks for, whoever made it
+const resourceOf = ( key: string ) => (
+  key.startsWith( ANONYMOUS_PREFIX )
+    ? key.slice( ANONYMOUS_PREFIX.length )
+    : null
+);
+
 interface Options {
   fetch: typeof fetch;
   store?: HttpCacheStore;
@@ -256,12 +265,38 @@ export const createHttpCache = ( {
   // before then may be out of date, so they aren't used ahead of the network
   let lastWriteAt = 0;
 
+  // When an anonymous request misses, the key of the latest response to the
+  // same request made as someone. A signed-in user's requests go out without
+  // a token once it expires and can't be refreshed, as when they've been
+  // offline for an hour, and would otherwise miss everything they viewed.
+  // Signing out clears the cache, so whoever the response was fetched as is
+  // the person using the app.
+  const keyForAnonymous = ( key: string ): string | null => {
+    const resource = resourceOf( key );
+    if ( !resource ) return null;
+    const suffix = ` ${resource}`;
+    const latest = Object.entries( getIndex( ) ).reduce<[string, IndexEntry] | null>(
+      ( best, entry ) => (
+        entry[0] !== key
+        && entry[0].endsWith( suffix )
+        && ( !best || entry[1].fetchedAt > best[1].fetchedAt )
+          ? entry
+          : best
+      ),
+      null,
+    );
+    return latest?.[0] ?? null;
+  };
+
   // The cached response, if there is one. With fresh, only one fetched within
-  // HTTP_CACHE_FRESH_MS and since the last write.
+  // HTTP_CACHE_FRESH_MS and since the last write. With anyRequester, an
+  // anonymous request can be answered with a response fetched as the user.
   const serve = async (
-    key: string,
-    { fresh = false }: { fresh?: boolean } = {},
+    requestKey: string,
+    { fresh = false, anyRequester = false }: { fresh?: boolean; anyRequester?: boolean } = {},
   ): Promise<Response | null> => {
+    let key = requestKey;
+    if ( anyRequester && !getIndex( )[key] ) key = keyForAnonymous( key ) ?? key;
     const entry = getIndex( )[key];
     if ( !entry ) return null;
     const age = Date.now( ) - entry.fetchedAt;
@@ -320,7 +355,7 @@ export const createHttpCache = ( {
 
     // Offline, a request would only fail, perhaps after a long wait
     if ( !isOnline( ) ) {
-      const cached = await serve( key );
+      const cached = await serve( key, { anyRequester: true } );
       if ( cached ) return cached;
     } else if ( init?.signal && cacheFirstSignals.has( init.signal ) ) {
       const cached = await serve( key, { fresh: true } );
@@ -332,7 +367,7 @@ export const createHttpCache = ( {
       response = await networkFetch( input, init );
     } catch ( error ) {
       // Couldn't reach the server, or timed out
-      const cached = await serve( key );
+      const cached = await serve( key, { anyRequester: true } );
       if ( cached ) return cached;
       throw error;
     }
