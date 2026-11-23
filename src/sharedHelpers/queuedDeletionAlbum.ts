@@ -5,11 +5,11 @@ import addPhotosToImportedAlbum, {
 } from "sharedHelpers/importedPhotoAlbum";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import {
-  restoredUriFor,
+  restoredUriLookup,
   restoreFavedDevicePhotos,
 } from "sharedHelpers/restoreFavedDevicePhotos";
 import classifyDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
-import { libraryUriForDevicePhoto, sweepUsbStaging } from "sharedHelpers/usbStaging";
+import { devicePhotoLibraryUriLookup, sweepUsbStaging } from "sharedHelpers/usbStaging";
 import { readUserObservationsCache } from "sharedHelpers/userObservationsCache";
 
 // Keeps the "Imported to iNaturalist" album holding the photos on unfavorited
@@ -32,8 +32,13 @@ let lastSynced = "";
 let restoring: Promise<void> = Promise.resolve( );
 
 // The Photos asset holding a device photo: one saved back after a refave, a
-// faved USB import's saved copy, or the photo itself.
-const libraryUriFor = ( uri: string ) => restoredUriFor( uri ) ?? libraryUriForDevicePhoto( uri );
+// faved USB import's saved copy, or the photo itself. Both maps are read once
+// per lookup, not once per photo.
+const libraryUriLookup = ( ) => {
+  const restoredUriFor = restoredUriLookup( );
+  const libraryUriForDevicePhoto = devicePhotoLibraryUriLookup( );
+  return ( uri: string ) => restoredUriFor( uri ) ?? libraryUriForDevicePhoto( uri );
+};
 
 const syncNow = async ( ) => {
   timer = null;
@@ -50,6 +55,7 @@ const syncNow = async ( ) => {
     if ( !realm.isClosed ) recordUploadedDevicePhotoUris( realm, uris );
   }, crops );
   // Faved USB imports were saved to Photos as new assets; file those.
+  const libraryUriFor = libraryUriLookup( );
   const toFile = unfavorited.map( libraryUriFor ).sort( );
   const toUnfile = favorited.map( libraryUriFor ).sort( );
   const signature = JSON.stringify( [toFile, toUnfile] );
@@ -62,7 +68,8 @@ const syncNow = async ( ) => {
   } );
   let failed = false;
   restoring = restoring.then( async ( ) => {
-    const restored = await restoreFavedDevicePhotos( realm, favorited, libraryUriFor );
+    // Read afresh: an earlier restoration may have saved new assets since.
+    const restored = await restoreFavedDevicePhotos( realm, favorited, libraryUriLookup( ) );
     ( { failed } = restored );
     // New assets the photo picker would otherwise offer for import again.
     if ( restored.saved.length > 0 && !realm.isClosed ) {
