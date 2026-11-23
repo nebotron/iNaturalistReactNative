@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import addPhotosToImportedAlbum from "sharedHelpers/importedPhotoAlbum";
+import { raceTimeout } from "sharedHelpers/withTimeout";
 
 // This app never deletes photos from the user's photo library. Photos the user
 // removed from an observation, or that were imported and are meant to go, are
@@ -36,13 +37,9 @@ const settled = ( promise: Promise<unknown> ): Promise<void> => promise.then(
 
 // Waits for a native write to settle, but not forever: a task whose native call
 // never comes back must not poison the chain for the rest of the session.
-const heldUntilSettled = ( promise: Promise<unknown>, ms: number ): Promise<void> => {
-  let timer: ReturnType<typeof setTimeout>;
-  return Promise.race( [
-    settled( promise ),
-    new Promise<void>( resolve => { timer = setTimeout( resolve, ms ); } ),
-  ] ).then( ( ) => { clearTimeout( timer ); } );
-};
+const heldUntilSettled = ( promise: Promise<unknown>, ms: number ): Promise<void> => (
+  raceTimeout( settled( promise ), ms ).then( ( ) => undefined )
+);
 
 // Sits above the native deletion watchdog (kInatPendingDeleteWatchdogSeconds in
 // ImageCropper.m), so a native call that is merely slow has always settled

@@ -63,10 +63,16 @@ export const recordStagedImportCrop = ( uri: string, crop: NormalizedCrop ) => {
   store.set( IMPORT_CROPS_KEY, JSON.stringify( { ...getImportCrops( ), [name]: crop } ) );
 };
 
-// The Photos asset a staged photo URI was saved as, or the URI itself.
-export const libraryUriForDevicePhoto = ( uri: string ) => {
-  const name = stagedNameFromUri( uri );
-  return ( name && getSaved( )[name] ) || uri;
+// Maps a staged photo URI to the Photos asset it was saved as, or to the URI
+// itself. The saved map is read once, when the lookup is made: reading and
+// parsing it for every photo made a sync over a large library quadratic, and
+// held the JS thread for seconds at a time.
+export const devicePhotoLibraryUriLookup = ( ) => {
+  const saved = getSaved( );
+  return ( uri: string ) => {
+    const name = stagedNameFromUri( uri );
+    return ( name && saved[name] ) || uri;
+  };
 };
 
 // Where a staged photo's original can be read now: the Photos asset it was

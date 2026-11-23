@@ -50,6 +50,8 @@ const getSearchIndex = ( realm: Realm ) => {
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
   const iconicTaxa = useIconicTaxa( { reload: false } );
+  // Remove leading and trailing whitespace, no need to perform new queries or
+  // potentially get different results b/c of meaningless whitespace
   const taxonQuery = taxonQueryArg.trim();
   const [localResult, setLocalResult] = useState<{
     query: string;

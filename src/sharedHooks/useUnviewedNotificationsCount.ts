@@ -17,6 +17,7 @@ import {
   PERSISTED_QUERY_TTL_MS,
   readPersistedQueryUpdatedAt,
 } from "sharedHelpers/persistedQueries";
+import { raceTimeout } from "sharedHelpers/withTimeout";
 import useStore from "stores/useStore";
 
 import useAuthenticatedQuery from "./useAuthenticatedQuery";
@@ -128,11 +129,7 @@ const prefetchNotificationMedia = ( notifications: Notification[] ) => {
       : null,
     ...[...new Set( largePhotos )].map( url => Image.prefetch( url ) ),
   ] );
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race( [
-    downloads,
-    new Promise( resolve => { timeout = setTimeout( resolve, MEDIA_PRELOAD_TIMEOUT ); } ),
-  ] ).finally( ( ) => clearTimeout( timeout ) );
+  return raceTimeout( downloads, MEDIA_PRELOAD_TIMEOUT );
 };
 
 interface Options {
