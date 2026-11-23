@@ -101,8 +101,7 @@ const FaveButton = ( {
     const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
     if ( !realmObservation || !realmObservation.isValid( ) ) return;
     const userId = currentUser?.id || 0;
-    // The deletion album reads faves from the cache first, so it has to agree
-    // before the Realm write below wakes the album sync.
+    // Kept in step for the features that read faves from the cache.
     setCachedFave( currentUser?.id, uuid, faved );
     safeRealmWrite( realm, ( ) => {
       const otherVotes = ( realmObservation.votes || [] )

@@ -8,6 +8,9 @@ jest.mock( "react-native-mmkv", ( ) => ( {
     getString( key ) { return mockStore.get( key ); }
 
     // eslint-disable-next-line class-methods-use-this
+    addOnValueChangedListener( ) { return { remove: ( ) => undefined }; }
+
+    // eslint-disable-next-line class-methods-use-this
     set( key, value ) { mockStore.set( key, value ); }
   },
 } ) );

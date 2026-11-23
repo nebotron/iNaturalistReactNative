@@ -25,20 +25,22 @@ const store = new MMKV( { id: "restored-device-photos" } );
 // Device photo URI → the ph:// URI it was saved back to Photos as.
 const RESTORED_KEY = "restoredUris";
 
-const getRestored = ( ): Record<string, string> => JSON.parse(
-  store.getString( RESTORED_KEY ) ?? "{}",
-);
+// Parsed once and kept until the value changes. Change listeners are shared by
+// every MMKV instance with this id, so a write from the iCloud restore drops
+// it too.
+let restoredCache: Record<string, string> | null = null;
+store.addOnValueChangedListener( key => {
+  if ( key === RESTORED_KEY ) restoredCache = null;
+} );
+const getRestored = ( ): Record<string, string> => {
+  restoredCache ??= JSON.parse( store.getString( RESTORED_KEY ) ?? "{}" ) as Record<string, string>;
+  return restoredCache;
+};
 
 // The asset a device photo was restored as, if it was.
 export const restoredUriFor = ( deviceUri: string ): string | undefined => (
   getRestored( )[deviceUri]
 );
-
-// restoredUriFor for many photos, reading the restored map once.
-export const restoredUriLookup = ( ) => {
-  const restored = getRestored( );
-  return ( deviceUri: string ): string | undefined => restored[deviceUri];
-};
 
 const { ImageCropper } = NativeModules as {
   ImageCropper?: { existingAssets?: ( phUris: string[] ) => Promise<string[]> };
@@ -89,11 +91,13 @@ const restoreSource = async (
     : null;
 };
 
+type PhotoFinder = ( deviceUri: string ) => RealmPhoto | null | undefined;
+
 const restoreOne = async (
-  realm: Realm,
   deviceUri: string,
+  photoFor: PhotoFinder,
 ): Promise<string | null | undefined> => {
-  const photo = findObsPhoto( realm, deviceUri )?.photo;
+  const photo = photoFor( deviceUri );
   // Nothing to save for a photo no longer on any observation.
   const source = photo && await restoreSource( photo );
   if ( !source ) return null;
@@ -115,14 +119,18 @@ const isLibraryBusy = ( error: unknown ): boolean => (
 
 // deviceUris: device photos on faved observations.
 // libraryUriFor: the Photos asset each currently maps to.
-// Resolves the new assets saved, and whether any save failed and is worth
-// trying again.
+// photoFor: the observation photo carrying a device photo; by default it's
+// looked for across every observation.
+// Resolves the new assets saved, whether any save failed and is worth trying
+// again, and the device photos still to be dealt with: failed, put off for
+// this launch, or not checked.
 export const restoreFavedDevicePhotos = async (
   realm: Realm,
   deviceUris: string[],
   libraryUriFor: ( uri: string ) => string,
-): Promise<{ saved: string[]; failed: boolean }> => {
-  const none = { saved: [], failed: false };
+  photoFor: PhotoFinder = uri => findObsPhoto( realm, uri )?.photo,
+): Promise<{ saved: string[]; failed: boolean; retry: string[] }> => {
+  const none = { saved: [], failed: false, retry: [] };
   if ( Platform.OS !== "ios" || !ImageCropper?.existingAssets ) return none;
   // Staged USB photos not yet saved are sweepUsbStaging's to save.
   const candidates = [...new Set( deviceUris )]
@@ -134,23 +142,30 @@ export const restoreFavedDevicePhotos = async (
   } catch ( error ) {
     // Without full access a missing asset can't be told from a hidden one.
     logger.warn( "Could not check which faved photos are still in Photos", error );
-    return none;
+    return { ...none, retry: candidates };
   }
   const saved: string[] = [];
   let failed = false;
-  const missing = candidates.filter( uri => !existing.has( libraryUriFor( uri ) )
-    && ( failures.get( uri ) ?? 0 ) < MAX_FAILURES_PER_LAUNCH );
+  const gone = candidates.filter( uri => !existing.has( libraryUriFor( uri ) ) );
+  const retry = gone.filter( uri => ( failures.get( uri ) ?? 0 ) >= MAX_FAILURES_PER_LAUNCH );
+  const missing = gone.filter( uri => !retry.includes( uri ) );
   for ( const deviceUri of missing ) {
-    if ( realm.isClosed ) break;
+    if ( realm.isClosed ) {
+      retry.push( deviceUri );
+      // eslint-disable-next-line no-continue
+      continue;
+    }
     try {
       // eslint-disable-next-line no-await-in-loop
-      const uri = await restoreOne( realm, deviceUri );
+      const uri = await restoreOne( deviceUri, photoFor );
       if ( uri ) {
         store.set( RESTORED_KEY, JSON.stringify( { ...getRestored( ), [deviceUri]: uri } ) );
+        restoredCache = null;
         saved.push( uri );
       }
     } catch ( error ) {
       failed = true;
+      retry.push( deviceUri );
       // A busy library refused without trying; that's no mark against the photo.
       if ( !isLibraryBusy( error ) ) {
         const count = ( failures.get( deviceUri ) ?? 0 ) + 1;
@@ -165,5 +180,5 @@ export const restoreFavedDevicePhotos = async (
   if ( saved.length > 0 ) {
     logger.info( `Put ${saved.length} faved photo(s) back in Photos` );
   }
-  return { saved, failed };
+  return { saved, failed, retry };
 };

@@ -340,10 +340,9 @@ const GroupPhotosContainer = ( ) => {
     }
   };
 
-  // Filing removed photos in the imported album means classifying every
-  // device photo in Realm and writing to the Photos library, which stalled the
-  // grid shortly after each removal. The removed URIs are recorded right away,
-  // so the album can catch up once the user leaves this screen instead.
+  // Removed photos are queued for the imported album as they're removed, but
+  // written to the Photos library only once the user leaves this screen, so
+  // the library write doesn't land while they're still sorting photos.
   const removedAnyPhotos = useRef( false );
   useEffect( ( ) => ( ) => {
     if ( removedAnyPhotos.current ) requestQueuedDeletionAlbumSync( );
