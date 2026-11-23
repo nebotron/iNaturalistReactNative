@@ -487,17 +487,16 @@ class Observation extends Realm.Object {
       // using 'modified' here for the case where a new observation has the same Taxon
       // as a previous observation; otherwise, realm will error out
       // also using modified for updating observations which were already saved locally
-      realm.create( "Observation", obsToSave, "modified" );
+      const created = realm.create( "Observation", obsToSave, "modified" );
+      // Saving is what makes the device photos "saved" as far as the photo
+      // gallery's hide saved photos button is concerned, so index them now
+      // rather than waiting for upload. The index outlives the observation, so
+      // the photos stay hidden even if it's later deleted. In the same
+      // transaction, so an import of many observations commits once per
+      // observation rather than twice.
+      recordUploadedDevicePhotoUrisFromObservation( realm, created );
     }, "saving local observation for upload in Observation" );
-    const savedObservation = realm.objectForPrimaryKey( "Observation", obs.uuid );
-    // Saving is what makes the device photos "saved" as far as the photo
-    // gallery's hide saved photos button is concerned, so index them now rather than
-    // waiting for upload. The index outlives the observation, so the photos
-    // stay hidden even if it's later deleted.
-    if ( savedObservation ) {
-      recordUploadedDevicePhotoUrisFromObservation( realm, savedObservation );
-    }
-    return savedObservation;
+    return realm.objectForPrimaryKey( "Observation", obs.uuid );
   }
 
   static mapObservationForUpload( obs ) {

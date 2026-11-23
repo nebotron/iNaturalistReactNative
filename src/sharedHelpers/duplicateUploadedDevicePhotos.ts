@@ -8,6 +8,53 @@ import {
 } from "sharedHelpers/getOriginalDevicePhotoUri";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 
+// getPreviouslyUploadedDevicePhotoUrisSet walks every saved observation's
+// photos, and the picker, its preload, Group Photos and each import all ask
+// for it, often with nothing
+// changed in between (a background burst on build 1122.21 spent 87% of its JS
+// samples here). So the full set is kept per Realm and dropped whenever a
+// write could change it: Realm's own notifications cover every writer
+// (creations and deletions always notify; modifications only for the key path
+// read here), and recordUploadedDevicePhotoUris drops it at once, since its
+// callers ask again right after it.
+const OBSERVATION_URI_KEY_PATHS = ["observationPhotos.originalDevicePhotoUri"];
+let uriSetCache: {
+  realm: Realm;
+  uris: Set<string> | null;
+  stopListening: ( ) => void;
+} | null = null;
+
+const invalidateUriSetCache = ( realm?: Realm ) => {
+  if ( uriSetCache && ( !realm || uriSetCache.realm === realm ) ) uriSetCache.uris = null;
+};
+
+// Starts watching a Realm the first time its set is asked for. Returns null for
+// a Realm that can't notify (closed, or a test double), which is then always
+// walked afresh.
+const cacheFor = ( realm: Realm ) => {
+  if ( uriSetCache?.realm === realm && !realm.isClosed ) return uriSetCache;
+  if ( realm.isClosed || typeof realm.objects( "Observation" )?.addListener !== "function" ) {
+    return null;
+  }
+  uriSetCache?.stopListening( );
+  const observations = realm.objects( "Observation" );
+  const indexed = realm.objects( UploadedDevicePhotoUri.schema.name );
+  // Called once on registration too, which is harmless: nothing is cached yet.
+  const invalidate = ( ) => invalidateUriSetCache( realm );
+  observations.addListener( invalidate, OBSERVATION_URI_KEY_PATHS );
+  indexed.addListener( invalidate );
+  uriSetCache = {
+    realm,
+    uris: null,
+    stopListening: ( ) => {
+      if ( realm.isClosed ) return;
+      observations.removeListener( invalidate );
+      indexed.removeListener( invalidate );
+    },
+  };
+  return uriSetCache;
+};
+
 export const getDevicePhotoUrisFromObservation = (
   observation: Pick<RealmObservation, "observationPhotos">,
 ): string[] => (
@@ -20,19 +67,26 @@ export const recordUploadedDevicePhotoUris = (
   realm: Realm,
   devicePhotoUris: string[],
 ): void => {
-  const normalizedUris = devicePhotoUris
+  // Only URIs not indexed yet. Every save and every upload of an observation
+  // records all its photos again, and rewriting a row that's already there
+  // (with a fresh uploadedAt) is a disk write that changes nothing anyone
+  // reads; with nothing missing, no write transaction is opened at all.
+  const missingUris = [...new Set( devicePhotoUris
     .map( normalizeDevicePhotoUri )
-    .filter( ( uri ): uri is string => !!uri );
+    .filter( ( uri ): uri is string => !!uri ) )]
+    .filter( uri => !realm.objectForPrimaryKey( UploadedDevicePhotoUri.schema.name, uri ) );
 
-  if ( normalizedUris.length === 0 ) {
+  if ( missingUris.length === 0 ) {
     return;
   }
 
+  invalidateUriSetCache( realm );
   safeRealmWrite( realm, ( ) => {
-    normalizedUris.forEach( uri => {
+    const uploadedAt = new Date( );
+    missingUris.forEach( uri => {
       realm.create(
         UploadedDevicePhotoUri.schema.name,
-        { uri, uploadedAt: new Date( ) },
+        { uri, uploadedAt },
         "modified",
       );
     } );
@@ -75,9 +129,9 @@ export const recordUploadedDevicePhotoUrisFromObservation = (
   );
 };
 
-export const getPreviouslyUploadedDevicePhotoUrisSet = (
+const collectPreviouslyUploadedDevicePhotoUris = (
   realm: Realm,
-  excludeObservationUuids: string[] = [],
+  excludeObservationUuids: string[],
 ): Set<string> => {
   const previouslyUploadedUris = new Set<string>( );
 
@@ -99,6 +153,19 @@ export const getPreviouslyUploadedDevicePhotoUrisSet = (
   } );
 
   return previouslyUploadedUris;
+};
+
+export const getPreviouslyUploadedDevicePhotoUrisSet = (
+  realm: Realm,
+  excludeObservationUuids: string[] = [],
+): Set<string> => {
+  const cache = excludeObservationUuids.length === 0
+    ? cacheFor( realm )
+    : null;
+  if ( !cache ) return collectPreviouslyUploadedDevicePhotoUris( realm, excludeObservationUuids );
+  cache.uris ??= collectPreviouslyUploadedDevicePhotoUris( realm, [] );
+  // A copy, so a caller adding to its set can't change anyone else's
+  return new Set( cache.uris );
 };
 
 // The same for a single photo, against a set the caller already has. An import
