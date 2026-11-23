@@ -19,4 +19,18 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number, label: string ): Pro
   } )
 );
 
+// Like withTimeout, but running out of time is a result rather than an error
+export const raceTimeout = <T, >(
+  promise: Promise<T>,
+  ms: number,
+): Promise<{ timedOut: false; value: T } | { timedOut: true }> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race( [
+    promise.then( value => ( { timedOut: false as const, value } ) ),
+    new Promise<{ timedOut: true }>( resolve => {
+      timer = setTimeout( ( ) => resolve( { timedOut: true } ), ms );
+    } ),
+  ] ).finally( ( ) => clearTimeout( timer ) );
+};
+
 export default withTimeout;
