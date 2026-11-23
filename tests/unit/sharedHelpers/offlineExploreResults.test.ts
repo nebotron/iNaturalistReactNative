@@ -24,6 +24,7 @@ const bird = {
   taxon: { id: 3, ancestor_ids: [1, 2, 3], iconic_taxon_name: "Aves" },
   observation_photos: [{}],
   user: { id: 10 },
+  votes: [{ user_id: 20 }, { user_id: 21, vote_scope: "needs_id" }],
   place_ids: [7],
   geojson: { coordinates: [-122, 37] },
 };
@@ -86,6 +87,8 @@ describe( "offline explore results", ( ) => {
 
   it( "filters by user and sorts", async ( ) => {
     expect( await uuids( { not_user_id: 10 } ) ).toEqual( ["b"] );
+    expect( await uuids( { faved_by: 20 } ) ).toEqual( ["a"] );
+    expect( await uuids( { faved_by: 21 } ) ).toEqual( [] );
     expect( await uuids( { order_by: "created_at", order: "asc" } ) ).toEqual( ["a", "b"] );
     expect( await uuids( { } ) ).toEqual( ["b", "a"] );
   } );
