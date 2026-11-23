@@ -6,6 +6,8 @@ import {
   HTTP_CACHE_TTL_MS,
   preferCachedResponse,
   requesterOf,
+  requireNetworkResponse,
+  wasServedFromCache,
 } from "sharedHelpers/httpCache";
 
 const URL = "https://api.inaturalist.org/v2/observations?taxon_id=1";
@@ -315,6 +317,62 @@ describe( "httpCache", ( ) => {
       } );
       network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
       expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 2 } );
+    } );
+  } );
+
+  describe( "wasServedFromCache", ( ) => {
+    it( "tells whether a request's response came from the cache", async ( ) => {
+      const cache = makeCache( );
+      const networkSignal = new AbortController( ).signal;
+      network.mockResolvedValueOnce( jsonResponse( { results: [1] } ) );
+      await ( await cache.fetch( URL, { signal: networkSignal } ) ).text( );
+      await settle( );
+      expect( wasServedFromCache( networkSignal ) ).toBe( false );
+
+      const cachedSignal = preferCachedResponse( new AbortController( ).signal );
+      await cache.fetch( URL, { signal: cachedSignal } );
+      expect( wasServedFromCache( cachedSignal ) ).toBe( true );
+
+      const fallbackSignal = new AbortController( ).signal;
+      network.mockRejectedValueOnce( new TypeError( "Network request failed" ) );
+      await cache.fetch( URL, { signal: fallbackSignal } );
+      expect( wasServedFromCache( fallbackSignal ) ).toBe( true );
+    } );
+  } );
+
+  describe( "requireNetworkResponse", ( ) => {
+    const cacheSomething = async ( cache: ReturnType<typeof makeCache> ) => {
+      network.mockResolvedValueOnce( jsonResponse( { results: [1] } ) );
+      await ( await cache.fetch( URL ) ).text( );
+      await settle( );
+    };
+
+    it( "goes to the network even when a fresh response is cached", async ( ) => {
+      const cache = makeCache( );
+      await cacheSomething( cache );
+      network.mockResolvedValueOnce( jsonResponse( { results: [2] } ) );
+      const signal = requireNetworkResponse(
+        preferCachedResponse( new AbortController( ).signal ),
+      );
+      expect( await read( await cache.fetch( URL, { signal } ) ) ).toEqual( { results: [2] } );
+      expect( wasServedFromCache( signal ) ).toBe( false );
+    } );
+
+    it( "never falls back to the cache when the network fails", async ( ) => {
+      const cache = makeCache( );
+      await cacheSomething( cache );
+      network.mockRejectedValueOnce( new TypeError( "Network request failed" ) );
+      const signal = requireNetworkResponse( new AbortController( ).signal );
+      await expect( cache.fetch( URL, { signal } ) ).rejects.toThrow( "Network request failed" );
+    } );
+
+    it( "goes to the network while offline", async ( ) => {
+      const cache = makeCache( );
+      await cacheSomething( cache );
+      online = false;
+      network.mockResolvedValueOnce( jsonResponse( { results: [3] } ) );
+      const signal = requireNetworkResponse( new AbortController( ).signal );
+      expect( await read( await cache.fetch( URL, { signal } ) ) ).toEqual( { results: [3] } );
     } );
   } );
 
