@@ -311,23 +311,12 @@ const fetchUnviewedObservationUpdatesCount = async (
   // request rather than logging an auth error on every background poll.
   if ( !opts?.api_token ) return 0;
   try {
-    // Updates whose comment or identification was deleted can stay in the
-    // search index unviewed, and marking the observation viewed never clears
-    // them (the server only marks the updates still in its database). The
-    // notifications list hides them, so leave them out of the count too, or
-    // the unread dot stays on after everything visible has been read.
-    const { total_results: total, results } = await inatjs.observations.updates( {
+    const { total_results: updatesCount } = await inatjs.observations.updates( {
       ...params,
       viewed: false,
-      per_page: 200,
-      fields: { id: true, comment: { id: true }, identification: { id: true } },
+      per_page: 0,
     }, opts );
-    const withoutContent = ( results || [] ).filter(
-      ( update: { comment?: unknown; identification?: unknown } ) => (
-        !update.comment && !update.identification
-      ),
-    ).length;
-    return Math.max( 0, total - withoutContent );
+    return updatesCount;
   } catch ( e ) {
     return handleError( e as ErrorWithResponse, {
       context: {

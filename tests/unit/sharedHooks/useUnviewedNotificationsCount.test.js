@@ -43,7 +43,7 @@ describe( "useUnviewedNotificationsCount with preload", ( ) => {
     resolveList = undefined;
     stopPersisting = persistQueries( queryClient, { writeDelayMs: 0 } );
     inatjs.observations.updates.mockImplementation( params => {
-      if ( params.viewed === false ) {
+      if ( params.per_page === 0 ) {
         return Promise.resolve( {
           ...makeResponse( ),
           total_results: params.observations_by === "owner"
