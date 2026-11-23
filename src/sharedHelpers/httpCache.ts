@@ -9,7 +9,8 @@ import { MMKV } from "react-native-mmkv";
 // keeps whatever was recently viewed (Explore's tabs, the map's place, taxa,
 // users...) usable offline without each screen saving its own results. Online,
 // requests go to the network first, unless the caller marked the request's
-// signal with preferCachedResponse and a fresh enough copy is cached.
+// signal with preferCachedResponse and a fresh enough copy is cached. A signal
+// marked with requireNetworkResponse never gets a cached response.
 
 // Entries not fetched or read for this long are dropped
 export const HTTP_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -43,6 +44,21 @@ export const preferCachedResponse = (
   cacheFirstSignals.set( signal, maxAgeMs );
   return signal;
 };
+
+// Signals of requests that must never be answered from the cache, not even
+// offline or when the network fails. Their responses are still saved.
+const networkOnlySignals = new WeakSet<AbortSignal>( );
+export const requireNetworkResponse = ( signal: AbortSignal ) => {
+  networkOnlySignals.add( signal );
+  return signal;
+};
+
+// Signals of requests that were answered from the cache, so a caller can show
+// the cached results and fetch the latest in the background
+const servedFromCacheSignals = new WeakSet<AbortSignal>( );
+export const wasServedFromCache = ( signal: AbortSignal | undefined ) => (
+  !!signal && servedFromCacheSignals.has( signal )
+);
 
 interface IndexEntry {
   // Name of the file holding the body
@@ -356,12 +372,21 @@ export const createHttpCache = ( {
       return networkFetch( input, init );
     }
 
+    const signal = init?.signal ?? undefined;
+    const networkOnly = !!signal && networkOnlySignals.has( signal );
+    const served = ( cached: Response | null ) => {
+      if ( cached && signal ) servedFromCacheSignals.add( signal );
+      return cached;
+    };
+
     // Offline, a request would only fail, perhaps after a long wait
-    if ( !isOnline( ) ) {
-      const cached = await serve( key, { anyRequester: true } );
+    if ( networkOnly ) {
+      // Straight to the network
+    } else if ( !isOnline( ) ) {
+      const cached = served( await serve( key, { anyRequester: true } ) );
       if ( cached ) return cached;
-    } else if ( init?.signal && cacheFirstSignals.has( init.signal ) ) {
-      const cached = await serve( key, { maxAgeMs: cacheFirstSignals.get( init.signal ) } );
+    } else if ( signal && cacheFirstSignals.has( signal ) ) {
+      const cached = served( await serve( key, { maxAgeMs: cacheFirstSignals.get( signal ) } ) );
       if ( cached ) return cached;
     }
 
@@ -370,7 +395,9 @@ export const createHttpCache = ( {
       response = await networkFetch( input, init );
     } catch ( error ) {
       // Couldn't reach the server, or timed out
-      const cached = await serve( key, { anyRequester: true } );
+      const cached = networkOnly
+        ? null
+        : served( await serve( key, { anyRequester: true } ) );
       if ( cached ) return cached;
       throw error;
     }

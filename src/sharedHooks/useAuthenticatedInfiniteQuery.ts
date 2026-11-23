@@ -1,10 +1,19 @@
 import { useRoute } from "@react-navigation/native";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  hashKey, onlineManager, useInfiniteQuery, useQueryClient,
+} from "@tanstack/react-query";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import i18n from "i18next";
-import { useCallback, useEffect, useRef } from "react";
+import {
+  useCallback, useEffect, useRef, useSyncExternalStore,
+} from "react";
 import type { UserPojo } from "realmModels/User";
-import { preferCachedResponse } from "sharedHelpers/httpCache";
+import {
+  preferCachedResponse,
+  requireNetworkResponse,
+  wasServedFromCache,
+} from "sharedHelpers/httpCache";
+import { log } from "sharedHelpers/logger";
 import {
   createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
 } from "sharedHelpers/logging";
@@ -20,18 +29,48 @@ import { useCurrentUser } from "sharedHooks";
 // and authentication.
 //
 // With `persist: true` the results are saved to disk and shown again after a
-// restart, and are only fetched again after PERSISTED_QUERY_TTL_MS or when
-// refreshFirstPage is called.
+// restart.
 //
 // With `cacheFirst` (on by default with `persist`) a page fetched in the last
 // HTTP_CACHE_FRESH_MS comes from the HTTP cache rather than the network.
 // refreshFirstPage always goes to the network.
+//
+// Whenever cached results are shown (saved to disk, from the HTTP cache, or
+// kept in memory since an earlier visit), the latest are fetched in the
+// background and replace them when they arrive.
+//
+// With `noCache` nothing cached is ever shown: results come only from the
+// network, and are dropped from memory once nothing shows them.
 interface AuthenticatedInfiniteQueryOptions {
   allowAnonymousJWT?: boolean;
   persist?: boolean;
   cacheFirst?: boolean;
+  noCache?: boolean;
   [option: string]: unknown;
 }
+
+const logger = log.extend( "useAuthenticatedInfiniteQuery" );
+
+// Results kept in memory this long, by a persisted query whose results React
+// Query itself won't fetch again, are fetched again when shown
+const REVALIDATE_AFTER_MS = 60 * 1000;
+
+// Hashes of the queries showing cached results, waiting to be fetched again
+// from the network, and of those being fetched again
+const needsRevalidation = new Set<string>( );
+const revalidating = new Set<string>( );
+// Hashes of the queries fetched again this way, whose later pages then come
+// from the network too, rather than from the cache one after another, each
+// starting another refetch
+const revalidated = new Set<string>( );
+
+interface InfinitePages {
+  pages: unknown[];
+  pageParams: unknown[];
+}
+
+const subscribeToOnline = ( onChange: ( ) => void ) => onlineManager.subscribe( onChange );
+const getIsOnline = ( ) => onlineManager.isOnline( );
 
 // A persisted query's key has to survive a restart, so it holds only what
 // changes the results rather than the whole user, whose counts change all the
@@ -53,7 +92,16 @@ const useAuthenticatedInfiniteQuery = (
   const route = useRoute( );
   const currentUser = useCurrentUser( );
   const queryClient = useQueryClient( );
-  const { persist, cacheFirst = persist, ...infiniteQueryOptions } = queryOptions;
+  const {
+    noCache = false,
+    persist: persistOption,
+    cacheFirst: cacheFirstOption,
+    ...infiniteQueryOptions
+  } = queryOptions;
+  const persist = !noCache && !!persistOption;
+  const cacheFirst = !noCache && ( cacheFirstOption ?? persist );
+  const enabled = infiniteQueryOptions.enabled !== false;
+  const isOnline = useSyncExternalStore( subscribeToOnline, getIsOnline );
 
   // Use locale in case there is no user session
   const locale = i18n?.language ?? "en";
@@ -62,8 +110,10 @@ const useAuthenticatedInfiniteQuery = (
     ? persistedQueryUserKey( currentUser )
     : currentUser;
   const fullQueryKey = [...queryKey, queryOptions.allowAnonymousJWT, userKey];
+  const queryHash = hashKey( fullQueryKey );
 
-  const queryFn = async (
+  // A page, and whether it came from the HTTP cache rather than the network
+  const fetchPage = async (
     params: Record<string, unknown>,
     { fromNetwork = false }: { fromNetwork?: boolean } = {},
   ) => {
@@ -75,18 +125,28 @@ const useAuthenticatedInfiniteQuery = (
     // one is expired. We *could* store the token in state with useState if
     // fetching from RNSInfo becomes a performance issue
     const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
-    const { signal, clear } = createRequestTimeoutSignal( );
-    const options = {
-      api_token: apiToken,
-      signal: cacheFirst && !fromNetwork
-        ? preferCachedResponse( signal )
-        : signal,
-    };
+    const { signal: timeoutSignal, clear } = createRequestTimeoutSignal( );
+    const signal = cacheFirst && !fromNetwork
+      ? preferCachedResponse( timeoutSignal )
+      : timeoutSignal;
+    if ( noCache ) requireNetworkResponse( signal );
     try {
-      return await queryFunction( params, options );
+      const page = await queryFunction( params, { api_token: apiToken, signal } );
+      return { page, fromCache: wasServedFromCache( signal ) };
     } finally {
       clear( );
     }
+  };
+
+  const queryFn = async ( params: Record<string, unknown> ) => {
+    const hash = Array.isArray( params?.queryKey )
+      ? hashKey( params.queryKey )
+      : queryHash;
+    const { page, fromCache } = await fetchPage( params, {
+      fromNetwork: revalidated.has( hash ),
+    } );
+    if ( fromCache ) needsRevalidation.add( hash );
+    return page;
   };
 
   // Read only when React Query first creates the query, so once per key
@@ -95,9 +155,16 @@ const useAuthenticatedInfiniteQuery = (
       meta: PERSISTED_QUERY_META,
       staleTime: PERSISTED_QUERY_TTL_MS,
       gcTime: PERSISTED_QUERY_TTL_MS,
-      initialData: ( ) => readPersistedQuery( fullQueryKey ),
+      initialData: ( ) => {
+        const saved = readPersistedQuery( fullQueryKey );
+        if ( saved !== undefined ) needsRevalidation.add( queryHash );
+        return saved;
+      },
       initialDataUpdatedAt: ( ) => readPersistedQueryUpdatedAt( fullQueryKey ),
     }
+    : {};
+  const noCacheOptions = noCache
+    ? { staleTime: 0, gcTime: 0, refetchOnMount: "always" as const }
     : {};
 
   const query = useInfiniteQuery( {
@@ -111,23 +178,27 @@ const useAuthenticatedInfiniteQuery = (
     retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
     ...persistOptions,
     ...infiniteQueryOptions,
+    ...noCacheOptions,
   } );
 
   // Fetches the first page again and, only if that works, replaces every page
   // with it. The results already shown stay while it runs and if it fails, in
   // which case this throws. Reads the latest key and query function from a
   // ref, so it keeps one identity.
-  const latestRef = useRef( { queryFn, fullQueryKey } );
+  const { getNextPageParam } = infiniteQueryOptions as {
+    getNextPageParam?: ( ...args: unknown[] ) => unknown;
+  };
+  const latestRef = useRef( { fetchPage, fullQueryKey, getNextPageParam } );
   useEffect( ( ) => {
-    latestRef.current = { queryFn, fullQueryKey };
+    latestRef.current = { fetchPage, fullQueryKey, getNextPageParam };
   } );
   const refreshFirstPage = useCallback( async ( ) => {
-    const { queryFn: fetchPage, fullQueryKey: key } = latestRef.current;
-    const firstPage = await fetchPage(
+    const { fetchPage: fetchFromNetwork, fullQueryKey: key } = latestRef.current;
+    const { page: firstPage, fromCache } = await fetchFromNetwork(
       { queryKey: key, pageParam: undefined },
       { fromNetwork: true },
     );
-    if ( firstPage == null ) {
+    if ( firstPage == null || fromCache ) {
       throw new Error( "No results from refreshing the first page" );
     }
     // A next page still loading would otherwise add itself to the old pages
@@ -137,6 +208,88 @@ const useAuthenticatedInfiniteQuery = (
       pageParams: [undefined],
     } );
   }, [queryClient] );
+
+  // Fetches every page shown again from the network and, only if they all
+  // arrive, puts them in place of the cached ones. Pages loaded meanwhile by
+  // scrolling stay after them.
+  const revalidate = useCallback( async ( ) => {
+    const {
+      fetchPage: fetchFromNetwork,
+      fullQueryKey: key,
+      getNextPageParam: nextPageParam,
+    } = latestRef.current;
+    const shown = queryClient.getQueryData<InfinitePages>( key );
+    if ( !shown?.pages?.length ) return;
+    const pages: unknown[] = [];
+    const pageParams: unknown[] = [];
+    let pageParam = shown.pageParams[0];
+    for ( let i = 0; i < shown.pages.length; i += 1 ) {
+      // One page after another, as each page's param comes from the last
+      // eslint-disable-next-line no-await-in-loop
+      const { page, fromCache } = await fetchFromNetwork(
+        { queryKey: key, pageParam },
+        { fromNetwork: true },
+      );
+      if ( page == null || fromCache ) {
+        throw new Error( "Couldn't fetch the latest results" );
+      }
+      pages.push( page );
+      pageParams.push( pageParam );
+      if ( i + 1 < shown.pages.length ) {
+        pageParam = nextPageParam?.( page, pages, pageParam, pageParams );
+        if ( pageParam == null ) break;
+      }
+    }
+    const current = queryClient.getQueryData<InfinitePages>( key );
+    // Refreshed some other way meanwhile
+    if ( !current || current.pages[0] !== shown.pages[0] ) return;
+    const loadedSince = pages.length === shown.pages.length
+      ? current.pages.length - shown.pages.length
+      : 0;
+    // A next page still loading would otherwise add itself to the old pages
+    await queryClient.cancelQueries( { queryKey: key, exact: true } );
+    queryClient.setQueryData( key, {
+      pages: [...pages, ...current.pages.slice( shown.pages.length ).slice( 0, loadedSince )],
+      pageParams: [
+        ...pageParams,
+        ...current.pageParams.slice( shown.pageParams.length ).slice( 0, loadedSince ),
+      ],
+    } );
+  }, [queryClient] );
+
+  // Results React Query keeps in memory are shown again without being fetched
+  // when a persisted query's screen comes back, as its staleTime is long
+  useEffect( ( ) => {
+    if ( !persist || !enabled ) return;
+    const { dataUpdatedAt, data } = queryClient.getQueryState( fullQueryKey ) ?? {};
+    if ( data !== undefined && Date.now( ) - ( dataUpdatedAt ?? 0 ) >= REVALIDATE_AFTER_MS ) {
+      needsRevalidation.add( queryHash );
+    }
+  // Only when the query is first shown
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryHash, enabled, persist] );
+
+  const { isFetching, dataUpdatedAt } = query;
+  useEffect( ( ) => {
+    if (
+      noCache
+      || !enabled
+      || !isOnline
+      || isFetching
+      || !needsRevalidation.has( queryHash )
+      || revalidating.has( queryHash )
+    ) return;
+    needsRevalidation.delete( queryHash );
+    revalidating.add( queryHash );
+    revalidate( )
+      .then( ( ) => { revalidated.add( queryHash ); } )
+      .catch( error => {
+        // Tried again once back online, or when more results load
+        needsRevalidation.add( queryHash );
+        logger.warn( "Couldn't fetch the latest results, showing cached ones", error );
+      } )
+      .finally( ( ) => revalidating.delete( queryHash ) );
+  }, [noCache, enabled, isOnline, isFetching, dataUpdatedAt, queryHash, revalidate] );
 
   // Added rather than spread in, so React Query still only re-renders for the
   // fields a caller reads

@@ -74,7 +74,7 @@ describe( "useInfiniteExploreScroll", ( ) => {
     queryClient.clear( );
   } );
 
-  it( "shows the results it fetched before a restart without fetching again", async ( ) => {
+  it( "shows the results it fetched before a restart, then the latest", async ( ) => {
     inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
     const { result: firstResult, unmount } = renderExploreScroll( );
     await waitFor( ( ) => expect( uuidsOf( firstResult ) ).toEqual( ["a", "b"] ) );
@@ -85,10 +85,61 @@ describe( "useInfiniteExploreScroll", ( ) => {
 
     startApp( );
     inatjs.observations.search.mockClear( );
+    let resolveLatest;
+    inatjs.observations.search.mockReturnValue( new Promise( resolve => {
+      resolveLatest = resolve;
+    } ) );
     const { result } = renderExploreScroll( );
+    // The saved results right away, while the latest load in the background
     expect( uuidsOf( result ) ).toEqual( ["a", "b"] );
     expect( result.current.totalResults ).toEqual( 2 );
-    expect( inatjs.observations.search ).not.toHaveBeenCalled( );
+    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 1 ) );
+
+    await act( async ( ) => { resolveLatest( response( ["c", "a", "b"] ) ); } );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["c", "a", "b"] ) );
+    expect( result.current.totalResults ).toEqual( 3 );
+  } );
+
+  it( "keeps the saved results when the latest can't be fetched", async ( ) => {
+    inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
+    const { result: firstResult, unmount } = renderExploreScroll( );
+    await waitFor( ( ) => expect( uuidsOf( firstResult ) ).toEqual( ["a", "b"] ) );
+    await flushPersistence( );
+    unmount( );
+    rendered = [];
+    queryClient.clear( );
+
+    startApp( );
+    inatjs.observations.search.mockReset( );
+    inatjs.observations.search.mockRejectedValue( new Error( "Network request failed" ) );
+    const { result } = renderExploreScroll( );
+    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalled( ) );
+    await flushPersistence( );
+    expect( uuidsOf( result ) ).toEqual( ["a", "b"] );
+    expect( result.current.status ).toEqual( "success" );
+  } );
+
+  it( "never shows saved results with noCache", async ( ) => {
+    inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
+    const { result: firstResult, unmount } = renderExploreScroll( );
+    await waitFor( ( ) => expect( uuidsOf( firstResult ) ).toEqual( ["a", "b"] ) );
+    await flushPersistence( );
+    unmount( );
+    rendered = [];
+
+    inatjs.observations.search.mockResolvedValue( response( ["c"] ) );
+    const client = queryClient;
+    const utils = renderHook(
+      ( ) => useInfiniteExploreScroll( { params: PARAMS, enabled: true, noCache: true } ),
+      {
+        wrapper: ( { children } ) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+    rendered.push( utils );
+    expect( uuidsOf( utils.result ) ).toEqual( [] );
+    await waitFor( ( ) => expect( uuidsOf( utils.result ) ).toEqual( ["c"] ) );
   } );
 
   it( "replaces the results when pulling to refresh works", async ( ) => {

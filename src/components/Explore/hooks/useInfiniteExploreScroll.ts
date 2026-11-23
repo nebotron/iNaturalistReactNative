@@ -23,6 +23,8 @@ const logger = log.extend( "useInfiniteExploreScroll" );
 interface UseInfiniteExploreScrollParams {
   params: ApiObservationsSearchParams;
   enabled: boolean;
+  // Only ever show results just fetched from the network, never cached ones
+  noCache?: boolean;
 }
 
 interface UseInfiniteExploreScrollReturn {
@@ -40,7 +42,7 @@ interface UseInfiniteExploreScrollReturn {
 }
 
 const useInfiniteExploreScroll = (
-  { params: newInputParams, enabled }: UseInfiniteExploreScrollParams,
+  { params: newInputParams, enabled, noCache = false }: UseInfiniteExploreScrollParams,
 ): UseInfiniteExploreScrollReturn => {
   const baseParams = useMemo( () => ( {
     ...newInputParams,
@@ -82,7 +84,10 @@ const useInfiniteExploreScroll = (
     ttl: -1,
   } ), [newInputParams] );
 
-  const queryKey = ["useInfiniteExploreScroll", newInputParams];
+  // Kept apart from the cached query for the same search
+  const queryKey = noCache
+    ? ["useInfiniteExploreScroll", "noCache", newInputParams]
+    : ["useInfiniteExploreScroll", newInputParams];
 
   const getNextPageParam = useCallback(
     ( lastPage: ApiObservationsSearchResponse ) => getNextPageParamForExplore(
@@ -112,9 +117,10 @@ const useInfiniteExploreScroll = (
     {
       getNextPageParam,
       enabled,
-      // Shown again after leaving Explore or restarting the app, until pulled
-      // to refresh or PERSISTED_QUERY_TTL_MS passes
-      persist: true,
+      // Shown again after leaving Explore or restarting the app, while the
+      // latest are fetched in the background
+      persist: !noCache,
+      noCache,
     },
   );
 

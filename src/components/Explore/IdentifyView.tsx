@@ -105,7 +105,13 @@ const IdentifyView = ( {
     totalResults,
     fetchNextPage,
     isLoading,
-  } = useInfiniteExploreScroll( { params: queryParams, enabled: !!canFetch } );
+  } = useInfiniteExploreScroll( {
+    params: queryParams,
+    enabled: !!canFetch,
+    // Observations to identify go stale quickly, as other people identify
+    // them, so cached ones are never shown
+    noCache: true,
+  } );
 
   const [currentIndex, setCurrentIndex] = useState( 0 );
   const [selectedMediaIndex, setSelectedMediaIndex] = useState( 0 );
@@ -252,7 +258,7 @@ const IdentifyView = ( {
   }
 
   if ( !observation && isConnected === false ) {
-    // Nothing cached for this search, and nothing can load until back online
+    // Nothing can load until back online, and cached results aren't shown here
     return (
       <View className="flex-1 justify-center">
         <OfflineNotice onPress={( ) => { refresh( ); }} />
