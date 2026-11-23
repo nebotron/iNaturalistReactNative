@@ -367,4 +367,57 @@ describe( "uploadObservation", () => {
       } ),
     );
   } );
+  describe( "faving while the upload is in flight", () => {
+    const fave = { user_id: 1, vote_flag: true, vote_scope: null };
+    let currentObservation;
+
+    beforeEach( () => {
+      currentObservation = factory( "LocalObservation", { uuid: mockObservation.uuid } );
+      currentObservation.isValid = jest.fn( () => true );
+      mockRealm.objectForPrimaryKey = jest.fn( () => currentObservation );
+      apiObservations.faveObservation.mockResolvedValue( {} );
+      apiObservations.unfaveObservation.mockResolvedValue( {} );
+    } );
+
+    it( "should send a fave tapped after the upload started", async () => {
+      apiObservations.createObservation.mockImplementation( async () => {
+        currentObservation.votes = [fave];
+        return { results: [{ uuid: mockObservation.uuid, id: 12345 }] };
+      } );
+
+      await uploadObservation( mockObservation, mockRealm );
+
+      expect( apiObservations.faveObservation ).toHaveBeenCalledWith(
+        { uuid: mockObservation.uuid },
+        expect.anything(),
+      );
+    } );
+
+    it( "should not send a fave removed after the upload started", async () => {
+      currentObservation.votes = [fave];
+      apiObservations.createObservation.mockImplementation( async () => {
+        currentObservation.votes = [];
+        return { results: [{ uuid: mockObservation.uuid, id: 12345 }] };
+      } );
+
+      await uploadObservation( mockObservation, mockRealm );
+
+      expect( apiObservations.faveObservation ).not.toHaveBeenCalled();
+    } );
+
+    it( "should undo the fave when it was removed while the fave was sending", async () => {
+      currentObservation.votes = [fave];
+      apiObservations.faveObservation.mockImplementation( async () => {
+        currentObservation.votes = [];
+        return {};
+      } );
+
+      await uploadObservation( mockObservation, mockRealm );
+
+      expect( apiObservations.unfaveObservation ).toHaveBeenCalledWith(
+        { uuid: mockObservation.uuid },
+        expect.anything(),
+      );
+    } );
+  } );
 } );

@@ -2,6 +2,7 @@ import { INatApiError } from "api/error";
 import {
   createObservation,
   faveObservation,
+  unfaveObservation,
   updateObservation,
 } from "api/observations";
 import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService";
@@ -303,12 +304,20 @@ async function uploadObservation(
     throw realmError;
   }
 
-  // Step 6: favorite observation if it was locally favorited
-  const wasLocallyFavorited = observation.votes?.filter(
-    v => v?.vote_scope === null,
-  ).length > 0;
+  // Step 6: favorite observation if it was locally favorited. Read the
+  // current record, since the user can fave or unfave while the upload is in
+  // flight and that local change is what has to reach the server.
+  const isLocallyFavorited = ( ) => {
+    if ( realm.isClosed ) return false;
+    const current = realm.objectForPrimaryKey<RealmObservation>(
+      "Observation",
+      observation.uuid,
+    );
+    if ( !current?.isValid( ) ) return false;
+    return ( current.votes || [] ).some( v => v?.vote_scope === null );
+  };
 
-  if ( wasLocallyFavorited ) {
+  if ( isLocallyFavorited( ) ) {
     try {
       const apiToken = await validateAndGetToken( );
       // The observation was created moments ago, so a 404 here means the
@@ -318,6 +327,15 @@ async function uploadObservation(
         { uuid: obsUUID },
         { ...opts, api_token: apiToken },
       ), { alsoRetryStatuses: [404] } );
+      // The observation is marked synced by now, so an unfave tapped while
+      // the fave above was retrying went straight to the server and may have
+      // landed before it. Undo the fave so the server matches what they see.
+      if ( !isLocallyFavorited( ) ) {
+        await unfaveObservation(
+          { uuid: obsUUID },
+          { ...opts, api_token: await validateAndGetToken( ) },
+        );
+      }
     } catch ( error ) {
       const { uploadFailureDetails } = attachUploadFailureDetails(
         error,
