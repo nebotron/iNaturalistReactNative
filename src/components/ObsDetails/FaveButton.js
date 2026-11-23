@@ -163,7 +163,18 @@ const FaveButton = ( {
 
   const toggleFave = useCallback( ( ) => {
     const newIsFaved = !isFaved;
-    if ( isUnuploaded ) {
+    // Decide from Realm at tap time, not from the prop: an upload can finish
+    // while this screen is open without the prop changing identity, and a
+    // fave stored locally after the uploader's last look at it never reaches
+    // the server. While the upload is in flight, the local fave is what the
+    // uploader sends once the observation exists on the server.
+    const realmObservation = uuid && !realm.isClosed
+      ? realm.objectForPrimaryKey( "Observation", uuid )
+      : null;
+    const unuploadedNow = realmObservation && realmObservation.isValid( )
+      ? !realmObservation.wasSynced( )
+      : isUnuploaded;
+    if ( unuploadedNow ) {
       setLoading( true );
       writeLocalFave( newIsFaved );
       setIsFaved( newIsFaved );
@@ -189,6 +200,7 @@ const FaveButton = ( {
     deleteFaveMutate,
     isFaved,
     uuid,
+    realm,
     isUnuploaded,
     writeLocalFave,
     afterToggleFave,
