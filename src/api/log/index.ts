@@ -209,6 +209,8 @@ const iNatLogstashTransport: transportFunctionType<iNatLogstashTransportOptions>
     error = messageParams;
     message = error.message ?? "Unknown error";
   } else if ( Array.isArray( messageParams ) ) {
+    // specially handle the cases where the last arg is
+    // an error: so we can attach appropriate error metadata
     const last = messageParams.at( -1 );
     if ( isError( last ) ) {
       error = last;

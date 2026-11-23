@@ -305,10 +305,12 @@ const MainMediaDisplay = ( {
   const soundSwipeToCloseGesture = Gesture.Pan()
     .runOnJS( true )
     .maxPointers( 1 )
+    // Activate only on a mostly-vertical downward drag
     .activeOffsetY( 15 )
     .failOffsetX( [-15, 15] )
     .onUpdate( ( { translationY, velocityY } ) => {
       if ( translationY > 50 && velocityY > 500 ) {
+        // Close media viewer on swipe down
         onClose();
       }
     } );

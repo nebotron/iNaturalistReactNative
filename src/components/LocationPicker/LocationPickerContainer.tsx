@@ -266,6 +266,7 @@ const LocationPickerContainer = ( {
     dispatch( { type: "UPDATE_LOCATION_NAME", locationName: name } );
   }, [] );
 
+  // make sure map always reflects the current observation lat/lng
   useEffect(
     ( ) => initializeMapFromObservation( ),
     [initializeMapFromObservation],

@@ -34,6 +34,12 @@ export const restoredUriFor = ( deviceUri: string ): string | undefined => (
   getRestored( )[deviceUri]
 );
 
+// restoredUriFor for many photos, reading the restored map once.
+export const restoredUriLookup = ( ) => {
+  const restored = getRestored( );
+  return ( deviceUri: string ): string | undefined => restored[deviceUri];
+};
+
 const { ImageCropper } = NativeModules as {
   ImageCropper?: { existingAssets?: ( phUris: string[] ) => Promise<string[]> };
 };
