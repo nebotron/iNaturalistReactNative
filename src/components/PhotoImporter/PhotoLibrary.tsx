@@ -180,8 +180,10 @@ const PhotoLibrary = ( ) => {
       navigation.navigate( "GroupPhotos" );
       navigation.setParams( { fromGroupPhotos: false } );
     } else if ( skipGroupPhotos ) {
+      // This only happens when being called from ObsEdit
       navToObsEdit();
     } else if ( params?.previousScreen?.name === "ObsDetails" ) {
+      // If the uuid is undefined we need to error out here or ObsDetails doesn't work
       if ( !params.previousScreen.params?.uuid ) {
         throw new Error( "No UUID found to route to ObsDetails screen" );
       }
