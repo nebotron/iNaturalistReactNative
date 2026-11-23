@@ -19,7 +19,7 @@ const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 // A response larger than this isn't worth a slot
 const MAX_ENTRY_BYTES = 4 * 1024 * 1024;
 // How old a cached response may be and still be used instead of the network,
-// for requests marked with preferCachedResponse
+// for requests marked with preferCachedResponse, unless they say otherwise
 export const HTTP_CACHE_FRESH_MS = 2 * 60 * 60 * 1000;
 // Reads and writes arriving together save the index once
 const INDEX_WRITE_DELAY_MS = 1000;
@@ -32,12 +32,15 @@ const HTTP_CACHE_PATH = `${CachesDirectoryPath}/inatHttpCache`;
 // Header set on responses served from the cache, holding when they were fetched
 export const CACHED_AT_HEADER = "x-inat-cached-at";
 
-// Signals of requests that take a fresh cached response over the network.
-// Marking the signal rather than the request lets callers opt in through
-// inatjs, which passes the signal on but not custom headers.
-const cacheFirstSignals = new WeakSet<AbortSignal>( );
-export const preferCachedResponse = ( signal: AbortSignal ) => {
-  cacheFirstSignals.add( signal );
+// Signals of requests that take a cached response over the network, with how
+// old it may be. Marking the signal rather than the request lets callers opt
+// in through inatjs, which passes the signal on but not custom headers.
+const cacheFirstSignals = new WeakMap<AbortSignal, number>( );
+export const preferCachedResponse = (
+  signal: AbortSignal,
+  maxAgeMs = HTTP_CACHE_FRESH_MS,
+) => {
+  cacheFirstSignals.set( signal, maxAgeMs );
   return signal;
 };
 
@@ -288,12 +291,12 @@ export const createHttpCache = ( {
     return latest?.[0] ?? null;
   };
 
-  // The cached response, if there is one. With fresh, only one fetched within
-  // HTTP_CACHE_FRESH_MS and since the last write. With anyRequester, an
-  // anonymous request can be answered with a response fetched as the user.
+  // The cached response, if there is one. With maxAgeMs, only one fetched
+  // within it and since the last write. With anyRequester, an anonymous
+  // request can be answered with a response fetched as the user.
   const serve = async (
     requestKey: string,
-    { fresh = false, anyRequester = false }: { fresh?: boolean; anyRequester?: boolean } = {},
+    { maxAgeMs, anyRequester = false }: { maxAgeMs?: number; anyRequester?: boolean } = {},
   ): Promise<Response | null> => {
     let key = requestKey;
     if ( anyRequester && !getIndex( )[key] ) key = keyForAnonymous( key ) ?? key;
@@ -305,7 +308,7 @@ export const createHttpCache = ( {
       scheduleIndexWrite( );
       return null;
     }
-    if ( fresh && ( age >= HTTP_CACHE_FRESH_MS || entry.fetchedAt < lastWriteAt ) ) {
+    if ( maxAgeMs !== undefined && ( age >= maxAgeMs || entry.fetchedAt < lastWriteAt ) ) {
       return null;
     }
     let body: string;
@@ -358,7 +361,7 @@ export const createHttpCache = ( {
       const cached = await serve( key, { anyRequester: true } );
       if ( cached ) return cached;
     } else if ( init?.signal && cacheFirstSignals.has( init.signal ) ) {
-      const cached = await serve( key, { fresh: true } );
+      const cached = await serve( key, { maxAgeMs: cacheFirstSignals.get( init.signal ) } );
       if ( cached ) return cached;
     }
 

@@ -288,6 +288,21 @@ describe( "httpCache", ( ) => {
       expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 2 } );
     } );
 
+    it( "serves a cached response as old as the request allows", async ( ) => {
+      jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
+      const cache = makeCache( );
+      await cacheResponse( cache, { v: 1 } );
+      jest.setSystemTime( HTTP_CACHE_FRESH_MS );
+      const maxAge = ( ms: number ) => ( {
+        signal: preferCachedResponse( new AbortController( ).signal, ms ),
+      } );
+      expect( await read( await cache.fetch( URL, maxAge( HTTP_CACHE_FRESH_MS + 1 ) ) ) )
+        .toEqual( { v: 1 } );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      expect( await read( await cache.fetch( URL, maxAge( HTTP_CACHE_FRESH_MS ) ) ) )
+        .toEqual( { v: 2 } );
+    } );
+
     it( "goes to the network after the app changes something", async ( ) => {
       jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
       const cache = makeCache( );

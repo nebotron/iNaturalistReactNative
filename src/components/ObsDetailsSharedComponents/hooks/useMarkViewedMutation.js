@@ -53,9 +53,14 @@ const useMarkViewedMutation = (
   );
 
   useEffect( ( ) => {
+    // If user is not signed in, we can't mark as viewed
     if ( !currentUser ) return;
     if ( !uuid ) return;
+    // If we're already in the process of marking as viewed, we don't want to
+    // do it again
     if ( isMarkingViewed ) return;
+    // If a local copy exists and it's already been marked as viewed, we're
+    // probably good. Might be redundant with the prior check, though.
     if ( localObservation && localObservation.viewed( ) ) return;
 
     setIsMarkingViewed( true );
