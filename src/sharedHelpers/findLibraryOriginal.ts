@@ -1,4 +1,4 @@
-import { copyFile } from "@dr.pogodin/react-native-fs";
+import { copyFile, moveFile } from "@dr.pogodin/react-native-fs";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import { NativeModules, Platform } from "react-native";
 import type Realm from "realm";
@@ -21,6 +21,7 @@ interface Query {
 
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
+    exportPHAsset?: ( phUri: string, destPath: string ) => Promise<{ uti?: string }>;
     findLibraryOriginal?: ( options: Omit<Query, "uuid" | "deviceUri"> ) => Promise<{
       uri?: string;
       inSecond?: number;
@@ -142,11 +143,26 @@ const extensionOf = ( path: string ) => {
     : "jpg";
 };
 
+const extensionOfUti = ( uti?: string ) => {
+  const type = uti?.split( "." ).pop( )?.toLowerCase( );
+  if ( !type || type === "jpeg" ) return "jpg";
+  return type;
+};
+
 // Copies one device photo uri to a new temp file, or resolves null when it is
 // gone or unreadable.
 const copyDevicePhoto = async ( uri: string, tempBase: string ): Promise<string | null> => {
   try {
     let source = uri;
+    if ( uri.startsWith( "ph://" ) && ImageCropper?.exportPHAsset ) {
+      // The asset's own original bytes, not the rendition Photos shows: a
+      // faved photo is saved with its crop as a Photos edit, so the shown
+      // rendition is already cropped, and the share would crop it again.
+      const { uti } = await ImageCropper.exportPHAsset( uri, tempBase );
+      const dest = `${tempBase}.${extensionOfUti( uti )}`;
+      await moveFile( tempBase, dest );
+      return dest;
+    }
     if ( uri.startsWith( "ph://" ) ) {
       const data = await CameraRoll.iosGetImageDataById( uri.slice( "ph://".length ) );
       source = data?.node?.image?.filepath ?? "";
