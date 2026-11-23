@@ -157,3 +157,37 @@ Data: Oct 25 – Nov 10, builds 1025–1111.
   symbol-table artifact exists from the next TestFlight build on.
 - Ruled out: FasterImage pipelines are already shared (patched); the Audio ID
   spectrogram already draws at 30 fps and only while on screen.
+
+### 2026-11-23
+
+Data: Nov 9 – 23, builds 1107–1122 (screen signposts only through 1114).
+
+- **The album sync dominated JS CPU everywhere** (45–97% of samples in 21
+  profiles, builds 1122.16–1122.21; Explore cpu% 33 → 85 from 1107 to 1114):
+  `syncNow` re-parsed the saved-URI map once per photo. Fixed upstream in
+  `e11b988`, then replaced by the event-by-event sync (`1154890`). Confirm:
+  `syncNow` gone from `js_cpu_summary`, `ExploreResults` cpu% down.
+- **`getPreviouslyUploadedDevicePhotoUrisSet`** walked every observation for
+  each caller (87% of a background burst); now cached per Realm and dropped on
+  Realm notifications. **`recordUploadedDevicePhotoUris`** rewrote every row on
+  every save/upload in its own transaction; now creates only missing rows,
+  inside the save's transaction. Confirm: `PhotoLibrary`/`GroupPhotos` MB/min.
+- **Unchanged-payload hashes** now persist in MMKV (per build), so cold
+  launches stop rewriting every observation. Confirm: `MyObservationsResults`
+  MB/min (327 on 1113).
+- **Sentinel stages** are appended rather than read-modify-written.
+- **JS frames can be named now**: TestFlight builds save `<build>.jsbundle.map.gz`
+  in `symbols-<build>`; `symbolicate.py --js`. First target: the PhotoLibrary
+  base64 decode at `main.jsbundle:86219` (39% of one burst, build 1122.21).
+- **Disk-write exceptions (1–4.3 GB/day)**: ~80% of samples are
+  `-[UsbStorage copyImageToFile:…]`, the USB import's copy into staging,
+  which is the import itself (the drive is a separate volume, so no clone).
+  ~5% are Audio ID's per-build CoreML check (`-[AudioBirdId checkCoreML]` →
+  ORT `CreateSession` → `MILBlob::FileWriter`) converting the model again on
+  every build even when `audio_id.onnx` is unchanged; keying that check on the
+  model file instead of `CFBundleVersion` would stop it, but check how ORT keys
+  `ModelCacheDirectory` first (the bundle path changes with each install).
+- Not changed: iOS location history runs at ~100 m for all foreground and
+  background time, but that track geotags imported photos
+  (`applyTrackedLocationToPhotos`), so coarsening it would cost observation
+  location accuracy.
