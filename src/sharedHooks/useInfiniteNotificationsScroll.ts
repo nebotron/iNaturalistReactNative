@@ -11,7 +11,9 @@ import { RealmContext } from "providers/contexts";
 import { useEffect, useMemo, useState } from "react";
 import type Realm from "realm";
 import Observation from "realmModels/Observation";
+import type { UserPojo } from "realmModels/User";
 import { useAuthenticatedInfiniteQuery, useCurrentUser } from "sharedHooks";
+import { persistedQueryUserKey } from "sharedHooks/useAuthenticatedInfiniteQuery";
 
 const { useRealm } = RealmContext;
 
@@ -98,6 +100,16 @@ export const getNotificationsQueryKey = (
   notificationParams: ApiObservationsUpdatesParams,
 ): string[] => ["useInfiniteNotificationsScroll", JSON.stringify( notificationParams )];
 
+// The key the query is actually cached (and saved to disk) under
+export const getNotificationsFullQueryKey = (
+  notificationParams: ApiObservationsUpdatesParams,
+  currentUser: UserPojo | null,
+) => [
+  ...getNotificationsQueryKey( notificationParams ),
+  undefined,
+  persistedQueryUserKey( currentUser ),
+];
+
 export const getNextNotificationsPageParam = (
   lastPage: Notification[],
   allPages: Notification[][],
@@ -178,6 +190,11 @@ const useInfiniteNotificationsScroll = (
     {
       getNextPageParam: getNextNotificationsPageParam,
       enabled: !!( currentUser ),
+      // Saved to disk, so the list opens straight away after a restart
+      persist: true,
+      // Still checked for new notifications on every mount, from the network
+      staleTime: 0,
+      cacheFirst: false,
     },
   );
 

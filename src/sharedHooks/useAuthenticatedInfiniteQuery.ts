@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import i18n from "i18next";
 import { useCallback, useEffect, useRef } from "react";
+import type { UserPojo } from "realmModels/User";
 import { preferCachedResponse } from "sharedHelpers/httpCache";
 import {
   createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
@@ -32,6 +33,17 @@ interface AuthenticatedInfiniteQueryOptions {
   [option: string]: unknown;
 }
 
+// A persisted query's key has to survive a restart, so it holds only what
+// changes the results rather than the whole user, whose counts change all the
+// time. Exported for code that fills the same query outside the hook.
+export const persistedQueryUserKey = ( currentUser: UserPojo | null ) => ( {
+  id: currentUser?.id ?? null,
+  locale: currentUser?.locale ?? i18n?.language ?? "en",
+  prefersCommonNames: currentUser?.prefers_common_names,
+  prefersCommunityTaxa: currentUser?.prefers_community_taxa,
+  prefersScientificNameFirst: currentUser?.prefers_scientific_name_first,
+} );
+
 const useAuthenticatedInfiniteQuery = (
   queryKey: string[],
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -46,17 +58,8 @@ const useAuthenticatedInfiniteQuery = (
   // Use locale in case there is no user session
   const locale = i18n?.language ?? "en";
 
-  // A persisted query's key has to survive a restart, so it holds only what
-  // changes the results rather than the whole user, whose counts change all
-  // the time
   const userKey = persist
-    ? {
-      id: currentUser?.id ?? null,
-      locale: currentUser?.locale ?? locale,
-      prefersCommonNames: currentUser?.prefers_common_names,
-      prefersCommunityTaxa: currentUser?.prefers_community_taxa,
-      prefersScientificNameFirst: currentUser?.prefers_scientific_name_first,
-    }
+    ? persistedQueryUserKey( currentUser )
     : currentUser;
   const fullQueryKey = [...queryKey, queryOptions.allowAnonymousJWT, userKey];
 

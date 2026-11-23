@@ -1,5 +1,11 @@
-import { waitFor } from "@testing-library/react-native";
+import { act, waitFor } from "@testing-library/react-native";
 import inatjs from "inaturalistjs";
+import {
+  clearPersistedQueries,
+  persistQueries,
+  readPersistedQuery,
+} from "sharedHelpers/persistedQueries";
+import { getNotificationsFullQueryKey } from "sharedHooks/useInfiniteNotificationsScroll";
 import useUnviewedNotificationsCount from "sharedHooks/useUnviewedNotificationsCount";
 import factory, { makeResponse } from "tests/factory";
 import { queryClient, renderHookInApp } from "tests/helpers/render";
@@ -29,9 +35,13 @@ const mockUpdate = {
 
 describe( "useUnviewedNotificationsCount with preload", ( ) => {
   let resolveList;
+  let stopPersisting;
 
   beforeEach( ( ) => {
     queryClient.clear( );
+    clearPersistedQueries( );
+    resolveList = undefined;
+    stopPersisting = persistQueries( queryClient, { writeDelayMs: 0 } );
     inatjs.observations.updates.mockImplementation( params => {
       if ( params.per_page === 0 ) {
         return Promise.resolve( {
@@ -54,6 +64,7 @@ describe( "useUnviewedNotificationsCount with preload", ( ) => {
   afterEach( ( ) => {
     // The preloaded list is kept for a day, and its timer would keep Jest running
     queryClient.clear( );
+    stopPersisting( );
     inatjs.observations.updates.mockReset( );
     inatjs.observations.fetch.mockReset( );
   } );
@@ -79,5 +90,42 @@ describe( "useUnviewedNotificationsCount with preload", ( ) => {
     );
     const ownerList = cachedLists.find( ( [key] ) => key[1].includes( "owner" ) );
     expect( ownerList[1].pages[0][0].resource.uuid ).toEqual( mockObservation.uuid );
+  } );
+
+  it( "shows the tab ready straight away after a restart when nothing is new", async ( ) => {
+    const view = renderHookInApp(
+      ( ) => useUnviewedNotificationsCount( { preload: true } ),
+    );
+    await waitFor( ( ) => {
+      expect( resolveList ).toBeDefined( );
+    } );
+    resolveList( );
+    await waitFor( ( ) => {
+      expect( view.result.current.ownerReady ).toBe( true );
+    } );
+    // Lets the write to disk, on a timer, happen
+    await act( async ( ) => {
+      await new Promise( resolve => { setTimeout( resolve, 10 ); } );
+    } );
+    view.unmount( );
+
+    // Nothing in memory, only what was saved to disk
+    queryClient.clear( );
+    resolveList = undefined;
+    const listRequests = ( ) => inatjs.observations.updates.mock.calls
+      .filter( ( [params] ) => params.per_page !== 0 && params.observations_by === "owner" );
+    const requestsBefore = listRequests( ).length;
+
+    const { result } = renderHookInApp(
+      ( ) => useUnviewedNotificationsCount( { preload: true } ),
+    );
+    await waitFor( ( ) => {
+      expect( result.current.ownerReady ).toBe( true );
+    } );
+    expect( listRequests( ) ).toHaveLength( requestsBefore );
+    const saved = readPersistedQuery(
+      getNotificationsFullQueryKey( { observations_by: "owner" }, mockUser ),
+    );
+    expect( saved.pages[0][0].resource.uuid ).toEqual( mockObservation.uuid );
   } );
 } );
