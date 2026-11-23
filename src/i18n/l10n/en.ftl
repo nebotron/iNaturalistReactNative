@@ -311,8 +311,6 @@ Change-start-date = Change start date
 # Button that changes the taxon filter on Explore
 Change-taxon = Change taxon
 Change-taxon-filter = Change taxon filter
-# Accessibility label for the chip that shows the hotspot route time limit and opens its controls
-Change-time-limit = Change time limit
 # Button in settings that picks a different folder for USB photo import
 CHANGE-USB-FOLDER = CHANGE USB FOLDER
 Change-user = Change user
@@ -426,8 +424,6 @@ Could-not-import-selected-photos = None of the selected photos could be imported
 Could-not-import-your-photos-nothing-was-saved = Your photos could not be imported, so nothing was saved. Please try again.
 # Error message when the photo the crop editor was opened for cannot be read
 Could-not-open-this-photo-to-crop-it = This photo could not be opened, so there is nothing to crop.
-# Error shown when planning a hotspot route within a time limit fails
-Could-not-plan-route = Could not plan a route
 # Error adding an Audio ID clip to an observation; error is a technical message
 Couldnt-add-the-sound-error = Couldn't add the sound: { $error }
 # Title of an alert shown when combining observations fails
@@ -645,18 +641,6 @@ Downloading-X-observations = Downloading { $count }…
 Drag-two-fingers-on-the-stabilized-preview-to-set-opposite-corners = Drag two fingers on the stabilized preview to set opposite corners of the crop.
 # Accessibility hint for the stabilized video preview, where two fingers mark opposite corners of the crop
 Drag-two-fingers-to-set-opposite-corners-of-the-crop = Drag two fingers to set opposite corners of the crop.
-# Maximum total driving time chosen for planning a route through wildlife hotspots
-Drive-time-limit =
-    Max drive: { $hours ->
-        [0] { $minutes } min
-       *[other] { $hours } h { $minutes } min
-    }
-# Compact form of the maximum total driving time for a wildlife hotspots route, shown in a chip
-Drive-time-limit-short =
-    { $hours ->
-        [0] { $minutes } min
-       *[other] { $hours } h { $minutes } min
-    }
 Duplicate-photo-indicator = Previously uploaded photo
 Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
@@ -885,14 +869,10 @@ Hotspot-number = Hotspot { $number }
 Hotspot-obs-per-page = Total observations to fetch
 # Label for the parking time estimate setting in the hotspot finder filter
 Hotspot-parking-minutes = Parking estimate (min)
-# Label for the setting for how many hotspots trip planning considers
-Hotspot-plan-candidates = Trip plan candidates
 # Label for the setting for how many recent addresses Wildlife Hotspots remembers
 Hotspot-recent-addresses = Recent addresses to remember
 # Section header for hotspot finder algorithm settings in the Explore filters modal
 HOTSPOT-SETTINGS = HOTSPOT SETTINGS
-# Label for the setting for how much each tap changes the trip time limit
-Hotspot-time-step-minutes = Trip time step (min)
 # Accessibility label for a hotspot in a list
 Hotspot-X-with-Y-observations =
     { $count ->
@@ -1099,8 +1079,6 @@ LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Leave-your-observations-in-this-project = Leave your observations in this project
 # Traditional project leave: keep observations but revoke hidden coordinate access
 Leave-your-observations-revoke-hidden-coordinates = Leave your observations in this project but prevent curators from viewing their hidden coordinates
-# Accessibility label for the button that increases the hotspot route time limit
-Lengthen-time-limit = Lengthen time limit
 # Label for the lens a photo was taken with
 Lens = Lens
 # Header of the sheet for renaming a lens
@@ -1551,17 +1529,6 @@ Photos = Photos
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Settings option: the green observation button opens the photo picker
 Pick-photos = Pick photos
-# Button that adds the hotspots with the most observations that fit within the time limit to the route
-Plan-route = Plan route
-# Result of planning a hotspot route within a time limit
-Planned-hotspots-summary =
-    Added { $count ->
-        [one] 1 hotspot
-       *[other] { $count } hotspots
-    } with { $observations ->
-        [one] 1 observation
-       *[other] { $observations } observations
-    }
 # Display name for the iconic taxa category for plantae
 Plants = Plants
 # Button that plays the stabilized video
@@ -1786,8 +1753,6 @@ Reviewed = Reviewed
 Reviewed-observations-only = Reviewed observations only
 # Accessibility label for tagging an Audio ID result as correct
 Right--correct = Right
-# Shown when the route without any hotspots already takes longer to drive than the chosen time limit
-Route-is-longer-than-time-limit = The route without hotspots is longer than the time limit
 # Number of stops on a route, shown after the start and end in the collapsed route summary
 Route-stop-count =
     { $count ->
@@ -1904,8 +1869,6 @@ Share-map = Share map
 # Preceded by the fragment # Preceded by the fragment, "By uploading your observation to iNaturalist, you can:"
 Share-your-observation-where-it-can-help-scientists = Share your observation, where it can help scientists across the world better understand biodiversity.
 SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
-# Accessibility label for the button that decreases the hotspot route time limit
-Shorten-time-limit = Shorten time limit
 # Accessibility label for the photo picker button that shows photos already saved or deleted
 Show-all-photos = Show all photos
 Show-observation-options = Show observation options.

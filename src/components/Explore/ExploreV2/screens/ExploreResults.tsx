@@ -94,6 +94,8 @@ import useSpeciesCount from "sharedHooks/useSpeciesCount";
 import useStoredLayout from "sharedHooks/useStoredLayout";
 import useSubjectDistances, { sortBySubjectDistance } from "sharedHooks/useSubjectDistances";
 import { useLineages } from "sharedHooks/useTaxonomicLineages";
+import type { HotspotSettings } from "stores/createLayoutSlice";
+import { DEFAULT_HOTSPOT_SETTINGS } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
@@ -441,12 +443,12 @@ const ExploreResults = ( ) => {
 
   const hotspotSettings = useStore( s => s.layout.hotspotSettings );
   const hotspotParams = useMemo( ( ) => {
-    // Leave out the settings that don't change the search, so editing them
-    // doesn't rerun it
-    const {
-      hotspotRecentAddresses, hotspotTimeStepMinutes, hotspotMaxPlanCandidates,
-      ...searchSettings
-    } = hotspotSettings;
+    // Only the settings that change the search, so editing the others doesn't
+    // rerun it. Picked by key, since settings removed from the app can linger
+    // in persisted state.
+    const searchSettings = Object.fromEntries( Object.keys( DEFAULT_HOTSPOT_SETTINGS )
+      .filter( key => key !== "hotspotRecentAddresses" )
+      .map( key => [key, hotspotSettings[key as keyof HotspotSettings]] ) );
     return { ...baseSearchParams, ...searchSettings };
   }, [baseSearchParams, hotspotSettings] );
 
