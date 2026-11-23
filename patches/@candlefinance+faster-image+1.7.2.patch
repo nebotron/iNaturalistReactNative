@@ -281,6 +281,32 @@ index d653e1c..b4ca78d 100644
      }
    }
    
+diff --git a/node_modules/@candlefinance/faster-image/ios/Nuke/Internal/Graphics.swift b/node_modules/@candlefinance/faster-image/ios/Nuke/Internal/Graphics.swift
+index adb40b8..8f17197 100644
+--- a/node_modules/@candlefinance/faster-image/ios/Nuke/Internal/Graphics.swift
++++ b/node_modules/@candlefinance/faster-image/ios/Nuke/Internal/Graphics.swift
+@@ -368,6 +368,7 @@ extension Color {
+ /// - parameter options: Image loading options.
+ /// - parameter scale: The scale factor to assume when interpreting the image data, defaults to 1.
+ func makeThumbnail(data: Data, options: ImageRequest.ThumbnailOptions, scale: CGFloat = 1.0) -> PlatformImage? {
++    let createThumbnailWithTransform = options.createThumbnailWithTransform
+     guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+         return nil
+     }
+@@ -384,8 +385,12 @@ func makeThumbnail(data: Data, options: ImageRequest.ThumbnailOptions, scale: CG
+     }
+ 
+ #if canImport(UIKit)
++    // With createThumbnailWithTransform, ImageIO has already rotated the
++    // pixels to the EXIF orientation; tagging the image with it again turns
++    // a sideways-stored photo (every portrait iPhone photo) a second time.
+     var orientation: UIImage.Orientation = .up
+-    if let imageProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [AnyHashable: Any],
++    if !createThumbnailWithTransform,
++       let imageProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [AnyHashable: Any],
+        let orientationValue = imageProperties[kCGImagePropertyOrientation as String] as? UInt32,
+        let cgOrientation = CGImagePropertyOrientation(rawValue: orientationValue) {
+         orientation = UIImage.Orientation(cgOrientation)
 diff --git a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts b/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
 index 445d872..fb8eec4 100644
 --- a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
