@@ -458,12 +458,16 @@ const ExploreResults = ( ) => {
   } ), [baseSearchParams, state.speciesSortBy] );
 
   // Lists in the Explore tab scroll back to where they were when the user returns,
-  // as long as the search they show hasn't changed
+  // as long as the search they show hasn't changed. A search applied whole, like a
+  // saved search, starts over at the top even when it matches one scrolled before.
   const scrollRestoreKey = ( list: string, listParams: object ) => (
     isRootExplore
-      ? `explore:${list}:${JSON.stringify( listParams )}`
+      ? `explore:${list}:${state.appliedSearchCount}:${JSON.stringify( listParams )}`
       : undefined
   );
+  // Remounts the lists when a search is applied whole, so they start at the top
+  // instead of keeping the previous search's scroll position
+  const listKey = String( state.appliedSearchCount );
 
   const speciesCount = useSpeciesCount(
     baseSearchParams,
@@ -602,6 +606,7 @@ const ExploreResults = ( ) => {
               )
               : (
                 <ObservationsFlashList
+                  key={listKey}
                   data={sortedObservations}
                   dataCanBeFetched={canFetch}
                   explore
@@ -673,6 +678,7 @@ const ExploreResults = ( ) => {
         return (
           <>
             <ExploreV2SpeciesView
+              key={listKey}
               byTaxonomy={state.speciesSortBy === SPECIES_SORT.TAXONOMY}
               enabled={canFetch}
               isConnected={isConnected}
@@ -701,6 +707,7 @@ const ExploreResults = ( ) => {
       case IDENTIFY_TAB:
         return (
           <IdentifyView
+            key={listKey}
             canFetch={canFetch}
             queryParams={baseSearchParams}
             handleUpdateCount={noop}
@@ -709,6 +716,7 @@ const ExploreResults = ( ) => {
       case LIFELIST_TAB:
         return (
           <LifeListView
+            key={listKey}
             canFetch={canFetch}
             isConnected={Boolean( isConnected )}
             queryParams={baseSearchParams}
@@ -720,7 +728,7 @@ const ExploreResults = ( ) => {
       case IDENTIFIERS_TAB:
         return (
           <ExploreV2UsersView
-            key={state.activeTab}
+            key={`${state.activeTab}:${listKey}`}
             enabled={canFetch}
             isConnected={isConnected}
             params={baseSearchParams}
@@ -734,6 +742,7 @@ const ExploreResults = ( ) => {
       case IDENTIFICATIONS_TAB:
         return (
           <ExploreV2IdentificationsView
+            key={listKey}
             enabled={canFetch}
             params={baseSearchParams}
             onCount={setIdentificationsCount}
