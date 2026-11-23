@@ -9,6 +9,7 @@ import { log } from "sharedHelpers/logger";
 import resizeImage from "sharedHelpers/resizeImage";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { unlink } from "sharedHelpers/util";
+import { raceTimeout } from "sharedHelpers/withTimeout";
 
 const logger = log.extend( "useDeviceImageThumbnail" );
 
@@ -187,18 +188,14 @@ const HIGH_QUALITY_GENERATION_TIMEOUT_MS = 120000;
 const raceWithTimeout = (
   promise: Promise<string>,
   maxPixel: number,
-): Promise<{ value: string | null; timedOut: boolean }> => {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeoutMs = maxPixel >= HIGH_QUALITY_MIN_PIXEL
+): Promise<{ value: string | null; timedOut: boolean }> => raceTimeout(
+  promise,
+  maxPixel >= HIGH_QUALITY_MIN_PIXEL
     ? HIGH_QUALITY_GENERATION_TIMEOUT_MS
-    : GENERATION_TIMEOUT_MS;
-  return Promise.race( [
-    promise.then( value => ( { value, timedOut: false } ) ),
-    new Promise<{ value: null; timedOut: true }>( resolve => {
-      timer = setTimeout( ( ) => resolve( { value: null, timedOut: true } ), timeoutMs );
-    } ),
-  ] ).finally( ( ) => clearTimeout( timer ) );
-};
+    : GENERATION_TIMEOUT_MS,
+).then( result => ( result.timedOut
+  ? { value: null, timedOut: true }
+  : { value: result.value, timedOut: false } ) );
 
 // Keys already reported as ungeneratable. Nothing caches a failure, so every
 // pass back through a grid retries it and logged it again: one deleted photo

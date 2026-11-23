@@ -172,6 +172,48 @@ describe( "httpCache", ( ) => {
     expect( await read( await cache.fetch( URL, as( 1 ) ) ) ).toEqual( { user: 1 } );
   } );
 
+  it( "answers a request without a token with what the user fetched, when offline", async ( ) => {
+    // Offline for an hour, the token can't be refreshed and requests go without it
+    const cache = makeCache( );
+    const asUser = { headers: { Authorization: jwt( { user_id: 1 } ) } };
+    network.mockResolvedValueOnce( jsonResponse( { user: 1 } ) );
+    await ( await cache.fetch( URL, asUser ) ).text( );
+    await settle( );
+
+    online = false;
+    network.mockRejectedValue( new TypeError( "Network request failed" ) );
+    expect( await read( await cache.fetch( URL ) ) ).toEqual( { user: 1 } );
+    online = true;
+    expect( await read( await cache.fetch( URL ) ) ).toEqual( { user: 1 } );
+    await expect( cache.fetch( `${URL}&page=2` ) ).rejects.toThrow( );
+  } );
+
+  it( "prefers a request's own response to one made as someone else", async ( ) => {
+    const cache = makeCache( );
+    network.mockResolvedValueOnce( jsonResponse( { anonymous: true } ) );
+    await ( await cache.fetch( URL ) ).text( );
+    network.mockResolvedValueOnce( jsonResponse( { user: 1 } ) );
+    await ( await cache.fetch( URL, {
+      headers: { Authorization: jwt( { user_id: 1 } ) },
+    } ) ).text( );
+    await settle( );
+
+    online = false;
+    expect( await read( await cache.fetch( URL ) ) ).toEqual( { anonymous: true } );
+  } );
+
+  it( "doesn't answer a request online with what someone else fetched", async ( ) => {
+    const cache = makeCache( );
+    network.mockResolvedValueOnce( jsonResponse( { user: 1 } ) );
+    await ( await cache.fetch( URL, {
+      headers: { Authorization: jwt( { user_id: 1 } ) },
+    } ) ).text( );
+    await settle( );
+
+    network.mockResolvedValueOnce( jsonResponse( { anonymous: true } ) );
+    expect( await read( await cache.fetch( URL ) ) ).toEqual( { anonymous: true } );
+  } );
+
   it( "drops entries past the TTL", async ( ) => {
     jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
     try {
@@ -244,6 +286,21 @@ describe( "httpCache", ( ) => {
       jest.setSystemTime( HTTP_CACHE_FRESH_MS );
       network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
       expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 2 } );
+    } );
+
+    it( "serves a cached response as old as the request allows", async ( ) => {
+      jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
+      const cache = makeCache( );
+      await cacheResponse( cache, { v: 1 } );
+      jest.setSystemTime( HTTP_CACHE_FRESH_MS );
+      const maxAge = ( ms: number ) => ( {
+        signal: preferCachedResponse( new AbortController( ).signal, ms ),
+      } );
+      expect( await read( await cache.fetch( URL, maxAge( HTTP_CACHE_FRESH_MS + 1 ) ) ) )
+        .toEqual( { v: 1 } );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      expect( await read( await cache.fetch( URL, maxAge( HTTP_CACHE_FRESH_MS ) ) ) )
+        .toEqual( { v: 2 } );
     } );
 
     it( "goes to the network after the app changes something", async ( ) => {

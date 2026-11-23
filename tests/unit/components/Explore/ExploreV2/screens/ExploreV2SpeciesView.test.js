@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react-native";
+import { act, screen } from "@testing-library/react-native";
 import ExploreV2SpeciesView
   from "components/Explore/ExploreV2/screens/ExploreV2SpeciesView";
 import initI18next from "i18n/initI18next";
@@ -40,13 +40,16 @@ jest.mock( "@react-navigation/native", () => {
   };
 } );
 
+const mockRefreshFirstPage = jest.fn( () => Promise.resolve( ) );
+let mockInfiniteScrollData = mockSpeciesCounts;
 jest.mock( "sharedHooks/useInfiniteScroll", () => ( {
   __esModule: true,
   default: () => ( {
-    data: mockSpeciesCounts,
+    data: mockInfiniteScrollData,
     isFetchingNextPage: false,
     fetchNextPage: jest.fn( ),
-    totalResults: mockSpeciesCounts.length,
+    refreshFirstPage: mockRefreshFirstPage,
+    totalResults: mockInfiniteScrollData.length,
   } ),
 } ) );
 
@@ -89,6 +92,8 @@ beforeAll( async () => {
 beforeEach( () => {
   mockUseCurrentUser.mockReturnValue( null );
   mockSeenQueryResults = [];
+  mockInfiniteScrollData = mockSpeciesCounts;
+  mockRefreshFirstPage.mockClear( );
 } );
 
 describe( "ExploreV2SpeciesView", () => {
@@ -126,5 +131,21 @@ describe( "ExploreV2SpeciesView", () => {
 
     await screen.findByTestId( "TaxonGridItem.Pressable.745" );
     expect( screen.queryByTestId( "SpeciesSeenCheckmark" ) ).toBeNull( );
+  } );
+
+  it( "refreshes the species and their count when pulled with no results", async () => {
+    mockInfiniteScrollData = [];
+    const onRefresh = jest.fn( );
+    renderView( { onRefresh } );
+
+    expect(
+      await screen.findByText( "No results found. Try a different search or adjust your filters." ),
+    ).toBeVisible( );
+    const list = screen.getByTestId( "ExploreV2SpeciesList" );
+    await act( async () => {
+      await list.props.refreshControl.props.onRefresh( );
+    } );
+    expect( mockRefreshFirstPage ).toHaveBeenCalled( );
+    expect( onRefresh ).toHaveBeenCalled( );
   } );
 } );

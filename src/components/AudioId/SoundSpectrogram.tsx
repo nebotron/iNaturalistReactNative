@@ -1,5 +1,6 @@
 import { View } from "components/styledComponents";
 import React, { useEffect, useState } from "react";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 
 import AudioClipSpectrogram from "./AudioClipSpectrogram";
 import { AudioBirdId, normalizedSoundUri } from "./audioIdSession";
@@ -21,7 +22,7 @@ const SoundSpectrogram = ( { uri }: { uri: string } ) => {
     if ( AudioBirdId && !isLocal ) {
       normalizedSoundUri( uri ).then( local => {
         if ( !cancelled && local.startsWith( "file://" ) ) {
-          setCopy( { of: uri, path: decodeURIComponent( local.replace( /^file:\/\//, "" ) ) } );
+          setCopy( { of: uri, path: decodeURIComponent( stripFilePrefix( local ) ) } );
         }
       } );
     }

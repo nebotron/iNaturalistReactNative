@@ -397,6 +397,7 @@ const GroupPhotosContainer = ( ) => {
       firstVisibleItemUri.current,
       firstVisibleItemIndex.current,
     ) );
+    // remove from group photos screen
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
 

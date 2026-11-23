@@ -7,7 +7,6 @@ import {
   Body2,
   Body3,
   Body4,
-  Button,
   INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
@@ -49,7 +48,6 @@ import type {
   Hotspot, HotspotObservation, HotspotSpecies, RoutePoint,
 } from "./hooks/useRouteHotspots";
 import {
-  fetchOSRMDurationMatrix,
   fetchOSRMRoute,
   findBestInsertion,
   useRouteHotspots,
@@ -57,7 +55,6 @@ import {
 import HotspotListItem from "./HotspotListItem";
 import type { PlaceResult } from "./placeSearch";
 import { searchPlaces } from "./placeSearch";
-import planHotspotRoute from "./planHotspotRoute";
 
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
@@ -334,15 +331,9 @@ const WildlifeHotspotsScreen = ( {
     suggestions: PlaceResult[];
   } | null>( null );
   const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
-  const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>( null );
-  const [planning, setPlanning] = useState( false );
-  // Outcome of the last plan, shown only while the stops are still the ones it
-  // was made for
-  const [planStatus, setPlanStatus] = useState<{ stops: Stop[]; text: string } | null>( null );
   // Starts expanded until every stop has a location (a new route has no
   // destination yet); otherwise collapses only after an explicit action.
   const [stopsExpanded, setStopsExpanded] = useState( () => !stops.every( s => s.point ) );
-  const [timeLimitPopoverOpen, setTimeLimitPopoverOpen] = useState( false );
   const [showSettingsSheet, setShowSettingsSheet] = useState( false );
   // Stops the user has focused or typed in, which the late-arriving initial
   // location fix must not overwrite.
@@ -361,15 +352,12 @@ const WildlifeHotspotsScreen = ( {
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
-  const {
-    hotspotRecentAddresses: recentAddressCount,
-    hotspotTimeStepMinutes: timeLimitStepMinutes,
-    // Most hotspots, by observation count, considered when planning a route
-    hotspotMaxPlanCandidates: maxPlanCandidates,
-  } = useStore( state => state.layout.hotspotSettings );
+  const recentAddressCount = useStore(
+    state => state.layout.hotspotSettings.hotspotRecentAddresses,
+  );
 
   const {
-    hotspots, candidates, routeCoords, routeDurationSec, loading, error, findHotspots,
+    hotspots, routeCoords, routeDurationSec, loading, error, findHotspots,
   } = useRouteHotspots();
 
   // Rows shown in the dropdown before the user types: current location first,
@@ -606,69 +594,6 @@ const WildlifeHotspotsScreen = ( {
     setHotspotRouteCoords( [] );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops, t] );
-
-  // Until the user picks a limit, offer an hour on top of the current route
-  const limitMinutes = timeLimitMinutes ?? ( routeDurationSec === null
-    ? null
-    : Math.ceil( ( routeDurationSec / 60 + 60 ) / timeLimitStepMinutes )
-      * timeLimitStepMinutes );
-
-  const handleChangeTimeLimit = useCallback( ( deltaMinutes: number ) => {
-    if ( limitMinutes === null ) return;
-    setTimeLimitMinutes( Math.max( timeLimitStepMinutes, limitMinutes + deltaMinutes ) );
-  }, [limitMinutes, timeLimitStepMinutes] );
-
-  // Replaces the route's hotspot stops with the set that fits in the time limit
-  // and has the most observations
-  const handlePlanRoute = useCallback( async () => {
-    const fixedStops = stops.filter( s => !s.fromHotspot );
-    if ( limitMinutes === null || fixedStops.some( s => !s.point ) ) return;
-    const limitSec = limitMinutes * 60;
-    const pool = candidates
-      .filter( h => h.detourMinutes * 60 <= limitSec )
-      .sort( ( a, b ) => b.observationCount - a.observationCount )
-      .slice( 0, maxPlanCandidates );
-    const points: LatLng[] = [
-      ...fixedStops.map( s => s.point as LatLng ),
-      ...pool.map( h => ( { latitude: h.centerLatitude, longitude: h.centerLongitude } ) ),
-    ];
-    setPlanning( true );
-    try {
-      const plan = planHotspotRoute(
-        await fetchOSRMDurationMatrix( points ),
-        fixedStops.length,
-        pool.map( h => h.observationCount ),
-        limitSec,
-      );
-      if ( !plan ) {
-        setPlanStatus( { stops, text: t( "Route-is-longer-than-time-limit" ) } );
-        return;
-      }
-      const newStops = plan.sequence.map( node => ( node < fixedStops.length
-        ? fixedStops[node]
-        : {
-          id: makeStopId(), text: t( "Hotspot" ), point: points[node], fromHotspot: true,
-        } ) );
-      setPlanStatus( {
-        stops: newStops,
-        text: t( "Planned-hotspots-summary", {
-          count: newStops.length - fixedStops.length,
-          observations: plan.score,
-        } ),
-      } );
-      setStops( newStops );
-      setStopsExpanded( false );
-    } catch ( planError ) {
-      setPlanStatus( {
-        stops,
-        text: planError instanceof Error
-          ? planError.message
-          : t( "Could-not-plan-route" ),
-      } );
-    } finally {
-      setPlanning( false );
-    }
-  }, [stops, limitMinutes, candidates, maxPlanCandidates, t] );
 
   const hotspotStopPoints = useMemo(
     () => stops.flatMap( s => ( s.fromHotspot && s.point
@@ -937,34 +862,17 @@ const WildlifeHotspotsScreen = ( {
       } )}
     </Body4>
   );
-  const timeLimitChip = limitMinutes !== null && (
-    <>
-      <TouchableOpacity
-        onPress={() => setTimeLimitPopoverOpen( open => !open )}
-        className="flex-row items-center px-2 py-1 border border-lightGray rounded-full"
-        accessibilityRole="button"
-        accessibilityLabel={t( "Change-time-limit" )}
-        testID="WildlifeHotspotsScreen.timeLimitChip"
-      >
-        <INatIcon name="clock-outline" size={14} color={colors.darkGray} />
-        <Body4 className="ml-1 font-bold">
-          {t( "Drive-time-limit-short", {
-            hours: Math.floor( limitMinutes / 60 ),
-            minutes: limitMinutes % 60,
-          } )}
-        </Body4>
-      </TouchableOpacity>
-      <INatIconButton
-        className="w-8 h-8"
-        icon="map"
-        size={18}
-        color={colors.darkGray}
-        onPress={handleOpenRouteInGoogleMaps}
-        disabled={confirmedStopPoints.length < 2}
-        accessibilityLabel={t( "Open-route-in-Google-Maps" )}
-        testID="WildlifeHotspotsScreen.openInGoogleMaps"
-      />
-    </>
+  const googleMapsButton = (
+    <INatIconButton
+      className="w-8 h-8"
+      icon="map"
+      size={18}
+      color={colors.darkGray}
+      onPress={handleOpenRouteInGoogleMaps}
+      disabled={confirmedStopPoints.length < 2}
+      accessibilityLabel={t( "Open-route-in-Google-Maps" )}
+      testID="WildlifeHotspotsScreen.openInGoogleMaps"
+    />
   );
 
   const content = (
@@ -1006,7 +914,7 @@ const WildlifeHotspotsScreen = ( {
               )}
               <View className="flex-row items-center gap-2 mt-1 min-h-8">
                 {totalDriveTime}
-                {timeLimitChip}
+                {googleMapsButton}
                 <INatIconButton
                   className="w-8 h-8 ml-auto"
                   icon="caret-up"
@@ -1049,10 +957,10 @@ const WildlifeHotspotsScreen = ( {
                   accessibilityLabel={t( "Edit-route-stops" )}
                 />
               </View>
-              {( totalDriveTime || timeLimitChip ) && (
+              {totalDriveTime && (
                 <View className="flex-row items-center gap-2 min-h-8">
                   {totalDriveTime}
-                  {timeLimitChip}
+                  {googleMapsButton}
                 </View>
               )}
             </>
@@ -1065,8 +973,6 @@ const WildlifeHotspotsScreen = ( {
           ref={mapRef}
           initialRegion={initialRegion}
           onMapReady={() => setMapReady( true )}
-          // Called on any map press; used here only to dismiss the popover
-          openMapScreen={() => setTimeLimitPopoverOpen( false )}
           showCurrentLocationButton
           showSwitchMapTypeButton
           showsUserLocation
@@ -1175,49 +1081,6 @@ const WildlifeHotspotsScreen = ( {
           accessibilityLabel={t( "Change-hotspot-settings" )}
           testID="WildlifeHotspotsScreen.settings"
         />
-
-        {/* Rendered inside the map container rather than hanging off the top
-            panel, since Android ignores touches outside a parent's bounds. */}
-        {timeLimitPopoverOpen && limitMinutes !== null && (
-          <View className="absolute top-2 left-2 right-2 bg-white rounded-lg p-3 shadow-md">
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => handleChangeTimeLimit( -timeLimitStepMinutes )}
-                className="px-3 py-1 border border-lightGray rounded-lg"
-                accessibilityRole="button"
-                accessibilityLabel={t( "Shorten-time-limit" )}
-              >
-                <Body2>-</Body2>
-              </TouchableOpacity>
-              <Body3 className="mx-2 font-bold">
-                {t( "Drive-time-limit", {
-                  hours: Math.floor( limitMinutes / 60 ),
-                  minutes: limitMinutes % 60,
-                } )}
-              </Body3>
-              <TouchableOpacity
-                onPress={() => handleChangeTimeLimit( timeLimitStepMinutes )}
-                className="px-3 py-1 border border-lightGray rounded-lg"
-                accessibilityRole="button"
-                accessibilityLabel={t( "Lengthen-time-limit" )}
-              >
-                <Body2>+</Body2>
-              </TouchableOpacity>
-              <Button
-                className="ml-auto"
-                text={t( "Plan-route" )}
-                level="focus"
-                onPress={handlePlanRoute}
-                loading={planning}
-                disabled={loading || planning || candidates.length === 0}
-                testID="WildlifeHotspotsScreen.planRoute"
-              />
-            </View>
-            {planStatus?.stops === stops && (
-              <Body4 className="mt-1 text-darkGray">{planStatus.text}</Body4>
-            )}
-          </View>
-        )}
       </View>
 
       {/* Hidden copy of the tallest hotspot card, used only to measure the

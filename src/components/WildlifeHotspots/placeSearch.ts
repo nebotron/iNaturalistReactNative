@@ -4,7 +4,7 @@ import type { LatLng } from "react-native-maps";
 import { log } from "sharedHelpers/logger";
 import { getTunable } from "sharedHelpers/tunableParams";
 
-import { cachedRequest } from "./requestCache";
+import { cachedForADay } from "./hooks/useRouteHotspots";
 
 const logger = log.extend( "placeSearch" );
 
@@ -51,18 +51,6 @@ interface PlaceSearchModule {
 }
 const { PlaceSearch } = NativeModules as { PlaceSearch?: PlaceSearchModule };
 
-// Suggestions are cached by query so backspacing, retyping, or refocusing a
-// field doesn't refetch. The bias point is part of the key because the same
-// text ranks differently from a different stop.
-const CACHE_LIMIT = 200;
-
-function cacheKey( text: string, nearbyLatLng?: LatLng ): string {
-  const bias = nearbyLatLng
-    ? `${nearbyLatLng.latitude.toFixed( 2 )},${nearbyLatLng.longitude.toFixed( 2 )}`
-    : "";
-  return `${text.trim( ).toLowerCase( )}|${bias}`;
-}
-
 interface PhotonProperties {
   osm_id?: number;
   osm_type?: string;
@@ -102,7 +90,7 @@ async function searchPhoton( text: string, nearbyLatLng?: LatLng ): Promise<Plac
   // node/way features, which would otherwise fill the dropdown with duplicates.
   const url = `${PHOTON_URL}?q=${encodeURIComponent( text )}`
     + `&limit=${MAX_SUGGESTIONS * 3}&lang=en${bias}`;
-  const response = await fetch( url );
+  const response = await fetch( url, cachedForADay( ) );
   if ( !response.ok ) {
     logger.error( `Photon search failed: HTTP ${response.status}` );
     return [];
@@ -142,7 +130,10 @@ async function searchNominatim( text: string, nearbyLatLng?: LatLng ): Promise<P
     = `${NOMINATIM_URL}?q=${encodeURIComponent( text )}&format=json`
       + `&limit=${MAX_SUGGESTIONS}${bias}`;
   // Nominatim's usage policy requires an identifiable user agent.
-  const response = await fetch( url, { headers: { "User-Agent": getUserAgent( ) } } );
+  const response = await fetch( url, {
+    ...cachedForADay( ),
+    headers: { "User-Agent": getUserAgent( ) },
+  } );
   if ( !response.ok ) {
     logger.error( `Nominatim search failed: HTTP ${response.status}` );
     return [];
@@ -156,7 +147,9 @@ async function searchNominatim( text: string, nearbyLatLng?: LatLng ): Promise<P
   } ) );
 }
 
-async function searchPlacesUncached(
+// Suggestions carry their own coordinates, so selecting one needs no follow-up
+// place details lookup.
+export async function searchPlaces(
   text: string,
   nearbyLatLng?: LatLng,
 ): Promise<PlaceResult[]> {
@@ -189,23 +182,6 @@ async function searchPlacesUncached(
     logger.error( "Nominatim search threw", error );
     return [];
   }
-}
-
-// Suggestions carry their own coordinates, so selecting one needs no follow-up
-// place details lookup.
-export function searchPlaces(
-  text: string,
-  nearbyLatLng?: LatLng,
-): Promise<PlaceResult[]> {
-  // Only successful lookups are cached, so a network blip doesn't pin an empty
-  // dropdown to a query.
-  return cachedRequest(
-    "places",
-    CACHE_LIMIT,
-    cacheKey( text, nearbyLatLng ),
-    ( ) => searchPlacesUncached( text, nearbyLatLng ),
-    results => results.length > 0,
-  );
 }
 
 export default searchPlaces;

@@ -1,8 +1,8 @@
 import { searchObservations } from "api/observations";
-import { cachedRequest } from "components/WildlifeHotspots/requestCache";
 import i18n from "i18next";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
+import { preferCachedResponse } from "sharedHelpers/httpCache";
 import type { HotspotSettings } from "stores/createLayoutSlice";
 import { DEFAULT_HOTSPOT_SETTINGS } from "stores/createLayoutSlice";
 
@@ -56,9 +56,16 @@ interface OSRMRoute {
   durationSec: number;
 }
 
-async function fetchOSRMRouteUncached( wStr: string ): Promise<OSRMRoute> {
+// Responses this view fetches are reused for a day, so reopening it,
+// replanning the same trip, or retyping an address doesn't ask the server again
+export const cachedForADay = ( ) => ( {
+  signal: preferCachedResponse( new AbortController( ).signal, 24 * 60 * 60 * 1000 ),
+} );
+
+export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<OSRMRoute> {
+  const wStr = osrmCoords( waypoints );
   const url = `${OSRM_BASE}/${wStr}?overview=full&geometries=geojson`;
-  const response = await fetch( url );
+  const response = await fetch( url, cachedForADay( ) );
   if ( !response.ok ) {
     throw new Error( `Routing service error: ${response.status}` );
   }
@@ -73,31 +80,19 @@ async function fetchOSRMRouteUncached( wStr: string ): Promise<OSRMRoute> {
   };
 }
 
-export function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<OSRMRoute> {
-  const wStr = osrmCoords( waypoints );
-  return cachedRequest( "route", 50, wStr, ( ) => fetchOSRMRouteUncached( wStr ) );
-}
-
-async function fetchOSRMDurationsUncached( wStr: string ): Promise<( number | null )[][]> {
-  const response = await fetch( `${OSRM_TABLE_BASE}/${wStr}?annotations=duration` );
+// Driving times in seconds between every pair of points, Infinity where unroutable
+async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
+  const wStr = osrmCoords( points );
+  const response = await fetch(
+    `${OSRM_TABLE_BASE}/${wStr}?annotations=duration`,
+    cachedForADay( ),
+  );
   if ( !response.ok ) {
     throw new Error( `Routing service error: ${response.status}` );
   }
   const data = await response.json();
   if ( !data.durations ) throw new Error( "No travel times found between these locations" );
-  return data.durations;
-}
-
-// Driving times in seconds between every pair of points, Infinity where unroutable
-export async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
-  const wStr = osrmCoords( points );
-  // Stored as OSRM sends it, since JSON turns Infinity into null
-  const durations = await cachedRequest(
-    "durations",
-    50,
-    wStr,
-    ( ) => fetchOSRMDurationsUncached( wStr ),
-  );
+  const { durations } = data;
   return durations.map( row => row.map( d => d ?? Infinity ) );
 }
 
@@ -197,12 +192,12 @@ function roundBboxOutward( bbox: ReturnType<typeof routeBbox> ) {
   };
 }
 
-// Observation pages already fetched, so reopening the Hotspots view, reordering
-// stops, or changing a setting that only affects clustering or ranking doesn't
-// search iNaturalist again
+// Observation pages already fetched are reused too, so reordering stops or
+// changing a setting that only affects clustering or ranking doesn't search
+// iNaturalist again
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cachedSearchObservations = ( params: Record<string, unknown> ): Promise<any> => (
-  cachedRequest( "observations", 30, params, ( ) => searchObservations( params ) )
+  searchObservations( params, cachedForADay( ) )
 );
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -447,8 +442,6 @@ function clusterByKMeans( observations: any[], maxRadiusKm: number ): Map<string
 
 export function useRouteHotspots() {
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
-  // Every hotspot whose detour was evaluated, for route planning
-  const [candidates, setCandidates] = useState<Hotspot[]>( [] );
   const [routeCoords, setRouteCoords] = useState<RoutePoint[]>( [] );
   const [routeDurationSec, setRouteDurationSec] = useState<number | null>( null );
   const [loading, setLoading] = useState( false );
@@ -469,7 +462,6 @@ export function useRouteHotspots() {
       setLoading( true );
       setError( null );
       setHotspots( [] );
-      setCandidates( [] );
       setRouteCoords( [] );
       setRouteDurationSec( null );
 
@@ -606,7 +598,6 @@ export function useRouteHotspots() {
 
         if ( isStale() ) return;
         setHotspots( withDetours.slice( 0, 10 ) );
-        setCandidates( withDetours );
       } catch ( err ) {
         if ( isStale() ) return;
         setError( err instanceof Error
@@ -621,7 +612,6 @@ export function useRouteHotspots() {
 
   return {
     hotspots,
-    candidates,
     routeCoords,
     routeDurationSec,
     loading,

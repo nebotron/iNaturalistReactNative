@@ -14,6 +14,7 @@ import { View } from "components/styledComponents";
 import i18n from "i18next";
 import React, { useCallback, useMemo } from "react";
 import Taxon from "realmModels/Taxon";
+import { log } from "sharedHelpers/logger";
 import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 import type { SpeciesCountsSortAPIParams } from "sharedHelpers/speciesSort";
 import {
@@ -25,6 +26,7 @@ import useFetchPagesUpTo from "sharedHooks/useFetchPagesUpTo";
 import useGridLayout from "sharedHooks/useGridLayout";
 import useInfiniteScroll from "sharedHooks/useInfiniteScroll";
 import { useLineages } from "sharedHooks/useTaxonomicLineages";
+import useTranslation from "sharedHooks/useTranslation";
 
 export type SpeciesCountQueryParams = ExploreV2BaseQueryParams & SpeciesCountsSortAPIParams;
 
@@ -38,6 +40,8 @@ interface Props {
   byTaxonomy?: boolean;
   enabled: boolean;
   isConnected: boolean | null;
+  // Called on pull to refresh, alongside refreshing the list
+  onRefresh?: ( ) => void;
   params: SpeciesCountQueryParams;
   // See CustomFlashList
   scrollRestoreKey?: string;
@@ -51,12 +55,15 @@ const TAXONOMIC_PAGE_SIZE = 500;
 // Taxonomic order checks which species the user has seen in fewer, bigger requests
 const TAXONOMIC_SEEN_CHUNK_SIZE = 100;
 
+const logger = log.extend( "ExploreV2SpeciesView" );
+
 const speciesKey = ( item: SpeciesCountResult ) => String( item.taxon.id );
 
 const ExploreV2SpeciesView = ( {
-  byTaxonomy = false, enabled, isConnected, params, scrollRestoreKey,
+  byTaxonomy = false, enabled, isConnected, onRefresh, params, scrollRestoreKey,
 }: Props ) => {
   const currentUser = useCurrentUser( );
+  const { t } = useTranslation( );
   const { flashListStyle, gridItemStyle, numColumns } = useGridLayout( );
 
   // Signed-out users have no account locale, so common names need the app
@@ -68,6 +75,7 @@ const ExploreV2SpeciesView = ( {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    refreshFirstPage,
     totalResults,
   } = useInfiniteScroll(
     "exploreV2SpeciesCounts",
@@ -86,6 +94,16 @@ const ExploreV2SpeciesView = ( {
   );
 
   const speciesCounts = data as SpeciesCountResult[];
+
+  // The species shown stay while the new ones load, and if they can't be fetched
+  const handleRefresh = useCallback( async ( ) => {
+    onRefresh?.( );
+    try {
+      await refreshFirstPage( );
+    } catch ( error ) {
+      logger.warn( "Pull to refresh failed, keeping the species shown", error );
+    }
+  }, [onRefresh, refreshFirstPage] );
 
   useFetchPagesUpTo( {
     enabled: byTaxonomy && enabled,
@@ -202,6 +220,8 @@ const ExploreV2SpeciesView = ( {
       )}
       layout="grid"
       numColumns={numColumns}
+      onRefresh={handleRefresh}
+      refreshAccessibilityLabel={t( "Pull-to-refresh-species" )}
       renderItem={renderItem}
       scrollRestoreKey={scrollRestoreKey}
       totalResults={totalResults}

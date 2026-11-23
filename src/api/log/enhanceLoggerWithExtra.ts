@@ -88,6 +88,7 @@ const extractExtraForLogWrapper = ( rawMsg: unknown ) => {
   if ( !Array.isArray( rawMsg ) || rawMsg.length < 2 ) {
     return null;
   }
+  // make sure maybeExtra is an object w/ primitive values
   const extraCandidate = rawMsg.at( -1 );
   if ( !isObject( extraCandidate ) || Array.isArray( extraCandidate ) ) {
     return null;

@@ -27,6 +27,7 @@ const useInfiniteScroll = (
     fetchNextPage,
     hasNextPage,
     refetch,
+    refreshFirstPage,
     status,
   } = useAuthenticatedInfiniteQuery(
     [queryKey, baseParams],
@@ -75,6 +76,9 @@ const useInfiniteScroll = (
     fetchNextPage,
     hasNextPage,
     refetch,
+    // Goes to the network and keeps the results shown until it works; see
+    // useAuthenticatedInfiniteQuery
+    refreshFirstPage,
     status,
     totalResults: pages?.[0]
       ? pages?.[0].total_results

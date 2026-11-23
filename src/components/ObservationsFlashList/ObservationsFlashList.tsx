@@ -21,9 +21,10 @@ import React, {
 import type {
   LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle,
 } from "react-native";
-import { Animated } from "react-native";
+import { Animated, PixelRatio } from "react-native";
 import RealmObservation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
+import photoUriForPixelSize from "sharedHelpers/photoUriForPixelSize";
 import {
   useCurrentUser,
   useGridLayout,
@@ -365,12 +366,18 @@ const ObservationsFlashList = ( {
         }
       }
 
-      const allUrls = [...nextItemUrls, ...carouselUrls];
+      // The sizes the grid tiles draw, so the prefetch fills the cache they read
+      const tilePx = layout !== "list" && typeof gridItemStyle?.width === "number"
+        ? Math.ceil( gridItemStyle.width * PixelRatio.get( ) )
+        : null;
+      const allUrls = [...nextItemUrls, ...carouselUrls].map( url => ( tilePx
+        ? photoUriForPixelSize( url, tilePx )
+        : url ) );
       if ( allUrls.length > 0 ) {
         prefetchImageData( allUrls );
       }
     },
-    [explore],
+    [explore, gridItemStyle, layout],
   );
 
   const handleEndReached = useCallback( ( ) => {
