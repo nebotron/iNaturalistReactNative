@@ -18,7 +18,7 @@ import { getLatestTrackedLocation } from "../../../../sharedHelpers/locationHist
 interface Options {
   // Re-resolve each time a search is applied, not just on mount
   searchCount: number;
-  // A saved search's species can't be loaded offline
+  // Offline, a saved search's species come from the HTTP cache
   offline: boolean;
   // Nearby for the current search, also used for a nearby saved search
   nearbyCoords?: NearbyCoords;
@@ -75,10 +75,9 @@ const useExcludedSpecies = (
       nearbyCoords?.lng,
     ],
     queryFn: async ( ) => {
-      // Without a token the species are fetched signed out
-      const apiToken = offline
-        ? null
-        : await getJWT( ).catch( ( ) => null );
+      // Offline too, so the request matches the one cached when the user
+      // last viewed the search
+      const apiToken = await getJWT( ).catch( ( ) => null );
       // Rebuilt from the key, so only what the key covers can change the result
       return resolveExcludedSpeciesIds( {
         filters: { ...defaultExploreV2Filters, excludeSpeciesInSavedSearch: savedSearchName },

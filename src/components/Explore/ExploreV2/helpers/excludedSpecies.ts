@@ -21,7 +21,8 @@ type SearchToResolve = Pick<ExploreV2Search, "filters">;
 // Why a saved search's species can't be excluded:
 //  - missing: no saved search has the name, e.g. it was renamed or deleted
 //  - cycle: saved searches exclude each other's species, so none can be resolved
-//  - offline: species_counts can't be fetched offline, and there's no stored copy
+//  - offline: species_counts can't be fetched offline, and the HTTP cache has
+//    no copy from when the search was last viewed
 //  - too-many: it finds more species than the API will list, so the list would
 //    be incomplete
 export class ExcludedSavedSearchError extends Error {
@@ -82,20 +83,37 @@ export const referencedSavedSearches = (
   return chain;
 };
 
+// Offline, the pages come from the HTTP cache, saved when the search was last
+// viewed online
+const fetchSpeciesPage = async (
+  name: string,
+  params: Record<string, unknown>,
+  context: ExcludedSpeciesContext,
+): Promise<SpeciesCountsPage | null> => {
+  try {
+    return await fetchSpeciesCounts<SpeciesCountsPage>( params, {
+      api_token: context.apiToken,
+    } ) as SpeciesCountsPage | null;
+  } catch ( error ) {
+    if ( context.offline ) throw new ExcludedSavedSearchError( "offline", name );
+    throw error;
+  }
+};
+
 const fetchSpeciesIds = async (
   name: string,
   params: Record<string, unknown>,
-  apiToken: string | null,
+  context: ExcludedSpeciesContext,
 ): Promise<number[]> => {
   const ids = new Set<number>( );
   for ( let page = 1; ; page += 1 ) {
     // eslint-disable-next-line no-await-in-loop
-    const response = await fetchSpeciesCounts<SpeciesCountsPage>( {
+    const response = await fetchSpeciesPage( name, {
       ...params,
       page,
       per_page: SPECIES_PAGE_SIZE,
       fields: SPECIES_FIELDS,
-    }, { api_token: apiToken } ) as SpeciesCountsPage | null;
+    }, context );
     const results = response?.results;
     if ( !Array.isArray( results ) ) {
       throw new Error( "Unreadable species_counts response" );
@@ -123,7 +141,6 @@ const savedSearchSpeciesIds = async (
   const saved = findSavedSearchByName( context.savedSearches, name );
   if ( !saved ) throw new ExcludedSavedSearchError( "missing", name );
   if ( resolving.includes( saved.key ) ) throw new ExcludedSavedSearchError( "cycle", name );
-  if ( context.offline ) throw new ExcludedSavedSearchError( "offline", name );
 
   const search = relativeSavedSearch( saved );
   // eslint-disable-next-line no-use-before-define
@@ -138,7 +155,7 @@ const savedSearchSpeciesIds = async (
   const {
     per_page: _perPage, order: _order, order_by: _orderBy, ...params
   } = buildExploreV2QueryParams( search, nearbyCoords, context.currentUserId, nestedIds );
-  return fetchSpeciesIds( name, { ...params }, context.apiToken );
+  return fetchSpeciesIds( name, { ...params }, context );
 };
 
 // Every species the search leaves out. Empty when it leaves none out. Throws

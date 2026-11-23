@@ -95,11 +95,30 @@ describe( "resolveExcludedSpeciesIds", ( ) => {
       .rejects.toMatchObject( { reason: "cycle" } );
   } );
 
-  it( "fails offline rather than ignoring the saved search", async ( ) => {
+  it( "finds the species offline from what was fetched before", async ( ) => {
+    // Served by the HTTP cache
+    fetchSpeciesCounts.mockResolvedValue( { total_results: 1, results: [species( 10 )] } );
+    const ids = await resolveExcludedSpeciesIds(
+      excluding( "A" ),
+      context( [named( "A" )], { offline: true } ),
+    );
+    expect( ids ).toEqual( [10] );
+  } );
+
+  it( "fails offline rather than ignoring the saved search if it wasn't cached", async ( ) => {
+    fetchSpeciesCounts.mockRejectedValue( new TypeError( "Network request failed" ) );
     await expect( resolveExcludedSpeciesIds(
       excluding( "A" ),
       context( [named( "A" )], { offline: true } ),
     ) ).rejects.toMatchObject( { reason: "offline" } );
+  } );
+
+  it( "passes on a failure online", async ( ) => {
+    fetchSpeciesCounts.mockRejectedValue( new TypeError( "Network request failed" ) );
+    await expect( resolveExcludedSpeciesIds(
+      excluding( "A" ),
+      context( [named( "A" )] ),
+    ) ).rejects.toThrow( "Network request failed" );
   } );
 
   it( "applies a saved search's own exclusions when finding its species", async ( ) => {
