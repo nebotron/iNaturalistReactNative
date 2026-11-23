@@ -1,5 +1,5 @@
 import {
-  exists, mkdir, readDir, readFile, writeFile,
+  appendFile, exists, mkdir, readDir, readFile, writeFile,
 } from "@dr.pogodin/react-native-fs";
 import { log } from "sharedHelpers/logger";
 import { unlink } from "sharedHelpers/util";
@@ -10,6 +10,43 @@ const logger = log.extend( "sentinelFiles" );
 
 // a sentinel with this stage is considered "clean" and not in need of reporting
 const FLOW_COMPLETE_STAGE = "flow_complete";
+
+// A sentinel file is one JSON line for the flow, then one appended line per
+// stage, so logging a stage is a short append. It used to read, parse and
+// rewrite the whole file at every stage of the camera and import flows.
+interface SentinelStage {
+  name: string;
+  timestamp: string;
+}
+
+interface SentinelData {
+  screenName?: string;
+  entryTimestamp?: string;
+  stages: SentinelStage[];
+}
+
+// Reads either layout: files a build before the append format left behind
+// hold a single JSON object with every stage in it.
+export const parseSentinelContent = ( content: string ): SentinelData => {
+  const lines = content.split( "\n" ).filter( line => line.trim( ) );
+  const first = JSON.parse( lines[0] ?? "{}" );
+  // A stage appended after its file was removed starts a file of its own
+  const startsWithStage = !( "stages" in first ) && "name" in first;
+  const data = startsWithStage
+    ? { stages: [] }
+    : first;
+  const stages: SentinelStage[] = [...( data.stages || [] )];
+  ( startsWithStage
+    ? lines
+    : lines.slice( 1 ) ).forEach( line => {
+    try {
+      stages.push( JSON.parse( line ) );
+    } catch {
+      // A line cut short by the app dying mid-write; the stages before it stand
+    }
+  } );
+  return { ...data, stages };
+};
 
 const accessFullFilePath = ( fileName: string ) => `${sentinelFilePath}/${fileName}`;
 
@@ -29,7 +66,7 @@ const createSentinelFile = async ( screenName: string ): Promise<string> => {
       stages: [],
     };
 
-    const initialContent = JSON.stringify( logEntry );
+    const initialContent = `${JSON.stringify( logEntry )}\n`;
 
     await writeFile( accessFullFilePath( sentinelFileName ), initialContent, "utf8" );
     return sentinelFileName;
@@ -43,19 +80,14 @@ const logStage = async (
   sentinelFileName: string,
   stageName: string,
 ): Promise<void> => {
+  if ( !sentinelFileName ) return;
   const fullFilePath = accessFullFilePath( sentinelFileName );
   try {
-    const existingContent = await readFile( fullFilePath, "utf8" );
-    const sentinelData = JSON.parse( existingContent );
-
-    const stage = {
+    const stage: SentinelStage = {
       name: stageName,
       timestamp: new Date( ).toISOString( ),
     };
-
-    sentinelData.stages.push( stage );
-
-    await writeFile( fullFilePath, JSON.stringify( sentinelData ), "utf8" );
+    await appendFile( fullFilePath, `${JSON.stringify( stage )}\n`, "utf8" );
   } catch ( error ) {
     console.log( error, sentinelFileName, stageName, "Failed to log stage to sentinel file" );
     console.error( "Failed to log stage to sentinel file:", error, sentinelFileName, stageName );
@@ -79,8 +111,7 @@ const logSentinelFiles = async ( ) => {
   files.forEach( async file => {
     try {
       const existingContent = await readFile( file.path, "utf8" );
-      const sentinelData = JSON.parse( existingContent );
-      const stages = sentinelData.stages || [];
+      const { stages } = parseSentinelContent( existingContent );
       const completedNormally = stages
         .some( stage => stage.name === FLOW_COMPLETE_STAGE );
       if ( stages.length > 0 && !completedNormally ) {
