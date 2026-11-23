@@ -113,7 +113,7 @@ export type AdvancedSearchAction =
   | { type: "SET_REVIEWED"; reviewedFilter: REVIEWED }
   | { type: "SET_PHOTO_LICENSE"; photoLicense: PHOTO_LICENSE }
   | { type: "TOGGLE_EVIDENCE_TYPE"; evidenceType: EVIDENCE_TYPE }
-  | { type: "TOGGLE_POPULAR" }
+  | { type: "TOGGLE_FAVED_BY_ME" }
   | { type: "RESET" };
 
 const withFilters = (
@@ -267,9 +267,9 @@ export const advancedSearchReducer = (
           : null,
       } );
     }
-    case "TOGGLE_POPULAR":
+    case "TOGGLE_FAVED_BY_ME":
       return withFilters( draft, {
-        popular: draft.filters.popular
+        favedByMe: draft.filters.favedByMe
           ? null
           : true,
       } );

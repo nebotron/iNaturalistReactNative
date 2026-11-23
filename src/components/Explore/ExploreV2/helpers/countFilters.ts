@@ -9,7 +9,7 @@ const countedDefaults = {
   project: null,
   taxonFilters: null,
   evidenceTypes: null,
-  popular: null,
+  favedByMe: null,
 };
 
 type CountedKey = keyof typeof countedDefaults;

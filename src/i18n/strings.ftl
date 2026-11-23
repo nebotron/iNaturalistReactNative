@@ -759,6 +759,8 @@ Failed-to-load-hotspot-data = Failed to load hotspot data
 Failed-to-log-in = Failed to log in
 # Option for showing a star button to fave or unfave an observation on its photo
 Fave-star = Fave/unfave star
+# Explore filter checkbox limiting results to observations the signed-in user has faved
+Faved-by-me-observations-filter = Faved by me
 # Heading for the list of users who favorited an observation
 FAVORITES = FAVORITES
 # Heading for the list of users who favorited an observation
@@ -1556,7 +1558,6 @@ Please-make-sure-your-password-is-at-least-6-characters = Please make sure your 
 Please-try-again-when-you-are-connected-to-the-internet = Please try again when you are connected to the Internet.
 Please-try-again-when-you-are-online = Please try again when you are online!
 Point-the-camera-at-an-animal-plant-or-fungus = Point the camera at an animal, plant, or fungus
-Popular-observations-filter = Popular (at least one fave)
 POTENTIAL-DISAGREEMENT = POTENTIAL DISAGREEMENT
 Potential-disagreement-description = <0>Is the evidence enough to confirm this is </0><1></1><0>?<0>
 Potential-disagreement-disagree = <0>No, but this is a member of </0><1></1>

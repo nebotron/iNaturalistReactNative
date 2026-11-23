@@ -73,6 +73,9 @@ export class OfflineExploreObservation extends Realm.Object {
 
   votes_count!: number;
 
+  // Users who faved it (votes without a scope)
+  faver_ids!: Realm.List<number>;
+
   captive!: boolean;
 
   static schema: Realm.ObjectSchema = {
@@ -99,6 +102,7 @@ export class OfflineExploreObservation extends Realm.Object {
       photos_count: "int",
       sounds_count: "int",
       votes_count: { type: "int", indexed: true },
+      faver_ids: "int[]",
       captive: "bool",
     },
   };
@@ -106,7 +110,7 @@ export class OfflineExploreObservation extends Realm.Object {
 
 export const offlineExploreRealmConfig: Realm.Configuration = {
   schema: [OfflineExploreObservation],
-  schemaVersion: 1,
+  schemaVersion: 2,
   path: `${DocumentDirectoryPath}/offlineExplore.realm`,
 };
 
@@ -257,6 +261,9 @@ const toRow = ( obs: ApiObservation ) => {
     photos_count: obs.observation_photos?.length || 0,
     sounds_count: obs.observation_sounds?.length || 0,
     votes_count: obs.votes?.length || 0,
+    faver_ids: ( obs.votes || [] )
+      .filter( vote => !vote.vote_scope && vote.user_id )
+      .map( vote => vote.user_id ),
     captive: !!obs.captive,
   };
 };
@@ -403,6 +410,8 @@ export const queryOfflineObservations = ( db: Realm, params: Params ) => {
   if ( params.sounds === false ) add( "sounds_count == 0" );
   if ( typeof params.captive === "boolean" ) add( "captive == $0", params.captive );
   if ( params.popular ) add( "votes_count > 0" );
+  const favedBy = toNumbers( params.faved_by );
+  if ( favedBy.length ) add( "ANY faver_ids IN $0", favedBy );
 
   const userIds = toNumbers( params.user_id );
   if ( userIds.length ) add( "user_id IN $0", userIds );

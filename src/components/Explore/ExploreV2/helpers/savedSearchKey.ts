@@ -59,7 +59,7 @@ const filtersKey = ( filters: ExploreV2Filters ): string => {
     reviewedFilter: filters.reviewedFilter,
     photoLicense: filters.photoLicense,
     evidenceTypes: [...( filters.evidenceTypes ?? [] )].sort( ).join( "," ),
-    popular: filters.popular
+    favedByMe: filters.favedByMe
       ? "true"
       : "",
     user: String( filters.user?.id ?? "" ),
