@@ -1,12 +1,17 @@
 // @flow
 import { refresh } from "@react-native-community/netinfo";
 import {
-  ActivityIndicator, Body3, CustomFlashList, InfiniteScrollLoadingWheel, OfflineNotice,
+  ActivityIndicator,
+  Body3,
+  CustomFlashList,
+  CustomRefreshControl,
+  InfiniteScrollLoadingWheel,
+  OfflineNotice,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import UserList from "components/UserList/UserList";
 import type { Node } from "react";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { useTranslation } from "sharedHooks";
 
 type Props = {
@@ -20,6 +25,9 @@ type Props = {
   keyExtractor?: Function,
   layout?: string,
   numColumns?: number,
+  // Turns on pull to refresh, which works with no results too
+  onRefresh?: ( ) => Promise<void>,
+  refreshAccessibilityLabel?: string,
   renderItem?: Function,
   renderItemSeparator?: Function,
   scrollRestoreKey?: string,
@@ -38,6 +46,8 @@ const ExploreFlashList = ( {
   keyExtractor,
   layout,
   numColumns,
+  onRefresh,
+  refreshAccessibilityLabel,
   renderItem,
   renderItemSeparator,
   scrollRestoreKey,
@@ -45,6 +55,27 @@ const ExploreFlashList = ( {
   totalResults,
 }: Props ): Node => {
   const { t } = useTranslation( );
+  const [refreshing, setRefreshing] = useState( false );
+
+  const handleRefresh = useCallback( async ( ) => {
+    if ( !onRefresh ) return;
+    setRefreshing( true );
+    try {
+      await onRefresh( );
+    } finally {
+      setRefreshing( false );
+    }
+  }, [onRefresh] );
+
+  const refreshControl = onRefresh
+    ? (
+      <CustomRefreshControl
+        accessibilityLabel={refreshAccessibilityLabel}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+      />
+    )
+    : undefined;
 
   const renderFooter = useCallback( ( ) => (
     <InfiniteScrollLoadingWheel
@@ -103,6 +134,7 @@ const ExploreFlashList = ( {
         keyExtractor={keyExtractor}
         numColumns={numColumns}
         onEndReached={fetchNextPage}
+        refreshControl={refreshControl}
         refreshing={isFetchingNextPage}
         renderItem={renderItem}
         scrollRestoreKey={scrollRestoreKey}

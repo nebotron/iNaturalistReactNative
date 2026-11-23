@@ -1627,6 +1627,8 @@ Protozoans = Protozoans
 Pull-to-refresh-and-sync-observations = Pull to refresh and sync observations
 # Accessibility label for pull-to-refresh on Notifications list
 Pull-to-refresh-notifications = Pull to refresh notifications
+# Accessibility label for pull-to-refresh on the Explore species list
+Pull-to-refresh-species = Pull to refresh species
 QUALITY-GRADE = QUALITY GRADE
 # label in project requirements
 Quality-Grade = Quality Grade
