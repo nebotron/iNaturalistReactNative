@@ -36,10 +36,11 @@ YOLO_CONF_THRESH = 0.05
 YOLO_IOU_THRESH = 0.45
 MAX_DETS = 16
 # Test-time augmentation, mirroring ImageCropper.m: the photo as is, mirrored,
-# and zoomed out (drawn at 1/1.5 scale in the middle of the letterbox). Boxes
-# from all three are fused by weighted box fusion, and a box found in only one
-# view ends up with a third of its confidence.
-VIEWS = ( ( False, 1.0 ), ( True, 1.0 ), ( False, 1.5 ) )
+# zoomed out (drawn at 1/2 scale in the middle of the letterbox), and zoomed in
+# (drawn at 1/0.7 scale, so the letterbox shows the middle 70% of its longer
+# edge). Boxes from all four are fused by weighted box fusion, and a box found
+# in only one view ends up with a quarter of its confidence.
+VIEWS = ( ( False, 1.0 ), ( True, 1.0 ), ( False, 2.0 ), ( False, 0.7 ) )
 FUSION_IOU = 0.40
 
 _sess = None
@@ -162,7 +163,8 @@ def _detect_view( img_arr: np.ndarray, orig_w: int, orig_h: int, zoom: float = 1
 
     rows = []
     for i in kept:
-        # Trim to the image: the zoomed-out view sees past its edges.
+        # Trim to the image: the zoomed-out view sees past its edges, and the
+        # zoomed-in view's boxes can run off the canvas.
         x1, x2 = np.clip( ( boxes[i, [0, 2]] - pad_left ) / scale / orig_w, 0.0, 1.0 )
         y1, y2 = np.clip( ( boxes[i, [1, 3]] - pad_top ) / scale / orig_h, 0.0, 1.0 )
         rows.append( ( x1, y1, max( 0.01, x2 - x1 ), max( 0.01, y2 - y1 ), float( conf_raw[i] ) ) )
