@@ -91,7 +91,7 @@ def bounds_array( dets, sal, gate, thresh=DEFAULT_UNION_THRESH, k=DEFAULT_UNION_
 
 
 def score( bounds, truths, sizes, padding=0.0 ):
-    """Vectorized replica of bounds_to_crop + recall/precision/crop_score (IoU)."""
+    """Vectorized replica of bounds_to_crop + recall/precision/crop_score (IoU inside the image)."""
     ok = ~np.isnan( bounds[:, 0] )
     b = bounds[ok]
     t = truths[ok].astype( np.float64 )
@@ -105,8 +105,8 @@ def score( bounds, truths, sizes, padding=0.0 ):
     h = side_px / H
     cx = b[:, 0] + bw / 2
     cy = b[:, 1] + bh / 2
-    x = np.where( w <= 1.0, np.clip( cx - w / 2, 0.0, np.maximum( 1.0 - w, 0.0 ) ), cx - w / 2 )
-    y = np.where( h <= 1.0, np.clip( cy - h / 2, 0.0, np.maximum( 1.0 - h, 0.0 ) ), cy - h / 2 )
+    x = np.where( w <= 1.0, np.clip( cx - w / 2, 0.0, np.maximum( 1.0 - w, 0.0 ) ), ( 1.0 - w ) / 2 )
+    y = np.where( h <= 1.0, np.clip( cy - h / 2, 0.0, np.maximum( 1.0 - h, 0.0 ) ), ( 1.0 - h ) / 2 )
 
     # recall — against the truth shrunk 8% per side
     sx = t[:, 0] + t[:, 2] * 0.08
@@ -124,8 +124,13 @@ def score( bounds, truths, sizes, padding=0.0 ):
     side = np.maximum( w, h )
     p = inter_t / np.maximum( side * side, 1e-12 )
 
+    # IoU over pixels inside the image only (see crop_score): the truth is
+    # logged clipped to the image, so clip the prediction the same way.
+    # Clipping leaves inter_t unchanged because the truth lies inside the image.
+    cw = np.minimum( x + w, 1.0 ) - np.maximum( x, 0.0 )
+    ch = np.minimum( y + h, 1.0 ) - np.maximum( y, 0.0 )
     area_t = t[:, 2] * t[:, 3]
-    s = inter_t / np.maximum( w * h + area_t - inter_t, 1e-12 )
+    s = inter_t / np.maximum( cw * ch + area_t - inter_t, 1e-12 )
     return s, r, p, ok
 
 

@@ -7,7 +7,10 @@ scripts/pull_logs.py), downloads the original images, re-runs subject detection,
 and evaluates how well
 different padding values and detection strategies match the crops you actually chose.
 
-Score = IoU of the AI crop with the crop you chose (0–1, higher = better).
+Score = IoU of the AI crop with the crop you chose (0–1, higher = better),
+counting only the part of each crop inside the image: the chosen crop is
+logged clipped to the image, and a letterboxed AI crop shows no pixels past
+its edges either.
 Recall and precision are reported alongside it as diagnostics:
   recall    = fraction of the ground-truth crop (shrunk 8% per side) covered
               by the AI crop (must be ≈1.0 — the AI crop should always
@@ -80,7 +83,8 @@ def bounds_to_crop(bx: float, by: float, bw: float, bh: float,
     """Exact replica of subjectBoundsToNormalizedCrop.ts.
 
     When the padded subject exceeds the image dimensions, w or h may be > 1
-    and x or y may be negative (letterbox case — caller shows black bars).
+    and x or y may be negative (letterbox case — caller shows black bars,
+    split evenly because the crop is centred on the image, not the subject).
     """
     if bw <= 0 or bh <= 0:
         return Crop(0, 0, 1, 1)
@@ -93,11 +97,12 @@ def bounds_to_crop(bx: float, by: float, bw: float, bh: float,
         h = pixel_side / image_height
         cx = bx + bw / 2
         cy = by + bh / 2
-        # Clamp only when the crop fits within the image.
+        # Clamp only when the crop fits within the image; letterbox around
+        # the image's centre when it does not.
         x = (max(0.0, min(1.0 - w, cx - w / 2)) if w <= 1.0
-             else cx - w / 2)
+             else (1.0 - w) / 2)
         y = (max(0.0, min(1.0 - h, cy - h / 2)) if h <= 1.0
-             else cy - h / 2)
+             else (1.0 - h) / 2)
         return Crop(x, y, w, h)
     # Fallback when image dimensions are unavailable (normalized-space squaring)
     pad_w = bw * padding
@@ -163,10 +168,23 @@ def precision(pred: Crop, truth: Crop) -> float:
     return intersection_area(pred, truth) / pred_area
 
 
+def clip_to_image(c: Crop) -> Crop:
+    """The part of a crop inside the image — what a letterboxed crop shows."""
+    x1, y1 = max(0.0, c.x), max(0.0, c.y)
+    x2, y2 = min(1.0, c.x + c.w), min(1.0, c.y + c.h)
+    return Crop(x1, y1, max(0.0, x2 - x1), max(0.0, y2 - y1))
+
+
 def crop_score(pred: Crop, truth: Crop) -> float:
     """IoU with the chosen crop: rewards tight crops of small subjects as much as
-    full coverage, which a recall-weighted score did not."""
-    return iou(pred, truth)
+    full coverage, which a recall-weighted score did not.
+
+    Only pixels inside the image count. The chosen crop is logged as the
+    visible square intersected with the image (imageZoomTransformToNormalizedRect
+    clamps it to [0, 1]), so a predicted square that runs past the image edge
+    is clipped the same way; otherwise its off-image letterbox area would
+    count against it although the user sees exactly the same pixels."""
+    return iou(clip_to_image(pred), truth)
 
 
 # ---------------------------------------------------------------------------
