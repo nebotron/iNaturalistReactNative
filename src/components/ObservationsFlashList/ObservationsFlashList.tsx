@@ -42,12 +42,16 @@ const { useRealm } = RealmContext;
 
 const AnimatedFlashList = Animated.createAnimatedComponent( CustomFlashList );
 
+// Tunable: scales how far ahead of the scroll the grid both mounts cells and
+// prefetches photos. Raise it to trade memory and data for fewer blank tiles
+// on fast flings; lower it to save them. 1 is the original 1.5 / 4 screens.
+const GRID_LOOKAHEAD_SCALE = 2;
 // How far past the viewport grid cells are mounted, in screen heights, so
 // their photos have downloaded and decoded at tile size before they scroll in
-const GRID_DRAW_SCREENS = 1.5;
+const GRID_DRAW_SCREENS = 1.5 * GRID_LOOKAHEAD_SCALE;
 // How far past the viewport photo data is prefetched into the disk cache, in
 // screen heights, so the mounted-ahead cells above find it already there
-const GRID_PREFETCH_SCREENS = 4;
+const GRID_PREFETCH_SCREENS = 4 * GRID_LOOKAHEAD_SCALE;
 // The list layout's rows vary in height, so it prefetches a fixed count
 const LIST_PREFETCH_ITEMS = 5;
 
