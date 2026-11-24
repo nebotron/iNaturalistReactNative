@@ -1,6 +1,7 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiPlace, ApiProjectSummary } from "api/types";
+import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import DateFilterSection
   from "components/Explore/ExploreV2/components/DateFilterSection";
@@ -112,17 +113,31 @@ const AdvancedSearch = ( ) => {
     subject, location, sortBy, filters,
   } = draft;
 
+  const {
+    layout: observationsLayout,
+    writeLayoutToStorage: writeObservationsLayout,
+  } = useStoredLayout( useExploreLayoutKey( ) );
+  const showingObservationsMap = v2State.activeTab === OBSERVATIONS_TAB
+    && observationsLayout === "map";
+  // Reset also returns Explore to the observations map, once the search is run
+  const [viewReset, setViewReset] = useState( false );
+  const pendingViewChange = viewReset && !showingObservationsMap;
+
   const differsFromInitial = useMemo(
-    ( ) => !isEqual( draft, initialDraft ),
-    [draft, initialDraft],
+    ( ) => pendingViewChange || !isEqual( draft, initialDraft ),
+    [pendingViewChange, draft, initialDraft],
   );
 
   const resetDisabled = useMemo(
-    ( ) => isEqual( draft, defaultAdvancedSearchDraft ),
-    [draft],
+    ( ) => isEqual( draft, defaultAdvancedSearchDraft )
+      && ( viewReset || showingObservationsMap ),
+    [draft, viewReset, showingObservationsMap],
   );
 
-  const { layout: observationsLayout } = useStoredLayout( useExploreLayoutKey( ) );
+  const reset = ( ) => {
+    dispatch( { type: "RESET" } );
+    setViewReset( true );
+  };
   const { overlays: gridOverlays } = useExploreGridOverlays( );
   const savedSearches = useStore( state => state.exploreSavedSearches.searches );
   const [pendingExit, setPendingExit] = useState( false );
@@ -217,7 +232,15 @@ const AdvancedSearch = ( ) => {
   };
 
   const handleSearch = () => {
-    dispatchV2( { type: EXPLORE_V2_ACTION.APPLY_SEARCH, search: currentSearch } );
+    if ( viewReset ) {
+      writeObservationsLayout( "map" );
+    }
+    dispatchV2( {
+      type: EXPLORE_V2_ACTION.APPLY_SEARCH,
+      search: viewReset
+        ? { ...currentSearch, activeTab: OBSERVATIONS_TAB }
+        : currentSearch,
+    } );
     navigation.popTo( "ExploreResults" );
   };
 
@@ -347,7 +370,7 @@ const AdvancedSearch = ( ) => {
       <SearchHeader
         headerText={t( "SEARCH" )}
         onClose={requestExit}
-        onReset={() => dispatch( { type: "RESET" } )}
+        onReset={reset}
         resetDisabled={resetDisabled}
         testID="AdvancedSearch.back"
       />

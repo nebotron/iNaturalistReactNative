@@ -385,15 +385,17 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
 #define YOLO_MAX_DETS    16
-// Test-time augmentation: the detector runs on the photo as is, mirrored, and
-// zoomed out (drawn at 1/1.5 scale in the middle of the letterbox), and its
-// boxes are fused. A box found in all three views outranks one found in only
-// one, and averaging the views steadies the box's edges. Mirrored in
+// Test-time augmentation: the detector runs on the photo as is, mirrored,
+// zoomed out (drawn at 1/2 scale in the middle of the letterbox), and zoomed in
+// (drawn at 1/0.7 scale, so the canvas clips it to the middle 70% of its longer
+// edge), and its boxes are fused. A box found in every view outranks one found
+// in only one, averaging the views steadies the box's edges, and the zoomed-in
+// view sees small subjects at a scale the detector handles better. Mirrored in
 // scripts/cache_detections.py (VIEWS, fuse_views).
-#define YOLO_NUM_VIEWS   3
+#define YOLO_NUM_VIEWS   4
 #define YOLO_FUSION_IOU  0.40f
-static const BOOL  kYOLOViewFlip[YOLO_NUM_VIEWS] = { NO, YES, NO };
-static const float kYOLOViewZoom[YOLO_NUM_VIEWS] = { 1.0f, 1.0f, 1.5f };
+static const BOOL  kYOLOViewFlip[YOLO_NUM_VIEWS] = { NO, YES, NO, NO };
+static const float kYOLOViewZoom[YOLO_NUM_VIEWS] = { 1.0f, 1.0f, 2.0f, 0.7f };
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
@@ -574,7 +576,8 @@ static int detectYOLOView( UIImage *image, BOOL flip, float zoom, YOLOBox *outBo
         suppressed[k] = YES;
     }
     // Map back to normalised image coordinates, trimmed to the image: the
-    // zoomed-out view sees past its edges.
+    // zoomed-out view sees past its edges, and the zoomed-in view's boxes can
+    // run off the canvas.
     float x1 = MAX( 0.0f, MIN( 1.0f, ( dets[i].x1 - padLeft ) / scale / imgW ) );
     float x2 = MAX( 0.0f, MIN( 1.0f, ( dets[i].x2 - padLeft ) / scale / imgW ) );
     float y1 = MAX( 0.0f, MIN( 1.0f, ( dets[i].y1 - padTop  ) / scale / imgH ) );

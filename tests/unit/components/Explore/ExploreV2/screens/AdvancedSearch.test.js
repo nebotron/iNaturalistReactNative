@@ -1,4 +1,6 @@
 import { screen, userEvent } from "@testing-library/react-native";
+import { OBSERVATIONS_TAB, SPECIES_TAB } from "appConstants/tabs";
+import { EXPLORE_LAYOUT_KEY } from "components/Explore/ExploreV2/hooks/useExploreDisplaySettings";
 import AdvancedSearch from "components/Explore/ExploreV2/screens/AdvancedSearch";
 import initI18next from "i18n/initI18next";
 import i18next from "i18next";
@@ -11,6 +13,7 @@ import {
 } from "providers/ExploreV2Context";
 import React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
+import { zustandStorage } from "stores/useStore";
 import factory from "tests/factory";
 import { renderComponent } from "tests/helpers/render";
 import { savedSearch, setSavedSearches } from "tests/helpers/savedSearch";
@@ -474,6 +477,22 @@ describe( "AdvancedSearch screen", ( ) => {
         location: { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE },
         filters: defaultExploreV2Filters,
       } );
+    } );
+    it( "returns Explore to the observations map when the reset search runs", async ( ) => {
+      zustandStorage.setItem( EXPLORE_LAYOUT_KEY, "grid" );
+      setExploreState( { activeTab: SPECIES_TAB } );
+      renderComponent( <AdvancedSearch /> );
+
+      const resetButton = screen.getByTestId( "AdvancedSearch.back.reset" );
+      expect( resetButton ).toBeEnabled( );
+      await actor.press( resetButton );
+      expect( mockDispatch ).not.toHaveBeenCalled( );
+      expect( zustandStorage.getItem( EXPLORE_LAYOUT_KEY ) ).toEqual( "grid" );
+
+      await pressSearch( );
+
+      expect( committedSearch( ).activeTab ).toEqual( OBSERVATIONS_TAB );
+      expect( zustandStorage.getItem( EXPLORE_LAYOUT_KEY ) ).toEqual( "map" );
     } );
   } );
 

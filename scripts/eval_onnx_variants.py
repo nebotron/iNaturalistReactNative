@@ -73,7 +73,7 @@ def _raw_detections(image_path: str, model_path: Path) -> list[tuple[float, floa
 
 
 def _raw_detections_uncached(image_path: str, model_path: Path) -> list[tuple[float, float, float, float, float]]:
-    """The app's detections: three views fused (see cache_detections.VIEWS)."""
+    """The app's detections: every view in cache_detections.VIEWS, fused."""
     try:
         img = PILImage.open(image_path).convert("RGB")
         orig_w, orig_h = img.size

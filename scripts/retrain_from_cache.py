@@ -73,6 +73,10 @@ def main() -> None:
                              "subjects are a minority of the log and the detector is least "
                              "confident on them.")
     parser.add_argument("--small-frac", type=float, default=0.15)
+    parser.add_argument("--no-val", action="store_true",
+                        help="Skip ultralytics validation each epoch (score checkpoints "
+                             "with score_checkpoint.py instead; its mAP is not the crop "
+                             "metric anyway)")
     parser.add_argument("--cls", type=float, default=0.5,
                         help="Classification loss gain (ultralytics default 0.5)")
     args = parser.parse_args()
@@ -215,9 +219,11 @@ def main() -> None:
         exist_ok=True,
         single_cls=True,
         save_period=1,
+        val=not args.no_val,
     )
 
-    best_pt = Path("/tmp/inat_train_local/run/weights/best.pt")
+    weights_dir = Path("/tmp/inat_train_local/run/weights")
+    best_pt = weights_dir / ("last.pt" if args.no_val else "best.pt")
     if not best_pt.exists():
         sys.exit(f"Training finished but best.pt not found at {best_pt}")
 
