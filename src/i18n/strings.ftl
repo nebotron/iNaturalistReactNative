@@ -2218,10 +2218,6 @@ Tunable-defaultObsLocationAccuracyM = Default location accuracy (m)
 # Description of a tunable parameter in settings
 Tunable-defaultObsLocationAccuracyM-description = Accuracy assumed for observations whose location has no accuracy.
 # Label for a tunable parameter in settings
-Tunable-desiredLocationAccuracyM = Location picker accuracy (m)
-# Description of a tunable parameter in settings
-Tunable-desiredLocationAccuracyM-description = Accuracy below which the location picker shows the location as precise.
-# Label for a tunable parameter in settings
 Tunable-gameLocationRadiusKm = Species game local radius (km)
 # Description of a tunable parameter in settings
 Tunable-gameLocationRadiusKm-description = Radius used to decide whether a species occurs near you in the species game.
@@ -2270,10 +2266,6 @@ Tunable-matchLikelyConfidence = Match likely confidence
 # Description of a tunable parameter in settings
 Tunable-matchLikelyConfidence-description = Confidence (0-100) at or above which the match screen says you likely observed a taxon.
 # Label for a tunable parameter in settings
-Tunable-maxCameraZoom = Max camera zoom
-# Description of a tunable parameter in settings
-Tunable-maxCameraZoom-description = Maximum zoom factor allowed when pinching in the camera.
-# Label for a tunable parameter in settings
 Tunable-maxConcurrentUploads = Concurrent uploads
 # Description of a tunable parameter in settings
 Tunable-maxConcurrentUploads-description = Number of observations uploaded at the same time.
@@ -2290,21 +2282,9 @@ Tunable-maxPhotosPerObservation = Max photos per observation
 # Description of a tunable parameter in settings
 Tunable-maxPhotosPerObservation-description = Maximum number of photos an observation can have.
 # Label for a tunable parameter in settings
-Tunable-maxSoundsPerObservation = Max sounds per observation
-# Description of a tunable parameter in settings
-Tunable-maxSoundsPerObservation-description = Maximum number of sounds an observation can have.
-# Label for a tunable parameter in settings
 Tunable-mediaCacheDays = Media cache lifetime (days)
 # Description of a tunable parameter in settings
 Tunable-mediaCacheDays-description = How long brightness-adjusted photos, extracted audio, photo thumbnails, and photos prepared for cropping but not yet cropped are kept.
-# Label for a tunable parameter in settings
-Tunable-minFreeStorageMb = Minimum free storage (MB)
-# Description of a tunable parameter in settings
-Tunable-minFreeStorageMb-description = Free device storage below which the camera warns that storage is full.
-# Label for a tunable parameter in settings
-Tunable-minSmallGridColumns = Small grid columns
-# Description of a tunable parameter in settings
-Tunable-minSmallGridColumns-description = Minimum number of columns in small photo grids.
 # Label for a tunable parameter in settings
 Tunable-offlineMaxMapPins = Offline map max pins
 # Description of a tunable parameter in settings
@@ -2361,14 +2341,6 @@ Tunable-syncedPhotoFolderMaxGb-description = Maximum size of locally kept photos
 Tunable-targetLocationAccuracyM = Target location accuracy (m)
 # Description of a tunable parameter in settings
 Tunable-targetLocationAccuracyM-description = Accuracy at which a location fix is considered good enough to stop refining.
-# Label for a tunable parameter in settings
-Tunable-toastDurationSeconds = Toast duration (seconds)
-# Description of a tunable parameter in settings
-Tunable-toastDurationSeconds-description = How long brief notifications stay on screen.
-# Label for a tunable parameter in settings
-Tunable-topSuggestionScoreThreshold = Top suggestion score threshold
-# Description of a tunable parameter in settings
-Tunable-topSuggestionScoreThreshold-description = Minimum combined score (0-100) for a suggestion to be shown as the top ID.
 # Label for a tunable parameter in settings
 Tunable-uploadMaxDimension = Upload photo size (px)
 # Description of a tunable parameter in settings

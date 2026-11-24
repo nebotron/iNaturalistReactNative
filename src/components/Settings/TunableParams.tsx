@@ -50,10 +50,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-aiCameraCropRatio" ),
     t( "Tunable-aiCameraCropRatio-description" ),
   ],
-  topSuggestionScoreThreshold: [
-    t( "Tunable-topSuggestionScoreThreshold" ),
-    t( "Tunable-topSuggestionScoreThreshold-description" ),
-  ],
   matchHighConfidence: [
     t( "Tunable-matchHighConfidence" ),
     t( "Tunable-matchHighConfidence-description" ),
@@ -126,18 +122,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-maxPhotosPerObservation" ),
     t( "Tunable-maxPhotosPerObservation-description" ),
   ],
-  maxSoundsPerObservation: [
-    t( "Tunable-maxSoundsPerObservation" ),
-    t( "Tunable-maxSoundsPerObservation-description" ),
-  ],
-  maxCameraZoom: [
-    t( "Tunable-maxCameraZoom" ),
-    t( "Tunable-maxCameraZoom-description" ),
-  ],
-  minFreeStorageMb: [
-    t( "Tunable-minFreeStorageMb" ),
-    t( "Tunable-minFreeStorageMb-description" ),
-  ],
   maxPhotoInspectZoom: [
     t( "Tunable-maxPhotoInspectZoom" ),
     t( "Tunable-maxPhotoInspectZoom-description" ),
@@ -149,10 +133,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
   locationAccuracyDeadlineSeconds: [
     t( "Tunable-locationAccuracyDeadlineSeconds" ),
     t( "Tunable-locationAccuracyDeadlineSeconds-description" ),
-  ],
-  desiredLocationAccuracyM: [
-    t( "Tunable-desiredLocationAccuracyM" ),
-    t( "Tunable-desiredLocationAccuracyM-description" ),
   ],
   locationHistoryDistanceM: [
     t( "Tunable-locationHistoryDistanceM" ),
@@ -261,14 +241,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
   gameLocationRadiusKm: [
     t( "Tunable-gameLocationRadiusKm" ),
     t( "Tunable-gameLocationRadiusKm-description" ),
-  ],
-  toastDurationSeconds: [
-    t( "Tunable-toastDurationSeconds" ),
-    t( "Tunable-toastDurationSeconds-description" ),
-  ],
-  minSmallGridColumns: [
-    t( "Tunable-minSmallGridColumns" ),
-    t( "Tunable-minSmallGridColumns-description" ),
   ],
   advancedModeOnboardingObservations: [
     t( "Tunable-advancedModeOnboardingObservations" ),

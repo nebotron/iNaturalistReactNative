@@ -100,8 +100,6 @@ export const stagedPathFor = ( relativePath: string ) => (
 
 const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
 
-export const isStagedDevicePhoto = ( uri: string ) => !!stagedNameFromUri( uri );
-
 export const recordStagedImportCrop = ( uri: string, crop: NormalizedCrop ) => {
   const name = stagedNameFromUri( uri );
   if ( !name ) return;

@@ -13,18 +13,15 @@ import type { Node } from "react";
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
-import { setCachedFave } from "sharedHelpers/userObservationsCache";
 import {
   useAuthenticatedMutation,
   useTranslation,
 } from "sharedHooks";
+import colors from "styles/tailwindColors";
 
 const { useRealm } = RealmContext;
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
-// The star sits on top of a photo, so it needs to be fully opaque and carry a
-// shadow to stay visible over light parts of the image
-const WHITE_OVERLAY_COLOR = "rgba(255, 255, 255, 1)";
 
 type Props = {
   observation: Object,
@@ -101,8 +98,6 @@ const FaveButton = ( {
     const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
     if ( !realmObservation || !realmObservation.isValid( ) ) return;
     const userId = currentUser?.id || 0;
-    // Kept in step for the features that read faves from the cache.
-    setCachedFave( currentUser?.id, uuid, faved );
     safeRealmWrite( realm, ( ) => {
       const otherVotes = ( realmObservation.votes || [] )
         // Drop this user's fave; other users' faves and scoped votes stay put.
@@ -128,6 +123,22 @@ const FaveButton = ( {
     }, "toggling favorite locally" );
   }, [realm, uuid, currentUser] );
 
+  const { mutate: createUnfaveMutate } = useAuthenticatedMutation(
+    ( faveOrUnfaveParams, optsWithAuth ) => unfaveObservation( faveOrUnfaveParams, optsWithAuth ),
+    {
+      onSuccess: ( ) => {
+        afterToggleFave( false );
+        setLoading( false );
+      },
+      onError: error => {
+        showErrorAlert( error );
+        setIsFaved( true );
+        writeLocalFave( true );
+        setLoading( false );
+      },
+    },
+  );
+
   const { mutate: createFaveMutate } = useAuthenticatedMutation(
     ( faveOrUnfaveParams, optsWithAuth ) => faveObservation( faveOrUnfaveParams, optsWithAuth ),
     {
@@ -139,22 +150,6 @@ const FaveButton = ( {
         showErrorAlert( error );
         setIsFaved( false );
         writeLocalFave( false );
-        setLoading( false );
-      },
-    },
-  );
-
-  const { mutate: deleteFaveMutate } = useAuthenticatedMutation(
-    ( faveOrUnfaveParams, optsWithAuth ) => unfaveObservation( faveOrUnfaveParams, optsWithAuth ),
-    {
-      onSuccess: ( ) => {
-        afterToggleFave( false );
-        setLoading( false );
-      },
-      onError: error => {
-        showErrorAlert( error );
-        setIsFaved( true );
-        writeLocalFave( true );
         setLoading( false );
       },
     },
@@ -191,12 +186,12 @@ const FaveButton = ( {
     if ( newIsFaved ) {
       createFaveMutate( { uuid } );
     } else {
-      deleteFaveMutate( { uuid } );
+      createUnfaveMutate( { uuid } );
     }
   }, [
     currentUser,
     createFaveMutate,
-    deleteFaveMutate,
+    createUnfaveMutate,
     isFaved,
     uuid,
     realm,
@@ -245,7 +240,7 @@ const FaveButton = ( {
       width={buttonWidth}
       height={buttonHeight}
       onPress={toggleFave}
-      color={WHITE_OVERLAY_COLOR}
+      color={colors.white}
       dropShadow
       className={classNames( positionClassName )}
       accessibilityLabel={isFaved

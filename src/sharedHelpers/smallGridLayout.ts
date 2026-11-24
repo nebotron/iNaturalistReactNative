@@ -1,9 +1,8 @@
 import getBreakpoint from "sharedHelpers/breakpoint";
-import { getTunable } from "sharedHelpers/tunableParams";
 
 type Breakpoint = "sm" | "md" | "lg" | "xl" | "2xl";
 
-export const MIN_SMALL_GRID_COLUMNS = getTunable( "minSmallGridColumns" );
+export const MIN_SMALL_GRID_COLUMNS = 3;
 
 export const SMALL_GRID_GAP = 3;
 

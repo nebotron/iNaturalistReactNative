@@ -2,7 +2,7 @@ import { fetchSpeciesCounts } from "api/observations";
 import type { ApiTaxon } from "api/types";
 import type { ExploreV2Search } from "providers/ExploreV2Context";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
-import { speciesIdFromTaxon } from "sharedHelpers/userObservationsCache";
+import { speciesIdFromTaxon } from "sharedHelpers/observationHistory";
 import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
 import { findSavedSearchByName } from "stores/createExploreV2SearchesSlice";
 

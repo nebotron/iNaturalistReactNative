@@ -38,6 +38,7 @@ import { formatApiDatetime } from "sharedHelpers/dateAndTime";
 import { LAST_CRASH_DATA, store as installDataMMKVStorage } from "sharedHelpers/installData";
 import loadBirdCodes from "sharedHelpers/loadBirdCodes";
 import { log } from "sharedHelpers/logger";
+import { clearRetiredMmkvData } from "sharedHelpers/mmkvRecordStore";
 import { takeUnfinishedPhotoImport } from "sharedHelpers/photoImportMarker";
 import { logSentinelFiles } from "sharedHelpers/sentinelFiles";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
@@ -168,6 +169,7 @@ const useDeferredStartup = ( ) => {
     } );
     const idTrim = deferTask( "trimMmkv", async ( ) => {
       zustandMMKVBackingStorage.trim( );
+      clearRetiredMmkvData( );
     } );
     const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
     // Camera settings of every observation photo still without them, newest

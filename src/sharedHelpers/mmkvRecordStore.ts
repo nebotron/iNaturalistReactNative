@@ -20,6 +20,11 @@ const instanceIds = [
 export const clearMmkvUserData = ( ) => instanceIds
   .forEach( id => new MMKV( { id } ).clearAll( ) );
 
+// The old observation-history cache, no longer written or read. Emptied at
+// startup so installs that built one get the space back.
+export const clearRetiredMmkvData = ( ) => new MMKV( { id: USER_OBSERVATIONS_MMKV_ID } )
+  .clearAll( );
+
 // A map kept in its own MMKV instance with one key per record, so changing a
 // record writes only that record instead of re-serializing the whole map.
 const createMmkvRecordStore = <T>( id: string ) => {

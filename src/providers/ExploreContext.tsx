@@ -23,9 +23,6 @@ import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
 import { getLatestTrackedLocation } from "../sharedHelpers/locationHistoryTracker";
 import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
 
-export type { ExploreTaxonFilter };
-export type { ExploreUserFilter };
-
 export enum EXPLORE_ACTION {
   CHANGE_SORT_BY = "CHANGE_SORT_BY",
   CHANGE_TAXON = "CHANGE_TAXON",
@@ -922,4 +919,3 @@ export {
   useExplore,
   useOptionalExplore,
 };
-export type { State as ExploreState };

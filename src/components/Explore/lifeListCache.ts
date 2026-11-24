@@ -4,7 +4,7 @@ import type { Lifer } from "components/LifeList/LiferGridItem";
 import { fetchMissingDisplayData, toLifer } from "components/LifeList/LiferGridItem";
 import { log } from "sharedHelpers/logger";
 import { withRequestTimeout } from "sharedHelpers/logging";
-import { OBSERVATION_SYNC_FIELDS } from "sharedHelpers/userObservationsCache";
+import { OBSERVATION_SYNC_FIELDS } from "sharedHelpers/observationHistory";
 import { zustandStorage } from "stores/useStore";
 
 const logger = log.extend( "exploreLifeListCache" );

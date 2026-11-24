@@ -40,7 +40,6 @@ export const TUNABLE_PARAMS = {
   aiCameraConfidenceThreshold: def( "ai", 70, 0, 100 ),
   aiCameraStoredResults: def( "ai", 5, 1, 20 ),
   aiCameraCropRatio: def( "ai", 1, 0.1, 1, false ),
-  topSuggestionScoreThreshold: def( "ai", 78, 0, 100 ),
   matchHighConfidence: def( "ai", 93, 0, 100 ),
   matchLikelyConfidence: def( "ai", 50, 0, 100 ),
   subjectCropPadding: def( "ai", 0.1, 0, 1, false ),
@@ -61,14 +60,10 @@ export const TUNABLE_PARAMS = {
   audioIdMinCallSeconds: def( "audio", 1, 0, 15, false ),
 
   maxPhotosPerObservation: def( "camera", 20, 1, 100 ),
-  maxSoundsPerObservation: def( "camera", 20, 1, 100 ),
-  maxCameraZoom: def( "camera", 20, 1, 100 ),
-  minFreeStorageMb: def( "camera", 200, 0, 10000 ),
   maxPhotoInspectZoom: def( "camera", 20, 2, 100 ),
 
   targetLocationAccuracyM: def( "location", 10, 1, 1000 ),
   locationAccuracyDeadlineSeconds: def( "location", 6, 1, 60 ),
-  desiredLocationAccuracyM: def( "location", 100, 1, 10000 ),
   locationHistoryDistanceM: def( "location", 50, 1, 10000 ),
   locationHistoryIntervalMinutes: def( "location", 2, 0.1, 60, false ),
   locationMatchMaxGapHours: def( "location", 12, 0.1, 168, false ),
@@ -102,8 +97,6 @@ export const TUNABLE_PARAMS = {
   gameLookalikeRadiusKm: def( "game", 500, 1, 20000 ),
   gameLocationRadiusKm: def( "game", 200, 1, 20000 ),
 
-  toastDurationSeconds: def( "interface", 2, 0.5, 30, false ),
-  minSmallGridColumns: def( "interface", 3, 1, 10 ),
   advancedModeOnboardingObservations: def( "interface", 100, 0, 100000 ),
   autoAdvancedModeObservations: def( "interface", 100, 0, 100000 ),
 } satisfies Record<string, TunableDefinition>;

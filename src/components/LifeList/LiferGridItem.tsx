@@ -7,11 +7,11 @@ import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import Photo from "realmModels/Photo";
 import { withRequestTimeout } from "sharedHelpers/logging";
-import { accessibleTaxonName } from "sharedHelpers/taxon";
 import {
   OBSERVATION_SYNC_FIELDS,
   speciesIdFromTaxon,
-} from "sharedHelpers/userObservationsCache";
+} from "sharedHelpers/observationHistory";
+import { accessibleTaxonName } from "sharedHelpers/taxon";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 
 // Max number of observations the API will fetch by uuid in one request.

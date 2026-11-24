@@ -1,7 +1,6 @@
 import scoreImage from "api/computerVision";
 import flattenUploadParams from "components/Suggestions/helpers/flattenUploadParams";
 import Taxon from "realmModels/Taxon";
-import { getTunable } from "sharedHelpers/tunableParams";
 import { useAuthenticatedQuery, useCurrentUser } from "sharedHooks";
 
 interface RankedTaxon {
@@ -73,7 +72,7 @@ export const rankLevelForTaxon = ( taxon?: RankedTaxon ): number | undefined => 
 // to the top suggestion when the single highest-scoring result clears this
 // combined_score threshold (see filterSuggestions.ts). combined_score is on a
 // 0-100 scale.
-const TOP_RESULT_SCORE_THRESHOLD = getTunable( "topSuggestionScoreThreshold" );
+const TOP_RESULT_SCORE_THRESHOLD = 78;
 
 // If an observation's community taxon is genus or broader, suggest the most
 // likely species-level ID from the computer vision model. To keep this in sync
