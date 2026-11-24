@@ -21,7 +21,7 @@ import React, {
 import type {
   LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle,
 } from "react-native";
-import { Animated, PixelRatio } from "react-native";
+import { Animated, PixelRatio, useWindowDimensions } from "react-native";
 import RealmObservation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
 import type { RealmPhoto } from "realmModels/types";
@@ -41,6 +41,15 @@ import { photoFromObservation, photosFromObservation } from "./util";
 const { useRealm } = RealmContext;
 
 const AnimatedFlashList = Animated.createAnimatedComponent( CustomFlashList );
+
+// How far past the viewport grid cells are mounted, in screen heights, so
+// their photos have downloaded and decoded at tile size before they scroll in
+const GRID_DRAW_SCREENS = 1.5;
+// How far past the viewport photo data is prefetched into the disk cache, in
+// screen heights, so the mounted-ahead cells above find it already there
+const GRID_PREFETCH_SCREENS = 4;
+// The list layout's rows vary in height, so it prefetches a fixed count
+const LIST_PREFETCH_ITEMS = 5;
 
 // unlike the other FlashList Component props, Separator does _not_ accept an Element
 const ItemSeparator = () => <View className="border-b border-lightGray" />;
@@ -137,6 +146,18 @@ const ObservationsFlashList = ( {
       : "default",
   );
   const { t } = useTranslation( );
+  const { height: windowHeight } = useWindowDimensions( );
+
+  const isGrid = layout === "grid";
+  const rowHeight = isGrid && typeof gridItemStyle?.height === "number"
+    ? gridItemStyle.height + 2 * ( Number( gridItemStyle.margin ) || 0 )
+    : null;
+  const drawDistance = rowHeight
+    ? Math.round( windowHeight * GRID_DRAW_SCREENS )
+    : undefined;
+  const prefetchItemsAhead = rowHeight
+    ? Math.ceil( ( windowHeight * GRID_PREFETCH_SCREENS ) / rowHeight ) * numColumns
+    : LIST_PREFETCH_ITEMS;
 
   const renderItem = useCallback( ( {
     item,
@@ -338,11 +359,11 @@ const ObservationsFlashList = ( {
 
       const currentData = dataRef.current;
 
-      // Priority 1: first photo of next 5 items in the vertical scroll
+      // Priority 1: first photo of the upcoming items in the vertical scroll
       const nextItemUrls: string[] = [];
       for (
         let i = maxVisibleIndex + 1;
-        i <= maxVisibleIndex + 5 && i < currentData.length;
+        i <= maxVisibleIndex + prefetchItemsAhead && i < currentData.length;
         i += 1
       ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -386,7 +407,7 @@ const ObservationsFlashList = ( {
         prefetchImageData( allUrls );
       }
     },
-    [gridItemStyle, layout, tilePhotoUri],
+    [gridItemStyle, layout, prefetchItemsAhead, tilePhotoUri],
   );
 
   const handleEndReached = useCallback( ( ) => {
@@ -423,6 +444,7 @@ const ObservationsFlashList = ( {
       ListHeaderComponent={listHeaderContent}
       contentContainerStyle={contentContainerStyle}
       data={data}
+      drawDistance={drawDistance}
       ref={ref}
       key={numColumns}
       keyExtractor={keyExtractor}
