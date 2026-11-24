@@ -33,6 +33,10 @@ export interface FilterApiParams extends EvidenceTypeApiParams {
   user_id?: number;
   unobserved_by_user_id?: number;
   project_id?: number;
+  popular?: boolean;
+  // Not an API param: the API has no filter for who faved an observation and
+  // ignores it. Explore's observation search narrows to popular (faved by
+  // anyone) and keeps only this user's faves on device.
   faved_by?: number;
 }
 
@@ -108,7 +112,10 @@ const filtersToApiParams = (
 
   Object.assign( params, evidenceTypesToApiParams( filters.evidenceTypes ) );
 
-  if ( filters.favedByMe && viewerId ) { params.faved_by = viewerId; }
+  if ( filters.favedByMe && viewerId ) {
+    params.popular = true;
+    params.faved_by = viewerId;
+  }
 
   if ( filters.user?.id ) { params.user_id = filters.user.id; }
 

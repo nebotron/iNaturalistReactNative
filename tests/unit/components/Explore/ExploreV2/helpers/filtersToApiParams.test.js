@@ -235,8 +235,10 @@ describe( "filtersToApiParams", ( ) => {
     } );
   } );
 
-  it( "maps favedByMe to faved_by the viewer", ( ) => {
-    expect( filtersToApiParams( makeFilters( { favedByMe: true } ), 42 ).faved_by ).toBe( 42 );
+  it( "maps favedByMe to popular, faved_by the viewer", ( ) => {
+    expect( filtersToApiParams( makeFilters( { favedByMe: true } ), 42 ) )
+      .toMatchObject( { popular: true, faved_by: 42 } );
+    expect( filtersToApiParams( makeFilters( { favedByMe: true } ) ).popular ).toBeUndefined( );
     expect( filtersToApiParams( makeFilters( { favedByMe: true } ) ).faved_by ).toBeUndefined( );
     expect( filtersToApiParams( makeFilters( ), 42 ).faved_by ).toBeUndefined( );
   } );

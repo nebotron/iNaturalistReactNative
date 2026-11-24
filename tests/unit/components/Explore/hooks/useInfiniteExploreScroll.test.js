@@ -37,10 +37,10 @@ const startApp = ( ) => {
 };
 
 let rendered = [];
-const renderExploreScroll = ( ) => {
+const renderExploreScroll = ( params = PARAMS ) => {
   const client = queryClient;
   const utils = renderHook(
-    ( ) => useInfiniteExploreScroll( { params: PARAMS, enabled: true } ),
+    ( ) => useInfiniteExploreScroll( { params, enabled: true } ),
     {
       wrapper: ( { children } ) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -163,5 +163,55 @@ describe( "useInfiniteExploreScroll", ( ) => {
     await flushPersistence( );
     expect( uuidsOf( result ) ).toEqual( ["a", "b"] );
     expect( result.current.status ).toEqual( "success" );
+  } );
+
+  describe( "with faved_by", ( ) => {
+    const FAVED_PARAMS = { ...PARAMS, popular: true, faved_by: 7 };
+    const fave = userId => ( { user_id: userId, vote_scope: null } );
+    // Observations faved by user 7 only where listed
+    const favedPage = ( ids, favedIds ) => ( {
+      total_results: 1000,
+      page: 1,
+      per_page: 200,
+      results: ids.map( id => ( {
+        id,
+        uuid: `obs-${id}`,
+        votes: favedIds.includes( id )
+          ? [fave( 3 ), fave( 7 )]
+          : [fave( 3 ), { user_id: 7, vote_scope: "needs_id" }],
+      } ) ),
+    } );
+
+    it( "shows only the viewer's faves, without sending faved_by", async ( ) => {
+      inatjs.observations.search
+        .mockResolvedValueOnce( favedPage( [10, 9], [9] ) )
+        .mockResolvedValueOnce( favedPage( [8, 7], [7] ) )
+        .mockResolvedValue( favedPage( [], [] ) );
+      const { result } = renderExploreScroll( FAVED_PARAMS );
+      await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 3 ) );
+      await waitFor( ( ) => expect( result.current.hasNextPage ).toBe( false ) );
+      expect( uuidsOf( result ) ).toEqual( ["obs-9", "obs-7"] );
+      // Known once every popular observation has been checked
+      expect( result.current.totalResults ).toEqual( 2 );
+      const [apiParams] = inatjs.observations.search.mock.calls[0];
+      expect( apiParams.faved_by ).toBeUndefined( );
+      expect( apiParams ).toMatchObject( { popular: true, per_page: 200 } );
+    } );
+
+    it( "stops scanning after a batch of pages until more are asked for", async ( ) => {
+      let nextId = 100000;
+      inatjs.observations.search.mockImplementation( async ( ) => {
+        nextId -= 2;
+        return favedPage( [nextId + 1, nextId], [] );
+      } );
+      const { result } = renderExploreScroll( FAVED_PARAMS );
+      await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 10 ) );
+      await flushPersistence( );
+      expect( inatjs.observations.search ).toHaveBeenCalledTimes( 10 );
+      expect( result.current.totalResults ).toBeNull( );
+
+      act( ( ) => result.current.fetchNextPage( ) );
+      await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 20 ) );
+    } );
   } );
 } );
