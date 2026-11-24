@@ -165,3 +165,32 @@ notes of what did and did not work at the end of this skill.
 - The fp32 model differs from the shipped fp16 one by up to 0.15 per score: the model is
   sensitive to precision, so compare variants against the fp16 model, not fp32.
 
+
+### Session 6 (455 labels: 179 right, 276 wrong; 439 with audio)
+
+- eval_clips.py: rerunning the model keeps 150 right / 117 wrong at 0.5. Labels from
+  Nov 15 on are 5 right / 97 wrong, and 61 of those wrong are one place and one series of
+  nights: Red Fox near Thousand Oaks, CA (34.22, -118.84), on near-silent clips (-50 to
+  -68 dBFS). Others: 10 Virginia Rail at the Palo Alto Baylands (geo 0.89), Bohemian
+  Waxwing and Harbor Seal inland in southern California. Labels now carry latitude/longitude
+  (283 of 455), but not the app commit; split by `heardAt`.
+- `dump_regions.py` (birdnet/) scores 840 recordings (eval_regions.py's sets plus southern
+  California birds and California mammals) as the app runs now, every 2.5 s, and saves
+  max score per species + geomodel vector, so cutoffs sweep in seconds. At 0.5 with the
+  geo filter: birds recall 0.84-0.94, 0.50-0.64 wrong species per recording; mammals
+  0.59 (California) / 0.76 (North America); western US frogs 0.29 (most not in the model).
+  Newer recordings than the README table, so not directly comparable.
+- Field geo values (geomodel at the label's place and week): every right detection is
+  at geo >= 0.78 (birds) / 0.51 (non-birds); the Red Foxes are at 0.041. But a geo cutoff
+  can't be shipped: a non-bird cutoff of 0.05 drops 57 field wrong and no field right, yet
+  loses 32 of 252 non-bird detections on recordings (insects, frogs); a mammal-only 0.05
+  loses 2 of 94 (real Coyotes at geo 0.046-0.06, so widespread mammals rate as low as the
+  misplaced fox). A penalty on non-bird odds below g0 (never a boost) loses 8-60.
+  A bird cutoff of 0.05 is free on recordings (no detected true bird between 0.03 and
+  0.05 of 382) but drops only 5 field wrong; 0.1 loses 4. Not shipped: too thin either way.
+- Loudness: no right bird below -62 dBFS peak (8 wrong are); the 5 right non-birds are all
+  loud sea lions, so a non-bird gate can't be checked. Mic level varies by device and
+  the recordings are normalized uploads, so a gate can't be validated off the field set.
+- Red Fox clips' runner-ups are all < 0.1 (Barn Owl, seals, deer): nothing in the scores
+  points to the true source. Users rarely say what it really was (labelName is empty on
+  wrong IDs), so ask for that in the label UI if the fox/rail clusters are to be fixed.
