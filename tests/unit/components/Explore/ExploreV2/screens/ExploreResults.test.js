@@ -266,7 +266,26 @@ describe( "ExploreResults offline state", ( ) => {
     renderComponent( <ExploreResults /> );
 
     expect( await screen.findByTestId( "ExploreV2ObservationsList" ) ).toBeVisible( );
-    expect( screen.queryByText( "You are offline. Tap to try again." ) ).toBeNull( );
+    // Not the notice in their place, but a banner above them
+    expect( screen.queryByLabelText( "Internet Connection Required" ) ).toBeNull( );
+    expect( screen.getByTestId( "ExploreConnectionBanner" ) ).toBeVisible( );
+  } );
+
+  it( "says how old cached results are when disconnected", async ( ) => {
+    mockLayout = "grid";
+    mockUseInfiniteExploreScroll.mockReturnValue( {
+      fetchNextPage: jest.fn( ),
+      isFetchingNextPage: false,
+      handlePullToRefresh: mockHandlePullToRefresh,
+      observations: [{ uuid: "cached-obs", id: 1 }],
+      totalResults: 1,
+      dataUpdatedAt: Date.now( ) - 3 * 60 * 60 * 1000,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    expect(
+      await screen.findByText( "Offline: showing results from 3h ago. Tap to try again." ),
+    ).toBeVisible( );
   } );
 
   it( "hands the species tab its cached results when disconnected", async ( ) => {

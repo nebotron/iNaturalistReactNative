@@ -48,6 +48,35 @@ describe( "Map", ( ) => {
       .toMatch( new RegExp( `^${baseUrl}.*taxon_id=${taxonId}` ) );
   } );
 
+  it( "gives a search the same tile URL whatever area was searched", async ( ) => {
+    renderComponent(
+      <Map
+        withPressableObsTiles
+        tileMapParams={{
+          taxon_id: 3,
+          swlat: 1,
+          swlng: 2,
+          nelat: 3,
+          nelng: 4,
+          order_by: "votes",
+          per_page: 20,
+          iconic_taxa: undefined,
+          d1: "2025-01-01",
+        }}
+      />,
+    );
+    const { urlTemplate } = ( await screen.findByTestId( "Map.UrlTile" ) ).props;
+    // Paging, sorting, bounds and empty values left out, the rest in a fixed order
+    expect( urlTemplate ).toBe( `${baseUrl}?d1=2025-01-01&taxon_id=3` );
+  } );
+
+  it( "caches observation tiles on disk", async ( ) => {
+    renderComponent( <Map withPressableObsTiles tileMapParams={{ taxon_id: 3 }} /> );
+    const tiles = await screen.findByTestId( "Map.UrlTile" );
+    expect( tiles.props.tileCachePath ).toMatch( /observationTiles$/ );
+    expect( tiles.props.offlineMode ).toBe( false );
+  } );
+
   it( "displays location indicator when given an observation w/ lat/lng", async ( ) => {
     renderComponent(
       <Map

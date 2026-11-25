@@ -1,3 +1,4 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiObservation, ApiTaxon } from "api/types";
 import ExploreFlashList from "components/Explore/ExploreFlashList";
@@ -182,6 +183,51 @@ export const OfflineObservationsView = ( { layout, queryParams }: ViewProps ) =>
   );
 };
 
+// Whether any base map tiles have been saved for offline use
+export const useHasSavedBaseMap = ( enabled = true ) => {
+  const [hasSavedBaseMap, setHasSavedBaseMap] = useState( false );
+  useEffect( ( ) => {
+    if ( !enabled ) return ( ) => undefined;
+    let current = true;
+    exists( OFFLINE_TILES_PATH )
+      .then( found => { if ( current ) setHasSavedBaseMap( found ); } )
+      .catch( ( ) => undefined );
+    return ( ) => { current = false; };
+  }, [enabled] );
+  return enabled && hasSavedBaseMap;
+};
+
+// The OpenStreetMap tiles saved with offline results, as a base map. On the
+// online map offline, they fill in under the observation tiles wherever the
+// platform's own map has nothing cached.
+export const SavedBaseMapTiles = ( { replaceMapContent = false }: {
+  // iOS only: hide Apple's map, leaving only these tiles
+  replaceMapContent?: boolean;
+} ) => (
+  <>
+    {/* Past a spot's most detailed saved tiles, magnify them instead of showing
+      grey. One layer per saved zoom, most detailed on top, so each spot uses
+      its own deepest level. Native tiles go on top, as a UrlTile rather than a
+      LocalTile so they get the patched renderer that paints every tile on iOS. */}
+    {OVERZOOM_LEVELS.map( z => (
+      <UrlTile
+        key={z}
+        urlTemplate={`file://${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`}
+        minimumZ={z + 1}
+        maximumNativeZ={z}
+        tileSize={256}
+        zIndex={-2}
+      />
+    ) )}
+    <UrlTile
+      urlTemplate={`file://${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`}
+      shouldReplaceMapContent={replaceMapContent}
+      tileSize={256}
+      zIndex={-1}
+    />
+  </>
+);
+
 // Saved results as dots like the online point tiles, since those need the server
 interface MapProps {
   queryParams: Params;
@@ -224,24 +270,7 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
         switchMapTypeButtonClassName="right-5 bottom-20"
         mapChildren={(
           <>
-            {/* Past a spot's most detailed saved tiles, magnify them instead of showing
-              grey. One layer per saved zoom, most detailed on top, so each spot uses
-              its own deepest level. Native tiles go on top, as a UrlTile rather than a
-              LocalTile so they get the patched renderer that paints every tile on iOS. */}
-            {OVERZOOM_LEVELS.map( z => (
-              <UrlTile
-                key={z}
-                urlTemplate={`file://${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`}
-                minimumZ={z + 1}
-                maximumNativeZ={z}
-                tileSize={256}
-              />
-            ) )}
-            <UrlTile
-              urlTemplate={`file://${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`}
-              shouldReplaceMapContent
-              tileSize={256}
-            />
+            <SavedBaseMapTiles replaceMapContent />
             {pins.map( ( { uuid, json, coordinate } ) => (
               <Marker
                 key={uuid}

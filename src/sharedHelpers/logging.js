@@ -29,12 +29,24 @@ function handleRetryDelay( failureCount, error ) {
 // that indefinite hang into a retryable failure instead.
 const REQUEST_TIMEOUT_MS = 20000;
 
-const createRequestTimeoutSignal = ( ) => {
+// Also aborts when parentSignal does, e.g. React Query's signal for a query
+// nothing shows any more, so a search replaced by a newer one stops using the
+// connection instead of finishing in the background
+const createRequestTimeoutSignal = parentSignal => {
   const controller = new AbortController( );
   const timer = setTimeout( ( ) => controller.abort( ), REQUEST_TIMEOUT_MS );
+  const abort = ( ) => controller.abort( );
+  if ( parentSignal?.aborted ) {
+    abort( );
+  } else {
+    parentSignal?.addEventListener?.( "abort", abort );
+  }
   return {
     signal: controller.signal,
-    clear: ( ) => clearTimeout( timer ),
+    clear: ( ) => {
+      clearTimeout( timer );
+      parentSignal?.removeEventListener?.( "abort", abort );
+    },
   };
 };
 

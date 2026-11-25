@@ -1,5 +1,4 @@
 import {
-  ActivityIndicator,
   Button,
   Map,
 } from "components/SharedComponents";
@@ -7,6 +6,7 @@ import {
   getMapBoundariesSafely,
   getMapRegion,
 } from "components/SharedComponents/Map/helpers/mapHelpers";
+import MapLoadingIndicator from "components/SharedComponents/Map/MapLoadingIndicator";
 import { View } from "components/styledComponents";
 import type { MapBoundaries } from "providers/ExploreContext";
 import {
@@ -15,7 +15,6 @@ import {
 import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
 import type RNMapView from "react-native-maps";
 import type { Region } from "react-native-maps";
 import { useTranslation } from "sharedHooks";
@@ -41,21 +40,6 @@ const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
   elevation: 6,
 } );
-
-const activityIndicatorSize = 50;
-const centeredLoadingWheel: StyleProp<ViewStyle> = {
-  position: "absolute",
-  top: "50%",
-  left: "50%",
-  transform: [
-    { translateX: -( activityIndicatorSize / 2 ) },
-    { translateY: -( activityIndicatorSize / 2 ) },
-  ],
-  backgroundColor: "rgba(0,0,0,0)",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 20,
-};
 
 interface Props {
   // Bounding box of the observations retrieved for the query params
@@ -243,9 +227,7 @@ const MapView = ( {
         </View>
       )}
       {isLoading && (
-        <View style={centeredLoadingWheel} testID="activity-indicator">
-          <ActivityIndicator size={activityIndicatorSize} />
-        </View>
+        <MapLoadingIndicator className="top-5 right-5" testID="activity-indicator" />
       )}
       {renderLocationPermissionsGate( {} )}
     </View>

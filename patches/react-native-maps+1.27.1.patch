@@ -1,3 +1,70 @@
+diff --git a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java
+index a974311..777d33a 100644
+--- a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java
++++ b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java
+@@ -175,43 +175,11 @@ public class MapTileProvider implements TileProvider {
+ 		}
+ 
+ 		if (image == null && !this.offlineMode && this.tileCachePath != null) {
+-			String fileName = getTileFilename(x, y, zoom);
+-			Constraints constraints = new Constraints.Builder()
+-				.setRequiredNetworkType(NetworkType.CONNECTED)
+-				.build();
+-			OneTimeWorkRequest tileRefreshWorkRequest = new OneTimeWorkRequest.Builder(MapTileWorker.class)
+-				.setConstraints(constraints)
+-				.addTag(fileName)
+-				.setInputData(
+-					new Data.Builder()
+-						.putString("url", getTileUrl(x, y, zoom).toString())
+-						.putString("filename", fileName)
+-						.putInt("maxAge", -1)
+-						.build()
+-					)
+-				.build();
+-			WorkManager workManager = WorkManager.getInstance(this.context.getApplicationContext());
+-			Operation fetchOperation = workManager
+-				.enqueueUniqueWork(fileName, ExistingWorkPolicy.KEEP, tileRefreshWorkRequest);
+-			Future<Operation.State.SUCCESS> operationFuture = fetchOperation.getResult();
+-			try {
+-				operationFuture.get(1L, TimeUnit.SECONDS);
+-				Thread.sleep(500);
+-				Future<List<WorkInfo>> fetchFuture = workManager.getWorkInfosByTag(fileName);
+-				List<WorkInfo> workInfo = fetchFuture.get(1L, TimeUnit.SECONDS);
+-				Log.d("urlTile: ", workInfo.get(0).toString());
+-				if (this.tileCachePath != null) {
+-					image = readTileImage(x, y, zoom);
+-					if (image != null) {
+-						Log.d("urlTile","tile cache fetch HIT for " + zoom +
+-							"/" + x + "/" + y);
+-					} else {
+-							Log.d("urlTile","tile cache fetch MISS for " + zoom +
+-								"/" + x + "/" + y);
+-					}
+-				}
+-			} catch (Exception e) {
+-			  e.printStackTrace();
++			// Fetched here and saved, rather than queued through WorkManager and
++			// polled for, which held every missing tile for at least half a second
++			image = fetchTile(x, y, zoom);
++			if (image != null) {
++				writeTileImage(image, x, y, zoom);
+ 			}
+ 		} else if (image == null && !this.offlineMode) {
+ 			Log.d("urlTile", "Normal fetch");
+@@ -434,7 +402,12 @@ public class MapTileProvider implements TileProvider {
+ 		if (this.tileCachePath == null) {
+ 			return null;
+ 		}
+-		return this.tileCachePath + '/' + zoom +
++		// Each URL template gets its own directory, so tiles cached for one
++		// search are never served for another
++		String templateDir = this.urlTemplate == null
++			? "default"
++			: Integer.toHexString(this.urlTemplate.hashCode());
++		return this.tileCachePath + '/' + templateDir + '/' + zoom +
+ 			"/" + x + "/" + y;
+ 	}
+ 	
 diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
 index fdbc012..f93960e 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
@@ -11,10 +78,10 @@ index fdbc012..f93960e 100644
  
  @property (nonatomic, weak) AIRMap *map;
 diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
-index f77f627..58c1ddb 100644
+index f77f627..1a390ae 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
 +++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
-@@ -10,6 +10,120 @@
+@@ -10,6 +10,137 @@
  #import <React/UIView+React.h>
  #import "AIRMapUrlTileCachedOverlay.h"
  
@@ -49,6 +116,23 @@ index f77f627..58c1ddb 100644
 +@interface AIRMapUrlTileFallbackOverlay : MKTileOverlay
 +@end
 +@implementation AIRMapUrlTileFallbackOverlay
++- (void)loadTileAtPath:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result {
++    NSString *urlTemplate = self.URLTemplate;
++    [super loadTileAtPath:path result:^(NSData *data, NSError *error) {
++        if (data.length > 0 && urlTemplate) {
++            [AIRMapUrlTileFallbackCache() setObject:data
++                                             forKey:AIRMapUrlTileFallbackKey(urlTemplate, path.z, path.x, path.y)
++                                               cost:data.length];
++        }
++        result(data, error);
++    }];
++}
++@end
++
++// The same, for tiles also cached on disk (tileCachePath)
++@interface AIRMapUrlTileFallbackCachedOverlay : AIRMapUrlTileCachedOverlay
++@end
++@implementation AIRMapUrlTileFallbackCachedOverlay
 +- (void)loadTileAtPath:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result {
 +    NSString *urlTemplate = self.URLTemplate;
 +    [super loadTileAtPath:path result:^(NSData *data, NSError *error) {
@@ -135,7 +219,7 @@ index f77f627..58c1ddb 100644
  @implementation AIRMapUrlTile 
  
  - (void)setShouldReplaceMapContent:(BOOL)shouldReplaceMapContent
-@@ -63,6 +177,9 @@
+@@ -63,6 +194,9 @@
  
  - (void)setUrlTemplate:(NSString *)urlTemplate
  {
@@ -145,7 +229,16 @@ index f77f627..58c1ddb 100644
      _urlTemplate = urlTemplate;
      _urlTemplateSet = YES;
      [self createTileOverlayAndRendererIfPossible];
-@@ -139,13 +256,17 @@
+@@ -122,7 +256,7 @@
+     if (!_urlTemplateSet) return;
+     if (_tileCachePathSet || _maximumNativeZSet) {
+         NSLog(@"tileCache dir %@", _tileCachePath);
+-        self.tileOverlay = [[AIRMapUrlTileCachedOverlay alloc] initWithURLTemplate:self.urlTemplate];
++        self.tileOverlay = [[AIRMapUrlTileFallbackCachedOverlay alloc] initWithURLTemplate:self.urlTemplate];
+         _cachedOverlayCreated = YES;
+         if (_tileCachePathSet) {
+             NSURL *urlPath = [NSURL URLWithString:[self.tileCachePath stringByAppendingString:@"/"]];
+@@ -139,13 +273,17 @@
          }
      } else {
          NSLog(@"tileCache normal overlay");
@@ -165,6 +258,51 @@ index f77f627..58c1ddb 100644
      if (_opacitySet) {
          self.renderer.alpha = self.opacity;
      }
+diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m
+index 63d305c..1086418 100644
+--- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m
++++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m
+@@ -98,7 +98,15 @@
+ - (void)getTileImage:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result
+ {
+     NSData *image;
+-    NSURL *tileCacheFileDirectory = [NSURL URLWithString:[NSString stringWithFormat:@"%d/%d/", (int)path.z, (int)path.x] relativeToURL:self.tileCachePath];
++    // Each URL template gets its own directory, so tiles cached for one search
++    // are never served for another. FNV-1a, as NSString's hash isn't promised
++    // to stay the same between launches.
++    uint32_t templateHash = 2166136261u;
++    const char *templateBytes = self.URLTemplate ? self.URLTemplate.UTF8String : "";
++    for (const char *c = templateBytes; *c; c++) {
++        templateHash = (templateHash ^ (uint8_t)*c) * 16777619u;
++    }
++    NSURL *tileCacheFileDirectory = [NSURL URLWithString:[NSString stringWithFormat:@"%08x/%d/%d/", templateHash, (int)path.z, (int)path.x] relativeToURL:self.tileCachePath];
+     NSURL *tileCacheFilePath = [NSURL URLWithString:[NSString stringWithFormat:@"%d", (int)path.y] relativeToURL:tileCacheFileDirectory];
+ 
+     if (self.tileCachePath) {
+@@ -154,6 +162,12 @@
+         completionHandler:^(NSData *data,
+                             NSURLResponse *response,
+                             NSError *error) {
++            // An error page isn't a tile, and mustn't be cached as one
++            if ([response isKindOfClass:[NSHTTPURLResponse class]]
++                && ((NSHTTPURLResponse *)response).statusCode != 200) {
++                result(nil, error);
++                return;
++            }
+             result(data, error);
+         }] resume];
+ }
+@@ -205,7 +219,9 @@
+                     completionHandler:^(NSData *data,
+                                         NSURLResponse *response,
+                                         NSError *error) {
+-                    if (!error) {
++                    BOOL isOK = ![response isKindOfClass:[NSHTTPURLResponse class]]
++                        || ((NSHTTPURLResponse *)response).statusCode == 200;
++                    if (!error && isOK && data.length > 0) {
+                         [[NSFileManager defaultManager] createFileAtPath:[tileCacheFilePath path] contents:data attributes:nil];
+                         NSLog(@"tileCache File refreshed at %@", [tileCacheFilePath path]);
+                     }
 diff --git a/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm b/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm
 index 447520d..8043dcb 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm

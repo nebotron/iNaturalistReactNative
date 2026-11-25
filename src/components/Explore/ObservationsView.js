@@ -42,7 +42,13 @@ const ObservationsView = ( {
     totalBounds,
     totalResults,
     isLoading,
-  } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
+    isPlaceholderData,
+  } = useInfiniteExploreScroll( {
+    params: queryParams,
+    enabled: canFetch,
+    // The last results stay up, rather than none, while a new search loads
+    keepPreviousResults: true,
+  } );
 
   const {
     isLandscapeMode,
@@ -105,7 +111,7 @@ const ObservationsView = ( {
       />
       <MapView
         observationBounds={totalBounds}
-        isLoading={isLoading}
+        isLoading={isLoading || isPlaceholderData}
         queryParams={queryParams}
         renderLocationPermissionsGate={renderLocationPermissionsGate}
       />

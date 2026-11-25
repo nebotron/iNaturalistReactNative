@@ -5,7 +5,7 @@ import {
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import i18n from "i18next";
 import {
-  useCallback, useEffect, useRef, useSyncExternalStore,
+  useCallback, useEffect, useRef, useState, useSyncExternalStore,
 } from "react";
 import type { UserPojo } from "realmModels/User";
 import {
@@ -41,11 +41,19 @@ import { useCurrentUser } from "sharedHooks";
 //
 // With `noCache` nothing cached is ever shown: results come only from the
 // network, and are dropped from memory once nothing shows them.
+//
+// With `abortWhenUnused` a page still loading when nothing shows its query any
+// more (say a newer search replaced it) is aborted, rather than finishing in
+// the background on a connection the new search needs.
+//
+// A failed attempt to replace cached results with the latest is retried with
+// backoff while they're shown, and reported as `refreshFailed`.
 interface AuthenticatedInfiniteQueryOptions {
   allowAnonymousJWT?: boolean;
   persist?: boolean;
   cacheFirst?: boolean;
   noCache?: boolean;
+  abortWhenUnused?: boolean;
   [option: string]: unknown;
 }
 
@@ -54,6 +62,10 @@ const logger = log.extend( "useAuthenticatedInfiniteQuery" );
 // Results kept in memory this long, by a persisted query whose results React
 // Query itself won't fetch again, are fetched again when shown
 const REVALIDATE_AFTER_MS = 60 * 1000;
+
+// Backoff for fetching the latest results again after that failed
+const RETRY_REVALIDATION_MIN_MS = 5 * 1000;
+const RETRY_REVALIDATION_MAX_MS = 2 * 60 * 1000;
 
 // Hashes of the queries showing cached results, waiting to be fetched again
 // from the network, and of those being fetched again
@@ -88,7 +100,7 @@ const useAuthenticatedInfiniteQuery = (
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   queryFunction: Function,
   queryOptions: AuthenticatedInfiniteQueryOptions = {},
-): object => {
+) => {
   const route = useRoute( );
   const currentUser = useCurrentUser( );
   const queryClient = useQueryClient( );
@@ -96,6 +108,7 @@ const useAuthenticatedInfiniteQuery = (
     noCache = false,
     persist: persistOption,
     cacheFirst: cacheFirstOption,
+    abortWhenUnused = false,
     ...infiniteQueryOptions
   } = queryOptions;
   const persist = !noCache && !!persistOption;
@@ -117,6 +130,10 @@ const useAuthenticatedInfiniteQuery = (
     params: Record<string, unknown>,
     { fromNetwork = false }: { fromNetwork?: boolean } = {},
   ) => {
+    // React Query's, aborted once nothing shows the query
+    const querySignal = abortWhenUnused
+      ? params?.signal as AbortSignal | undefined
+      : undefined;
     if ( !currentUser ) {
       params.locale = locale;
     }
@@ -125,7 +142,7 @@ const useAuthenticatedInfiniteQuery = (
     // one is expired. We *could* store the token in state with useState if
     // fetching from RNSInfo becomes a performance issue
     const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
-    const { signal: timeoutSignal, clear } = createRequestTimeoutSignal( );
+    const { signal: timeoutSignal, clear } = createRequestTimeoutSignal( querySignal );
     const signal = cacheFirst && !fromNetwork
       ? preferCachedResponse( timeoutSignal )
       : timeoutSignal;
@@ -270,6 +287,18 @@ const useAuthenticatedInfiniteQuery = (
   }, [queryHash, enabled, persist] );
 
   const { isFetching, dataUpdatedAt } = query;
+  // The query whose latest attempt to replace cached results failed, and the
+  // backoff before the next. Bumping retryCount runs the effect below again.
+  const [refreshFailedHash, setRefreshFailedHash] = useState<string | null>( null );
+  const refreshFailed = refreshFailedHash === queryHash;
+  const [retryCount, setRetryCount] = useState( 0 );
+  const retryDelayRef = useRef( RETRY_REVALIDATION_MIN_MS );
+  useEffect( ( ) => {
+    if ( !refreshFailed || !enabled || !isOnline ) return ( ) => undefined;
+    const timer = setTimeout( ( ) => setRetryCount( count => count + 1 ), retryDelayRef.current );
+    retryDelayRef.current = Math.min( retryDelayRef.current * 2, RETRY_REVALIDATION_MAX_MS );
+    return ( ) => clearTimeout( timer );
+  }, [refreshFailed, enabled, isOnline, retryCount] );
   useEffect( ( ) => {
     if (
       noCache
@@ -282,18 +311,38 @@ const useAuthenticatedInfiniteQuery = (
     needsRevalidation.delete( queryHash );
     revalidating.add( queryHash );
     revalidate( )
-      .then( ( ) => { revalidated.add( queryHash ); } )
+      .then( ( ) => {
+        revalidated.add( queryHash );
+        retryDelayRef.current = RETRY_REVALIDATION_MIN_MS;
+        setRefreshFailedHash( failedHash => ( failedHash === queryHash
+          ? null
+          : failedHash ) );
+      } )
       .catch( error => {
-        // Tried again once back online, or when more results load
+        // Tried again with backoff, once back online, or when more results load
         needsRevalidation.add( queryHash );
+        setRefreshFailedHash( failedHash => {
+          // Another search's failures don't add to this one's backoff
+          if ( failedHash !== queryHash ) retryDelayRef.current = RETRY_REVALIDATION_MIN_MS;
+          return queryHash;
+        } );
         logger.warn( "Couldn't fetch the latest results, showing cached ones", error );
       } )
       .finally( ( ) => revalidating.delete( queryHash ) );
-  }, [noCache, enabled, isOnline, isFetching, dataUpdatedAt, queryHash, revalidate] );
+  }, [
+    noCache,
+    enabled,
+    isOnline,
+    isFetching,
+    dataUpdatedAt,
+    queryHash,
+    revalidate,
+    retryCount,
+  ] );
 
   // Added rather than spread in, so React Query still only re-renders for the
   // fields a caller reads
-  return Object.assign( query, { refreshFirstPage } );
+  return Object.assign( query, { refreshFirstPage, refreshFailed } );
 };
 
 export default useAuthenticatedInfiniteQuery;

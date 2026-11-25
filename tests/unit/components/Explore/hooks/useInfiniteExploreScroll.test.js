@@ -142,6 +142,60 @@ describe( "useInfiniteExploreScroll", ( ) => {
     await waitFor( ( ) => expect( uuidsOf( utils.result ) ).toEqual( ["c"] ) );
   } );
 
+  it( "asks for a smaller first page, then full pages", async ( ) => {
+    inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
+    const { result } = renderExploreScroll( );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["a", "b"] ) );
+    expect( inatjs.observations.search.mock.calls[0][0] ).toMatchObject( { per_page: 12 } );
+
+    await act( async ( ) => { result.current.fetchNextPage( ); } );
+    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 2 ) );
+    expect( inatjs.observations.search.mock.calls[1][0] ).toMatchObject( { per_page: 20 } );
+  } );
+
+  it( "keeps page-numbered searches' pages all the same size", async ( ) => {
+    inatjs.observations.search.mockResolvedValue( response( ["a"] ) );
+    const { result } = renderExploreScroll( { ...PARAMS, order_by: "votes" } );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["a"] ) );
+    expect( inatjs.observations.search.mock.calls[0][0] ).toMatchObject( { per_page: 20 } );
+  } );
+
+  it( "keeps the last search's results up while a new one loads, if asked", async ( ) => {
+    let resolveSecond;
+    inatjs.observations.search
+      .mockResolvedValueOnce( response( ["a"] ) )
+      .mockImplementationOnce( ( ) => new Promise( resolve => { resolveSecond = resolve; } ) );
+    const client = queryClient;
+    const utils = renderHook(
+      ( { params } ) => useInfiniteExploreScroll( {
+        params,
+        enabled: true,
+        noCache: true,
+        keepPreviousResults: true,
+      } ),
+      {
+        initialProps: { params: PARAMS },
+        wrapper: ( { children } ) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+    rendered.push( utils );
+    const { result, rerender } = utils;
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["a"] ) );
+
+    rerender( { params: { ...PARAMS, taxon_id: 3 } } );
+    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 2 ) );
+    expect( uuidsOf( result ) ).toEqual( ["a"] );
+    expect( result.current.isPlaceholderData ).toBe( true );
+    // The last search's count and bounds don't describe this one
+    expect( result.current.totalResults ).toBeNull( );
+
+    await act( async ( ) => { resolveSecond( response( ["b"] ) ); } );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["b"] ) );
+    expect( result.current.isPlaceholderData ).toBe( false );
+  } );
+
   it( "replaces the results when pulling to refresh works", async ( ) => {
     inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
     const { result } = renderExploreScroll( );

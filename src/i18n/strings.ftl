@@ -434,6 +434,8 @@ Couldnt-create-identification-unknown-error = Couldn't create identification, un
 # Error creating an observation from an Audio ID clip; error is a technical message
 Couldnt-create-the-observation-error = Couldn't create the observation: { $error }
 Couldnt-delete-observations = Couldn't delete observations
+# Shown above Explore results when fetching the latest ones failed; tapping it tries again
+Couldnt-load-the-latest-results-Tap-to-try-again = Couldn't load the latest results. Tap to try again.
 # Shown when saving the last 15 seconds of Audio ID listening fails
 Couldnt-save-the-clip-error = Couldn't save the clip: { $error }
 CREATE-AN-ACCOUNT = CREATE AN ACCOUNT
@@ -1104,6 +1106,8 @@ Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 # Progress of loading Explore results to sort them in taxonomic order
 Loading-observations-to-sort-loaded-of-total = Loading observations to sort: { $loaded } of { $total }
+# Accessibility label for the small spinner shown on a map while its results load
+Loading-results = Loading results
 # Loading message shown while fetching the route through a selected hotspot
 Loading-route = Loading route…
 # Progress of loading Explore species to sort them in taxonomic order
@@ -1435,6 +1439,9 @@ Offline-DQA-description = The DQA may not be accurate. Check your internet conne
 # Storage category: observations and map tiles downloaded for offline Explore
 Offline-Explore--storage = Offline Explore
 Offline-Explore--storage-description = Observations and map tiles downloaded for use offline
+# Shown above Explore results when offline. timeAgo is a short relative time, e.g. 3h or 2d.
+# Tapping it tries to load the latest results.
+Offline-showing-results-from-time-ago = Offline: showing results from { $timeAgo } ago. Tap to try again.
 Offline-suggestions-may-differ-from-online = Offline suggestions may differ from online suggestions, and taxon images and common names may not load.
 # Label shown in Explore when offline, with the count of saved results matching the filters
 Offline-X-of-Y-saved-observations = Offline: { $count } of { $total } saved
@@ -2123,6 +2130,8 @@ Tracked-location = Tracked location
 Tracking-your-location = Tracking your location
 Traditional-Project = Traditional Project
 Traditional-Projects = Traditional Projects
+# Accessibility hint for the banner shown above Explore results when they may be out of date
+Tries-to-load-the-latest-results = Tries to load the latest results.
 # Label for a tunable parameter in settings
 Tunable-advancedModeOnboardingObservations = Advanced mode prompt observations
 # Description of a tunable parameter in settings

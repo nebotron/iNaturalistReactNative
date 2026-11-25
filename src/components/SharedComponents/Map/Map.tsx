@@ -1,3 +1,4 @@
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
 import { Body1 } from "components/SharedComponents";
@@ -20,6 +21,11 @@ import MapView, { UrlTile } from "react-native-maps";
 import type Observation from "realmModels/Observation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import mapTracker from "sharedHelpers/mapPerformanceTracker";
+import {
+  OBSERVATION_TILE_CACHE_PATH,
+  OBSERVATION_TILE_MAX_AGE_S,
+  pruneObservationTileCache,
+} from "sharedHelpers/observationTileCache";
 import { useDebugMode, useDeviceOrientation } from "sharedHooks";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import type { MAP_TYPES } from "stores/createLayoutSlice";
@@ -51,6 +57,34 @@ const NEARBY_DIM_M = 50_000;
 const CURRENT_LOCATION_VIEWPORT_WIDTH_M = 3_000;
 const MIN_ZOOM_LEVEL = 0; // default in react-native-maps, for Google Maps only
 const MIN_CENTER_COORDINATE_DISTANCE = 5;
+
+// Params that never change which observations a tile shows: paging, sorting,
+// and what the list asks for. The bounds of a map area search go too: tiles
+// cover the whole map, so pins stay put and new ones fill in as the map pans,
+// and the tile URL, with the tiles cached under it, stays the same for every
+// area searched.
+const NON_TILE_PARAMS = new Set( [
+  "fields",
+  "id_above",
+  "id_below",
+  "nelat",
+  "nelng",
+  "order",
+  "order_by",
+  "page",
+  "per_page",
+  "return_bounds",
+  "swlat",
+  "swlng",
+  "ttl",
+] );
+
+// Android's tile layer blanks as soon as its URL changes, so the last search's
+// tiles stay underneath while the new ones load. There's no event for when they
+// have, so they go after this long online, and stay while offline. iOS keeps them
+// natively (see patches/react-native-maps).
+const PREVIOUS_TILES_MS = 8000;
+const KEEPS_PREVIOUS_TILES = Platform.OS === "android";
 
 const getDefaultRegion = ( initialLatitude?: number, initialLongitude?: number ) => ( {
   latitude: initialLatitude || 25, // Default to something US centric
@@ -94,6 +128,8 @@ interface Props {
   zoomEnabled?: boolean;
   zoomTapEnabled?: boolean;
   onMapLayout?: ( event: LayoutChangeEvent ) => void;
+  // Tile layers drawn under the observation tiles, e.g. a saved base map offline
+  baseTiles?: React.ReactNode;
 }
 
 // TODO: fallback to another map library
@@ -129,6 +165,7 @@ const Map = ( {
   zoomEnabled = true,
   zoomTapEnabled = true,
   onMapLayout,
+  baseTiles,
 }: Props ) => {
   const tilesMarkedVisible = useRef( false );
   const [performanceMetrics, setPerformanceMetrics] = useState( {
@@ -243,13 +280,12 @@ const Map = ( {
     regionToAnimate,
   ] );
 
-  const params = useMemo( ( ) => {
-    const newTileParams = { ...tileMapParams };
-    delete newTileParams.order;
-    delete newTileParams.order_by;
-    delete newTileParams.per_page;
-    return newTileParams;
-  }, [tileMapParams] );
+  // In a stable order, so the same search always has the same tile URL
+  const params = useMemo( ( ) => Object.fromEntries(
+    Object.entries( tileMapParams || {} )
+      .filter( ( [key, value] ) => !NON_TILE_PARAMS.has( key ) && value != null && value !== "" )
+      .sort( ( [a], [b] ) => a.localeCompare( b ) ),
+  ), [tileMapParams] );
 
   const onMapPressForObsLyr = useCallback( async ( latLng: LatLng ) => {
     const uuid = await fetchObservationUUID( currentZoom, latLng, params );
@@ -371,6 +407,33 @@ const Map = ( {
     ? `${TILE_URL}/points/{z}/{x}/{y}.png?${queryString}&color=%2374ac00`
     : `${TILE_URL}/grid/{z}/{x}/{y}.png?${queryString}`;
 
+  const { isConnected } = useNetInfo( );
+  const isOffline = isConnected === false;
+  // The template shown, and on Android the one before it, kept underneath
+  // until the new tiles have had time to load. Updated while rendering, so the
+  // old layer never unmounts in between.
+  const [tileLayers, setTileLayers] = useState<{
+    current: string;
+    previous: string | null;
+  }>( { current: tileUrlTemplate, previous: null } );
+  if ( tileLayers.current !== tileUrlTemplate ) {
+    setTileLayers( {
+      current: tileUrlTemplate,
+      previous: KEEPS_PREVIOUS_TILES
+        ? tileLayers.current
+        : null,
+    } );
+  }
+  const previousTileTemplate = tileLayers.previous;
+  useEffect( ( ) => {
+    if ( !previousTileTemplate || isOffline ) return ( ) => undefined;
+    const timer = setTimeout(
+      ( ) => setTileLayers( layers => ( { ...layers, previous: null } ) ),
+      PREVIOUS_TILES_MS,
+    );
+    return ( ) => clearTimeout( timer );
+  }, [previousTileTemplate, isOffline] );
+
   const handleRegionChangeComplete = useCallback( async (
     newRegion: Region,
     { isGesture }: { isGesture?: boolean },
@@ -450,6 +513,34 @@ const Map = ( {
   };
 
   const shouldOverlayObsTiles = withPressableObsTiles || withObsTiles;
+
+  useEffect( ( ) => {
+    if ( shouldOverlayObsTiles ) pruneObservationTileCache( );
+  }, [shouldOverlayObsTiles] );
+
+  const renderObsTiles = ( urlTemplate: string, isPrevious: boolean ) => (
+    <UrlTile
+      // Android keeps a layer per template, so an old one stays mounted
+      // under a new one. On iOS one layer changes template in place, which
+      // keeps the old tiles natively, but has to be added again after base
+      // tiles to stay on top of them.
+      key={KEEPS_PREVIOUS_TILES
+        ? urlTemplate
+        : `obsTiles-${!!baseTiles}`}
+      testID={isPrevious
+        ? "Map.UrlTile.previous"
+        : "Map.UrlTile"}
+      tileSize={512}
+      urlTemplate={urlTemplate}
+      opacity={1}
+      zIndex={isPrevious
+        ? 0
+        : 1}
+      tileCachePath={OBSERVATION_TILE_CACHE_PATH}
+      tileCacheMaxAge={OBSERVATION_TILE_MAX_AGE_S}
+      offlineMode={isOffline}
+    />
+  );
 
   const mapRegion = setRegion( );
 
@@ -575,15 +666,10 @@ const Map = ( {
         zoomEnabled={zoomEnabled}
         zoomTapEnabled={zoomTapEnabled}
       >
-        { shouldOverlayObsTiles
-        && (
-          <UrlTile
-            testID="Map.UrlTile"
-            tileSize={512}
-            urlTemplate={tileUrlTemplate}
-            opacity={1}
-          />
-        )}
+        {baseTiles}
+        { shouldOverlayObsTiles && previousTileTemplate
+          && renderObsTiles( previousTileTemplate, true )}
+        { shouldOverlayObsTiles && renderObsTiles( tileUrlTemplate, false )}
         { observation && hasCoordinates && ( currentUserCanViewCoords
           ? (
             <LocationIndicator

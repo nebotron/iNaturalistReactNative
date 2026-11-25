@@ -1,3 +1,4 @@
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useQuery } from "@tanstack/react-query";
 import fetchPlace from "api/places";
 import type { ApiTotalBounds } from "api/types";
@@ -5,7 +6,10 @@ import type {
   ExploreV2QueryParams,
   NearbyCoords,
 } from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import ActivityIndicator from "components/SharedComponents/ActivityIndicator";
+import {
+  SavedBaseMapTiles,
+  useHasSavedBaseMap,
+} from "components/Explore/OfflineExplore";
 import Button from "components/SharedComponents/Buttons/Button";
 import {
   boundingBoxGeojsonToBounds,
@@ -14,6 +18,7 @@ import {
   regionFromBounds,
 } from "components/SharedComponents/Map/helpers/mapHelpers";
 import Map from "components/SharedComponents/Map/Map";
+import MapLoadingIndicator from "components/SharedComponents/Map/MapLoadingIndicator";
 import { View } from "components/styledComponents";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import React, {
@@ -34,8 +39,6 @@ const WORLDWIDE_REGION: Region = {
   latitudeDelta: 180,
   longitudeDelta: 180,
 };
-
-const activityIndicatorSize = 50;
 
 // A worldwide search frames the map on the results so a regional taxon isn't off screen,
 // but for a global result set the API's total_bounds cover the globe and are not something
@@ -92,6 +95,10 @@ const ExploreV2MapView = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const mapRef = useRef<MapView | null>( null );
+  // Offline, tiles saved for offline use fill in the base map
+  const { isConnected } = useNetInfo( );
+  const isOffline = isConnected === false;
+  const showSavedBaseMap = useHasSavedBaseMap( isOffline );
   // The search the user panned away from. The "Redo search in this area"
   // button shows only while that is still the current search, so a new search
   // moving the map out from under the user hides it without a reset.
@@ -275,6 +282,9 @@ const ExploreV2MapView = ( {
         switchMapTypeButtonClassName="right-5 bottom-20"
         tileMapParams={queryParams}
         withPressableObsTiles
+        baseTiles={showSavedBaseMap
+          ? <SavedBaseMapTiles />
+          : undefined}
       />
       {showRedoSearch && (
         <View
@@ -289,14 +299,7 @@ const ExploreV2MapView = ( {
           />
         </View>
       )}
-      {isLoading && (
-        <View
-          className="absolute top-0 bottom-0 left-0 right-0 items-center justify-center"
-          testID="ExploreV2MapView.loading"
-        >
-          <ActivityIndicator size={activityIndicatorSize} />
-        </View>
-      )}
+      {isLoading && <MapLoadingIndicator testID="ExploreV2MapView.loading" />}
     </View>
   );
 };

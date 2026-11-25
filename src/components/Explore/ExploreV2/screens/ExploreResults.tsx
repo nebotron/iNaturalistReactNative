@@ -16,6 +16,8 @@ import {
 import CameraStatsView from "components/Explore/CameraStatsView";
 import ExcludedSpeciesError
   from "components/Explore/ExploreV2/components/ExcludedSpeciesError";
+import ExploreConnectionBanner
+  from "components/Explore/ExploreV2/components/ExploreConnectionBanner";
 import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
@@ -318,10 +320,15 @@ const ExploreResults = ( ) => {
     status: observationsStatus,
     totalBounds,
     totalResults,
+    isPlaceholderData,
+    dataUpdatedAt,
+    refreshFailed,
   } = useInfiniteExploreScroll( {
     params: observationsParams,
     // Only the observations view uses this search
     enabled: canFetch && state.activeTab === OBSERVATIONS_TAB,
+    // The last results stay up, dimmed, rather than none, while a new search loads
+    keepPreviousResults: true,
   } );
 
   const sortsTaxonomically = byTaxonomy && state.activeTab === OBSERVATIONS_TAB && !showMap;
@@ -589,7 +596,7 @@ const ExploreResults = ( ) => {
               ? (
                 <ExploreV2MapView
                   appliedSearchCount={state.appliedSearchCount}
-                  isLoading={isLoading}
+                  isLoading={isLoading || isPlaceholderData}
                   mapAreaBounds={state.location.placeMode === EXPLORE_V2_PLACE_MODE.MAP_AREA
                     ? state.location.bounds
                     : undefined}
@@ -605,46 +612,52 @@ const ExploreResults = ( ) => {
                 />
               )
               : (
-                <ObservationsFlashList
-                  key={listKey}
-                  data={sortedObservations}
-                  dataCanBeFetched={canFetch}
-                  explore
-                  fullWidthGrid={layout !== "list"}
-                  handlePullToRefresh={handlePullToRefresh}
-                  hideLoadingWheel={!isFetchingNextPage}
-                  isFetchingNextPage={isFetchingNextPage}
-                  isConnected={isConnected}
-                  layout={layout === "list"
-                    ? "list"
-                    : "grid"}
-                  // bit over a misnomer on this prop; in this case it hides the
-                  // ID/comments/quality badges that grid results can technically have
-                  hideObsUploadStatus={layout !== "list"}
-                  obsListKey="ExploreV2Observations"
-                  // Taxonomic order loads everything it sorts itself, and more would land all
-                  // over the list
-                  onEndReached={byTaxonomy
-                    ? noop
-                    : fetchNextPage}
-                  listHeaderContent={byTaxonomy
-                    ? (
-                      <TaxonomicOrderNotice
-                        kind="observations"
-                        loaded={observations.length}
-                        limit={EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT}
-                        total={totalResults}
-                      />
-                    )
-                    : null}
-                  scrollRestoreKey={scrollRestoreKey(
-                    `observations-${layout}`,
-                    observationsParams,
-                  )}
-                  selectable
-                  showNoResults={hasNoResults}
-                  testID="ExploreV2ObservationsList"
-                />
+                <View
+                  className={isPlaceholderData
+                    ? "flex-1 opacity-50"
+                    : "flex-1"}
+                >
+                  <ObservationsFlashList
+                    key={listKey}
+                    data={sortedObservations}
+                    dataCanBeFetched={canFetch}
+                    explore
+                    fullWidthGrid={layout !== "list"}
+                    handlePullToRefresh={handlePullToRefresh}
+                    hideLoadingWheel={!isFetchingNextPage}
+                    isFetchingNextPage={isFetchingNextPage}
+                    isConnected={isConnected}
+                    layout={layout === "list"
+                      ? "list"
+                      : "grid"}
+                    // bit over a misnomer on this prop; in this case it hides the
+                    // ID/comments/quality badges that grid results can technically have
+                    hideObsUploadStatus={layout !== "list"}
+                    obsListKey="ExploreV2Observations"
+                    // Taxonomic order loads everything it sorts itself, and more would land all
+                    // over the list
+                    onEndReached={byTaxonomy
+                      ? noop
+                      : fetchNextPage}
+                    listHeaderContent={byTaxonomy
+                      ? (
+                        <TaxonomicOrderNotice
+                          kind="observations"
+                          loaded={observations.length}
+                          limit={EXPLORE_TAXONOMIC_OBSERVATIONS_LIMIT}
+                          total={totalResults}
+                        />
+                      )
+                      : null}
+                    scrollRestoreKey={scrollRestoreKey(
+                      `observations-${layout}`,
+                      observationsParams,
+                    )}
+                    selectable
+                    showNoResults={hasNoResults}
+                    testID="ExploreV2ObservationsList"
+                  />
+                </View>
               )}
             <ObservationsViewBar
               layout={layout}
@@ -787,6 +800,7 @@ const ExploreResults = ( ) => {
         : offlineListResults )?.results.length || 0;
       return (
         <>
+          <ExploreConnectionBanner offline onRetry={reload} />
           <Body2 className="px-5 pb-2" testID="ExploreResults.offlineCount">
             {t( "X-Observations", { count: offlineCount } )}
           </Body2>
@@ -846,8 +860,20 @@ const ExploreResults = ( ) => {
       [OBSERVERS_TAB]: typeof observersCount === "number"
         && t( "X-Observers", { count: observersCount } ),
     }[state.activeTab as string];
+    // Results that aren't the latest stay shown, saying so above them
+    const showConnectionBanner = state.activeTab === OBSERVATIONS_TAB
+      && sortedObservations.length > 0
+      && !isPlaceholderData
+      && ( isConnected === false || refreshFailed || observationsStatus === "error" );
     return (
       <>
+        {showConnectionBanner && (
+          <ExploreConnectionBanner
+            offline={isConnected === false}
+            dataUpdatedAt={dataUpdatedAt}
+            onRetry={reload}
+          />
+        )}
         {totalCount && (
           <View className="px-5 pb-2">
             <Body2 testID="ExploreResults.totalCount">{totalCount}</Body2>
