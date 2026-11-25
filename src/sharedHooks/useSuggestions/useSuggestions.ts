@@ -18,6 +18,7 @@ const useSuggestions = (
     scoreImageParams,
     queryKey,
     preferOfflineModel = false,
+    pendingLocation,
   } = options;
 
   const {
@@ -49,14 +50,18 @@ const useSuggestions = (
   // show offline suggestions immediately, online suggestions replace them once they arrive
   const tryOfflineSuggestions = !urlWillCrashOffline;
 
+  const offlineLocation = scoreImageParams
+    ? { latitude: scoreImageParams.lat, longitude: scoreImageParams.lng }
+    : pendingLocation;
+
   const {
     offlineSuggestions,
     refetchOfflineSuggestions,
   } = useOfflineSuggestions( photoUri, {
     onFetched,
     onFetchError,
-    latitude: scoreImageParams?.lat,
-    longitude: scoreImageParams?.lng,
+    latitude: offlineLocation?.latitude,
+    longitude: offlineLocation?.longitude,
     tryOfflineSuggestions,
   } );
 
