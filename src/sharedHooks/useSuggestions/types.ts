@@ -71,4 +71,7 @@ export interface UseSuggestionsOptions {
   queryKey: string[];
   onlineSuggestionsAttempted: boolean;
   preferOfflineModel?: boolean;
+  // Location for the on-device model while scoreImageParams is still being
+  // built, so it doesn't score once without a location and again with it
+  pendingLocation?: { latitude?: number; longitude?: number };
 }

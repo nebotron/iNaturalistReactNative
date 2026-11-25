@@ -77,20 +77,30 @@ const initialState = {
   offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
   scoreImageParams: null,
   mediaViewerVisible: false,
+  observationUuid: undefined,
   queryKey: [],
   selectedPhotoUri: null,
   shouldUseEvidenceLocation: false,
 };
 
+// Image params are built asynchronously (resizing, subject detection), so by
+// the time they're ready the user may have picked another photo or moved on to
+// the next observation. Results built for a photo that's no longer selected are
+// dropped rather than paired with whatever is on screen now.
+const isStale = ( state, action ) => action.forPhotoUri !== undefined
+  && action.forPhotoUri !== state.selectedPhotoUri;
+
 const reducer = ( state, action ) => {
   switch ( action.type ) {
     case "SET_UPLOAD_PARAMS":
+      if ( isStale( state, action ) ) return state;
       return {
         ...state,
         scoreImageParams: action.scoreImageParams,
         queryKey: getQueryKey( state.selectedPhotoUri, state.shouldUseEvidenceLocation ),
       };
     case "SELECT_PHOTO":
+      if ( action.observationUuid !== state.observationUuid ) return state;
       return {
         ...state,
         onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
@@ -104,6 +114,7 @@ const reducer = ( state, action ) => {
     // crop, so the offline status (and the results already on screen) stay put
     // until the new suggestions arrive.
     case "RECROP_PHOTO":
+      if ( isStale( state, action ) ) return state;
       return {
         ...state,
         onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
@@ -121,6 +132,7 @@ const reducer = ( state, action ) => {
         offlineFetchStatus: action.offlineFetchStatus,
       };
     case "TOGGLE_LOCATION":
+      if ( isStale( state, action ) ) return state;
       return {
         ...state,
         onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
@@ -144,6 +156,7 @@ const reducer = ( state, action ) => {
     case "RESET_OBSERVATION":
       return {
         ...initialState,
+        observationUuid: action.observationUuid,
         selectedPhotoUri: action.selectedPhotoUri,
         scoreImageParams: action.scoreImageParams,
         shouldUseEvidenceLocation: action.shouldUseEvidenceLocation,
@@ -208,13 +221,33 @@ const SuggestionsContainer = ( ) => {
 
   const [state, dispatch] = useReducer( reducer, {
     ...initialState,
+    observationUuid: currentObservation?.uuid,
     selectedPhotoUri: photoUris[0],
     shouldUseEvidenceLocation: evidenceHasLocation,
     // set up front so cached online suggestions can be read on first render
     queryKey: getQueryKey( photoUris[0], evidenceHasLocation ),
   } );
   const [preferOfflineModel, setPreferOfflineModel] = useState( false );
-  const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
+
+  // Moving on to the next observation (bulk ID, multi-obs flow) swaps the
+  // photos on screen at once, so the selected photo -- which the suggestions
+  // are for -- has to switch in the same render. Waiting for the new photo's
+  // image params first left the new photo showing the previous observation's
+  // suggestions until they were ready. Params are filled in by the effect below.
+  if (
+    currentObservation?.uuid
+    && state.observationUuid !== currentObservation.uuid
+    && photoUris[0]
+  ) {
+    setPreferOfflineModel( false );
+    dispatch( {
+      type: "RESET_OBSERVATION",
+      observationUuid: currentObservation.uuid,
+      selectedPhotoUri: photoUris[0],
+      scoreImageParams: null,
+      shouldUseEvidenceLocation: evidenceHasLocation,
+    } );
+  }
 
   usePreloadNextObservationSuggestions( );
 
@@ -300,6 +333,9 @@ const SuggestionsContainer = ( ) => {
     queryKey,
     onlineSuggestionsAttempted,
     preferOfflineModel,
+    pendingLocation: shouldUseEvidenceLocation
+      ? { latitude: currentObservation?.latitude, longitude: currentObservation?.longitude }
+      : undefined,
   } );
 
   const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: true } );
@@ -331,6 +367,7 @@ const SuggestionsContainer = ( ) => {
         const newImageParams = await createUploadParams( uri, shouldUseEvidenceLocation );
         dispatch( {
           type: "SELECT_PHOTO",
+          observationUuid: state.observationUuid,
           selectedPhotoUri: uri,
           scoreImageParams: newImageParams,
         } );
@@ -347,6 +384,7 @@ const SuggestionsContainer = ( ) => {
       selectedPhotoUri,
       shouldUseEvidenceLocation,
       preferOfflineModel,
+      state.observationUuid,
     ],
   );
 
@@ -367,7 +405,11 @@ const SuggestionsContainer = ( ) => {
     // Only the online request is built from the cropped image.
     if ( !selectedPhotoUri || preferOfflineModel ) return;
     createUploadParams( selectedPhotoUri, shouldUseEvidenceLocation ).then( params => {
-      dispatch( { type: "RECROP_PHOTO", scoreImageParams: params } );
+      dispatch( {
+        type: "RECROP_PHOTO",
+        forPhotoUri: selectedPhotoUri,
+        scoreImageParams: params,
+      } );
     } );
   }, [
     createUploadParams,
@@ -387,6 +429,7 @@ const SuggestionsContainer = ( ) => {
     const newImageParams = await createUploadParams( selectedPhotoUri, showLocation );
     dispatch( {
       type: "TOGGLE_LOCATION",
+      forPhotoUri: selectedPhotoUri,
       shouldUseEvidenceLocation: showLocation,
       scoreImageParams: newImageParams,
     } );
@@ -431,7 +474,11 @@ const SuggestionsContainer = ( ) => {
           selectedPhotoUri,
           shouldUseEvidenceLocation,
         );
-        dispatch( { type: "SET_UPLOAD_PARAMS", scoreImageParams: newImageParams } );
+        dispatch( {
+          type: "SET_UPLOAD_PARAMS",
+          forPhotoUri: selectedPhotoUri,
+          scoreImageParams: newImageParams,
+        } );
       } else {
         dispatch( {
           type: "SET_OFFLINE_FETCH_STATUS",
@@ -441,7 +488,11 @@ const SuggestionsContainer = ( ) => {
       return;
     }
     const newImageParams = await createUploadParams( selectedPhotoUri, shouldUseEvidenceLocation );
-    dispatch( { type: "SET_UPLOAD_PARAMS", scoreImageParams: newImageParams } );
+    dispatch( {
+      type: "SET_UPLOAD_PARAMS",
+      forPhotoUri: selectedPhotoUri,
+      scoreImageParams: newImageParams,
+    } );
   }, [
     createUploadParams,
     isConnected,
@@ -449,43 +500,14 @@ const SuggestionsContainer = ( ) => {
     shouldUseEvidenceLocation,
   ] );
 
+  // Build image params for the observation the screen just moved on to (the
+  // first one gets them from the focus listener below).
+  const paramsObservationUuidRef = useRef( state.observationUuid );
   useEffect( ( ) => {
-    const observationUuid = currentObservation?.uuid;
-    if ( !observationUuid || previousObservationUuidRef.current === observationUuid ) {
-      return;
-    }
-    const hadPreviousObservation = previousObservationUuidRef.current !== undefined;
-    previousObservationUuidRef.current = observationUuid;
-
-    if ( !hadPreviousObservation ) {
-      return;
-    }
-
-    const resetForNextObservation = async ( ) => {
-      const nextPhotoUri = photoUris[0];
-      if ( !nextPhotoUri ) {
-        return;
-      }
-      const newImageParams = isConnected === false
-        ? null
-        : await createUploadParams( nextPhotoUri, evidenceHasLocation );
-      setPreferOfflineModel( false );
-      dispatch( {
-        type: "RESET_OBSERVATION",
-        selectedPhotoUri: nextPhotoUri,
-        scoreImageParams: newImageParams,
-        shouldUseEvidenceLocation: evidenceHasLocation,
-      } );
-    };
-
-    resetForNextObservation( );
-  }, [
-    createUploadParams,
-    currentObservation?.uuid,
-    evidenceHasLocation,
-    isConnected,
-    photoUris,
-  ] );
+    if ( paramsObservationUuidRef.current === state.observationUuid ) return;
+    paramsObservationUuidRef.current = state.observationUuid;
+    setImageParams( );
+  }, [setImageParams, state.observationUuid] );
 
   const headerRight = useCallback( ( ) => <TaxonSearchButton />, [] );
 
@@ -515,6 +537,7 @@ const SuggestionsContainer = ( ) => {
     newImageParams.lng = userLocation?.longitude;
     dispatch( {
       type: "TOGGLE_LOCATION",
+      forPhotoUri: selectedPhotoUri,
       shouldUseEvidenceLocation: true,
       scoreImageParams: newImageParams,
     } );
@@ -532,11 +555,12 @@ const SuggestionsContainer = ( ) => {
     createUploadParams( newUri, shouldUseEvidenceLocation ).then( params => {
       dispatch( {
         type: "SELECT_PHOTO",
+        observationUuid: state.observationUuid,
         selectedPhotoUri: newUri,
         scoreImageParams: params,
       } );
     } );
-  }, [createUploadParams, navigation, shouldUseEvidenceLocation] );
+  }, [createUploadParams, navigation, shouldUseEvidenceLocation, state.observationUuid] );
 
   const onDeletePhoto = useCallback( async ( uriToDelete: string ) => {
     try {
