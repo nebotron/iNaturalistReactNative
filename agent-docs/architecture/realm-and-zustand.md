@@ -131,6 +131,12 @@ MMKV backend: `src/stores/zustandMMKVBackingStorage.ts`
 - `loginBannerDismissed` — Login banner state
 - `justFinishedSignup` — Post-signup flag
 
+### iCloud backup (iOS)
+
+Deleting the app removes MMKV and Realm with it, and Android has `allowBackup="false"`. On iOS, `sharedHelpers/cloudBackup.ts` mirrors an allowlist (`BACKED_UP`) of MMKV keys — settings, saved searches, tunable parameters, the USB import list, game and vote history — to iCloud key-value storage via the `CloudKeyValueStore` native module, and a fresh install restores them. When you add a persisted value that a user would miss after a reinstall, add its key there. Leave out caches, tokens, and anything pointing at a file inside the app container. Apple's limit is 1 MB in total.
+
+The device-photo records Realm keeps but the API never returns — `UploadedDevicePhotoUri`, and each `ObservationPhoto`'s `originalDevicePhotoUri` and `cameraInfo` — are too big for that, so `sharedHelpers/cloudPhotoBackup.ts` keeps them as one JSON document in the app's iCloud Drive container (no photo contents). After a reinstall they wait in MMKV until `upsertRemoteObservations` brings each observation photo back. If you add another local-only field to an observation photo, add it to that document and to the restore in `upsertRemoteObservations`.
+
 ## Screen state that has to live in Zustand
 
 **A React context mounted inside a bottom-tab screen cannot hold state that should survive navigation.** Two independent mechanisms destroy the tree:
@@ -171,7 +177,7 @@ export function useMyThing( ) {
 }
 ```
 
-`src/providers/MyObservationsContext.ts` is the worked example. Consumers keep the same `{ state, dispatch }` shape, so converting a context is close to a no-op at the call sites. **`src/providers/ExploreContext.tsx` has the same problem and has not been converted yet.**
+`src/providers/MyObservationsContext.ts` is the worked example. Consumers keep the same `{ state, dispatch }` shape, so converting a context is close to a no-op at the call sites. `src/providers/ExploreContext.tsx` still lives in a context, but the Explore tab copies its whole state into `createExploreSessionSlice` (`exploreSessionState`) and starts from that when it remounts. The same in-memory slice keeps the tab's nearby coordinates, map viewport (`exploreMapView`) and list scroll offsets (`listScrollOffsets`, written by `CustomFlashList` for any list given a `scrollRestoreKey`), so leaving the tab and coming back puts the user where they were.
 
 Two rules this depends on:
 

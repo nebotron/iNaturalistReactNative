@@ -2,10 +2,13 @@ import CameraFlip from "components/Camera/Buttons/CameraFlip";
 import CameraTips from "components/Camera/Buttons/CameraTips";
 import Close from "components/Camera/Buttons/Close";
 import Flash from "components/Camera/Buttons/Flash";
+import GreenCheckmark from "components/Camera/Buttons/GreenCheckmark";
+import LatestPhoto from "components/Camera/Buttons/LatestPhoto";
 import Location from "components/Camera/Buttons/Location";
-import PhotoLibraryIcon from "components/Camera/Buttons/PhotoLibraryIcon";
+import Macro from "components/Camera/Buttons/Macro";
 import TakePhoto from "components/Camera/Buttons/TakePhoto";
 import Zoom from "components/Camera/Buttons/Zoom";
+import RotatableIconWrapper from "components/Camera/RotatableIconWrapper";
 import TabletButtons from "components/Camera/TabletButtons";
 import { View } from "components/styledComponents";
 import React from "react";
@@ -18,41 +21,47 @@ import { useLayoutPrefs } from "sharedHooks";
 const isTablet = DeviceInfo.isTablet();
 
 interface Props {
+  confirmDisabled: boolean;
+  handleCheckmarkPress: ( ) => void;
   handleZoomButtonPress: ( ) => void;
   flipCamera: ( ) => void;
   handleClose: ( ) => void;
   hasFlash: boolean;
-  modelLoaded: boolean;
+  latestPhotoUri?: string;
+  onPressLatestPhoto: ( ) => void;
+  photosTaken: boolean;
   rotatableAnimatedStyle: AnimatedStyle;
-  showPrediction: boolean;
   showZoomButton: boolean;
   takePhoto: () => Promise<void>;
   takePhotoOptions: CapturePhotoSettings;
-  takingPhoto: boolean;
   toggleFlash: ( ) => void;
   zoomTextValue: string;
   useLocation: boolean;
   toggleLocation: ( ) => void;
-  completeSentinelFile: ( ) => Promise<void>;
+  macroMode: boolean;
+  toggleMacro: ( ) => void;
 }
 
 const AICameraButtons = ( {
+  confirmDisabled,
+  handleCheckmarkPress,
   handleZoomButtonPress,
   flipCamera,
   handleClose,
   hasFlash,
-  modelLoaded,
+  latestPhotoUri,
+  onPressLatestPhoto,
+  photosTaken,
   rotatableAnimatedStyle,
-  showPrediction,
   showZoomButton,
   takePhoto,
   takePhotoOptions,
-  takingPhoto,
   toggleFlash,
   zoomTextValue,
   useLocation,
   toggleLocation,
-  completeSentinelFile,
+  macroMode,
+  toggleMacro,
 }: Props ) => {
   const { bottom } = useSafeAreaInsets( );
   const { isDefaultMode } = useLayoutPrefs();
@@ -60,17 +69,24 @@ const AICameraButtons = ( {
     return (
       <TabletButtons
         handleZoomButtonPress={handleZoomButtonPress}
-        disabled={!modelLoaded || takingPhoto}
-        disabledPhotoLibrary={takingPhoto}
+        // The shutter looks the same at all times; handleTakePhoto ignores
+        // taps mid-capture and explains the photo limit
+        disabled={false}
         // TODO: once we re-visit tablet views, we'll want to ensure users cannot spam the submit
         // button while taking photos. see:
         // https://linear.app/inaturalist/issue/MOB-1084/multicapture-camera-multiple-copies-of-photos-can-be-saved
         // confirmDisabled={false}
         flipCamera={flipCamera}
+        handleCheckmarkPress={confirmDisabled
+          ? undefined
+          : handleCheckmarkPress}
+        handleClose={handleClose}
         hasFlash={hasFlash}
-        hasPhotoLibraryButton
+        hasLatestPhoto
+        latestPhotoUri={latestPhotoUri}
+        onPressLatestPhoto={onPressLatestPhoto}
+        photosTaken={photosTaken}
         rotatableAnimatedStyle={rotatableAnimatedStyle}
-        showPrediction={showPrediction}
         showZoomButton={showZoomButton}
         takePhoto={takePhoto}
         takePhotoOptions={takePhotoOptions}
@@ -79,7 +95,6 @@ const AICameraButtons = ( {
         useLocation={useLocation}
         toggleLocation={toggleLocation}
         isDefaultMode={isDefaultMode}
-        completeSentinelFile={completeSentinelFile}
       />
     );
   }
@@ -116,6 +131,13 @@ const AICameraButtons = ( {
             />
           </View>
         )}
+        <View>
+          <Macro
+            toggleMacro={toggleMacro}
+            macroMode={macroMode}
+            rotatableAnimatedStyle={rotatableAnimatedStyle}
+          />
+        </View>
         {showZoomButton && (
           <View>
             <Zoom
@@ -140,20 +162,34 @@ const AICameraButtons = ( {
           />
         </View>
         <View>
-          <PhotoLibraryIcon
+          <LatestPhoto
+            onPress={onPressLatestPhoto}
+            photoUri={latestPhotoUri}
             rotatableAnimatedStyle={rotatableAnimatedStyle}
-            disabled={takingPhoto}
-            completeSentinelFile={completeSentinelFile}
           />
         </View>
       </View>
       <View className="flex-row justify-center items-center w-full" pointerEvents="box-none">
+        {/* The shutter looks the same at all times; handleTakePhoto ignores
+            taps mid-capture and explains the photo limit */}
         <TakePhoto
-          disabled={!modelLoaded || takingPhoto}
+          disabled={false}
           takePhoto={takePhoto}
-          showPrediction={showPrediction}
-          rotatableAnimatedStyle={rotatableAnimatedStyle}
         />
+        {photosTaken && (
+          // Sits just right of the shutter, clear of the column of options
+          <View className="absolute left-1/2 ml-[56px] h-10 w-10">
+            <RotatableIconWrapper
+              rotatableAnimatedStyle={rotatableAnimatedStyle}
+              containerClass="h-10 w-10 rounded-full justify-center items-center"
+            >
+              <GreenCheckmark
+                disabled={confirmDisabled}
+                handleCheckmarkPress={handleCheckmarkPress}
+              />
+            </RotatableIconWrapper>
+          </View>
+        )}
       </View>
     </View>
   );

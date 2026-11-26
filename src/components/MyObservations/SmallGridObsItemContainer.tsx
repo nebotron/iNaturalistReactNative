@@ -100,6 +100,7 @@ const SmallGridObsItemContainer = ( {
       onItemPress={onItemPress}
       onUploadButtonPress={onUploadButtonPress}
       queued={queued}
+      selectable
       unsynced={obsNeedsSync}
       uploadProgress={uploadProgress}
       uuid={uuid}

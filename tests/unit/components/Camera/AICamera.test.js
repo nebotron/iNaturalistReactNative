@@ -4,6 +4,18 @@ import * as usePredictions from "components/Camera/AICamera/hooks/usePredictions
 import i18next from "i18next";
 import React from "react";
 import * as useTaxon from "sharedHooks/useTaxon";
+import useStore from "stores/useStore";
+import cachedImageUri from "tests/helpers/cachedImageUri";
+
+jest.mock( "@react-navigation/native", () => ( {
+  ...jest.requireActual( "@react-navigation/native" ),
+  useNavigation: () => ( {
+    navigate: jest.fn( ),
+    addListener: () => jest.fn( ),
+  } ),
+  useRoute: () => ( {} ),
+  useFocusEffect: () => ( {} ),
+} ) );
 
 const mockTaxonPrediction = {
   id: 144351,
@@ -57,6 +69,13 @@ jest.mock( "components/Camera/hooks/useZoom", () => ( {
   ),
 } ) );
 
+const mockMultiCaptureProps = {
+  newPhotoUris: [],
+  setNewPhotoUris: jest.fn( ),
+  handleCheckmarkPress: jest.fn( ),
+  confirmPhotosInProgress: false,
+};
+
 describe( "AI Camera", ( ) => {
   it( "shows a taxon prediction when result & rank_level < 40", async () => {
     jest.spyOn( usePredictions, "default" ).mockImplementation( () => ( {
@@ -65,7 +84,7 @@ describe( "AI Camera", ( ) => {
         taxon: mockTaxonPrediction,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const taxonResult = screen.getByTestId( `AICamera.taxa.${mockTaxonPrediction.id}` );
 
@@ -80,7 +99,7 @@ describe( "AI Camera", ( ) => {
         taxon: mockTaxonNoPrediction,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const scanText = screen.getByText(
       i18next.t( "Point-the-camera-at-an-animal-plant-or-fungus" ),
@@ -94,7 +113,7 @@ describe( "AI Camera", ( ) => {
       ...mockModelLoaded,
       modelLoaded: false,
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const loadingText = screen.getByText( i18next.t( "Loading-iNaturalists-AI-Camera" ) );
 
@@ -109,15 +128,11 @@ describe( "AI Camera", ( ) => {
         taxon: mockLocalTaxon,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const taxonPhoto = screen.getByTestId( "ObsList.photo" );
 
-    expect( taxonPhoto.props.source ).toMatchObject(
-      {
-        url: mockLocalTaxon.default_photo.url,
-      },
-    );
+    expect( cachedImageUri( taxonPhoto ) ).toStrictEqual( mockLocalTaxon.default_photo.url );
   } );
 
   it( "displays iconic taxon icon if taxon does not exist in realm", ( ) => {
@@ -136,10 +151,22 @@ describe( "AI Camera", ( ) => {
         taxon: mockLocalTaxon,
       },
     } ) );
-    render( <AICamera /> );
+    render( <AICamera {...mockMultiCaptureProps} /> );
 
     const taxonIcon = screen.getByTestId( "IconicTaxonName.iconicTaxonIcon" );
 
     expect( taxonIcon ).toBeVisible( );
+  } );
+
+  it( "shows only the most recent photo in the corner thumbnail", ( ) => {
+    useStore.setState( { cameraUris: ["file://first.jpg", "file://second.jpg"] } );
+    render( <AICamera {...mockMultiCaptureProps} /> );
+
+    const latestPhoto = screen.getByTestId( "AICamera.latestPhoto" );
+
+    expect( latestPhoto ).toBeVisible( );
+    expect( latestPhoto.props.source ).toStrictEqual( { uri: "file://second.jpg" } );
+    expect( screen.queryByLabelText( i18next.t( "Photo-importer" ) ) ).toBeNull( );
+    useStore.setState( { cameraUris: [] } );
   } );
 } );

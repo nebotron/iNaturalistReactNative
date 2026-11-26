@@ -1,0 +1,138 @@
+import { MMKV } from "react-native-mmkv";
+
+// Hard-coded constants the user can override from Settings > Tunable
+// Parameters. Values are read once when the module that uses them loads, so
+// overrides take effect after the app restarts. Kept in their own MMKV
+// instance so signing out (which clears the main store) doesn't reset them.
+
+export type TunableSection =
+  | "ai"
+  | "audio"
+  | "camera"
+  | "location"
+  | "uploads"
+  | "storage"
+  | "usb"
+  | "explore"
+  | "game"
+  | "interface";
+
+interface TunableDefinition {
+  section: TunableSection;
+  default: number;
+  min: number;
+  max: number;
+  integer?: boolean;
+}
+
+const def = (
+  section: TunableSection,
+  defaultValue: number,
+  min: number,
+  max: number,
+  integer = true,
+): TunableDefinition => ( {
+  section, default: defaultValue, min, max, integer,
+} );
+
+export const TUNABLE_PARAMS = {
+  aiCameraFps: def( "ai", 1, 0.2, 10, false ),
+  aiCameraConfidenceThreshold: def( "ai", 70, 0, 100 ),
+  aiCameraStoredResults: def( "ai", 5, 1, 20 ),
+  aiCameraCropRatio: def( "ai", 1, 0.1, 1, false ),
+  matchHighConfidence: def( "ai", 93, 0, 100 ),
+  matchLikelyConfidence: def( "ai", 50, 0, 100 ),
+  subjectCropPadding: def( "ai", 0.1, 0, 1, false ),
+  subjectCropFrameFraction: def( "ai", 0.8, 0.1, 1, false ),
+
+  audioIdThreshold: def( "audio", 0.5, 0, 1, false ),
+  audioIdVibrateThreshold: def( "audio", 0.7, 0, 1, false ),
+  audioIdDimAfterSeconds: def( "audio", 30, 1, 600 ),
+  audioIdNewCallGapSeconds: def( "audio", 6, 0.5, 60, false ),
+  audioIdRealertHours: def( "audio", 24, 0.1, 720, false ),
+  audioIdRecentObsDays: def( "audio", 30, 0, 365 ),
+  audioIdBirdGeoThreshold: def( "audio", 0.03, 0, 1, false ),
+  audioIdNonBirdGeoThreshold: def( "audio", 0.0003, 0, 1, false ),
+  audioIdCallLogit: def( "audio", 0, -20, 20, false ),
+  audioIdCallPeakRange: def( "audio", 2, 0, 20, false ),
+  audioIdCallGapSeconds: def( "audio", 2, 0, 15, false ),
+  audioIdCallPaddingBins: def( "audio", 1, 0, 45 ),
+  audioIdMinCallSeconds: def( "audio", 1, 0, 15, false ),
+
+  maxPhotosPerObservation: def( "camera", 20, 1, 100 ),
+  maxPhotoInspectZoom: def( "camera", 20, 2, 100 ),
+
+  targetLocationAccuracyM: def( "location", 10, 1, 1000 ),
+  locationAccuracyDeadlineSeconds: def( "location", 6, 1, 60 ),
+  locationHistoryDistanceM: def( "location", 50, 1, 10000 ),
+  locationHistoryIntervalMinutes: def( "location", 2, 0.1, 60, false ),
+  locationMatchMaxGapHours: def( "location", 12, 0.1, 168, false ),
+  locationHistoryMaxAccuracyM: def( "location", 100, 1, 10000 ),
+  defaultObsLocationAccuracyM: def( "location", 1000, 1, 100000 ),
+
+  maxConcurrentUploads: def( "uploads", 3, 1, 10 ),
+  uploadMaxDimension: def( "uploads", 2048, 512, 4096 ),
+  uploadMaxMb: def( "uploads", 5, 1, 50 ),
+  uploadMaxRetries: def( "uploads", 3, 0, 10 ),
+  uploadTimeoutMinutes: def( "uploads", 5, 1, 60 ),
+  importSectionGapMinutes: def( "uploads", 5, 0.1, 1440, false ),
+  importMaxSectionSize: def( "uploads", 100, 2, 1000 ),
+
+  mediaCacheDays: def( "storage", 2, 0.1, 60, false ),
+  remoteImageCacheMb: def( "storage", 500, 10, 10000 ),
+  cropSourcesCacheMb: def( "storage", 1024, 10, 20000 ),
+  cropPreloadAhead: def( "storage", 10, 0, 100 ),
+  cropPreloadConcurrency: def( "storage", 1, 1, 4 ),
+  syncedPhotoFolderMaxGb: def( "storage", 5, 0.1, 100, false ),
+
+  usbMaxPhotosPerScan: def( "usb", 500, 1, 5000 ),
+  usbStagingRetentionDays: def( "usb", 3, 0, 365, false ),
+
+  placeSearchMaxSuggestions: def( "explore", 5, 1, 20 ),
+
+  gamePoolSize: def( "game", 20, 1, 200 ),
+  gameLookalikeRadiusKm: def( "game", 500, 1, 20000 ),
+  gameLocationRadiusKm: def( "game", 200, 1, 20000 ),
+
+  advancedModeOnboardingObservations: def( "interface", 100, 0, 100000 ),
+  autoAdvancedModeObservations: def( "interface", 100, 0, 100000 ),
+} satisfies Record<string, TunableDefinition>;
+
+export type TunableKey = keyof typeof TUNABLE_PARAMS;
+
+const storage = new MMKV( { id: "tunable-params" } );
+
+const readOverride = ( key: TunableKey ): number | undefined => storage.getNumber( key );
+
+const clampTunable = ( key: TunableKey, value: number ) => {
+  const { min, max, integer } = TUNABLE_PARAMS[key] as TunableDefinition;
+  const clamped = Math.min( max, Math.max( min, value ) );
+  return integer
+    ? Math.round( clamped )
+    : clamped;
+};
+
+export const getTunable = ( key: TunableKey ): number => {
+  const override = readOverride( key );
+  return override === undefined || !Number.isFinite( override )
+    ? TUNABLE_PARAMS[key].default
+    : clampTunable( key, override );
+};
+
+export const setTunable = ( key: TunableKey, value: number ) => {
+  const clamped = clampTunable( key, value );
+  // Entering the default value is the same as clearing the override
+  if ( clamped === TUNABLE_PARAMS[key].default ) {
+    storage.delete( key );
+  } else {
+    storage.set( key, clamped );
+  }
+};
+
+export const resetTunable = ( key: TunableKey ) => storage.delete( key );
+
+export const resetAllTunables = ( ) => storage.clearAll( );
+
+export const isTunableOverridden = ( key: TunableKey ) => (
+  getTunable( key ) !== TUNABLE_PARAMS[key].default
+);

@@ -5,6 +5,7 @@ import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { useCallback } from "react";
 import { clearRollbackPhotos } from "sharedHelpers/clearCaches";
+import promptDeleteOriginalDevicePhotos from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import useStore from "stores/useStore";
 
 interface ExitOptions {
@@ -12,7 +13,22 @@ interface ExitOptions {
 }
 interface Options {
   navigate?: ( ) => void;
+  promptDeleteOriginalPhotos?: boolean;
+  // Go back to the screen the user opened ObsEdit from (e.g. ObsDetails in
+  // the Explore tab) instead of resetting into the Me tab, when that screen
+  // is somewhere they were browsing rather than part of the create flow
+  returnToPreviousScreen?: boolean;
 }
+
+// Screens that can sit beneath ObsEdit when editing an existing observation
+// and that are safe to return to once the flow state is reset
+const BROWSING_SCREENS = new Set( [
+  "ObsDetails",
+  "ObsList",
+  "RootExplore",
+  "Explore",
+  "Notifications",
+] );
 
 export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
   // This hook is used in:
@@ -32,6 +48,53 @@ export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
   const clearRollbackSnapshot = useStore( state => state.clearRollbackSnapshot );
 
   return useCallback( ( options: Options = {} ) => {
+    const originalDevicePhotoUris = options.promptDeleteOriginalPhotos
+      ? [...useStore.getState( ).removedOriginalDevicePhotoUris]
+      : [];
+
+    const canReturnToPreviousScreen = ( ) => {
+      const state = navigation.getState( );
+      if ( !state || state.index < 1 ) return false;
+      const previousRoute = state.routes[state.index - 1];
+      return !!previousRoute && BROWSING_SCREENS.has( previousRoute.name );
+    };
+    const returnToPreviousScreen = !!options.returnToPreviousScreen
+      && canReturnToPreviousScreen( );
+
+    const finishExit = ( ) => {
+      if ( returnToPreviousScreen ) {
+        navigation.goBack( );
+      } else if ( typeof ( options.navigate ) === "function" ) {
+        // This seems only to be used in ObsEditHeader in a few cases of backing out
+        options.navigate( );
+      } else {
+        // Use a reset (not navigate) to avoid piling up screen instances
+        navigation.dispatch(
+          CommonActions.reset( {
+            index: 0,
+            routes: [
+              {
+                name: "TabNavigator",
+                state: {
+                  routes: [
+                    {
+                      name: "ObservationsTab",
+                      state: {
+                        index: 0,
+                        routes: [
+                          { name: "ObsList" },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          } ),
+        );
+      }
+    };
+
     // In theory everything that needs to be saved has been saved at this
     // point, so clean up the state before we ditch this posicle stand. Note
     // that for mysterious reasons, tests seem to like it better if we do
@@ -48,34 +111,10 @@ export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
     }
     void clearRollbackPhotos( );
 
-    if ( typeof ( options.navigate ) === "function" ) {
-      // This seems only to be used in ObsEditHeader in a few cases of backing out
-      options.navigate( );
+    if ( originalDevicePhotoUris.length > 0 ) {
+      promptDeleteOriginalDevicePhotos( originalDevicePhotoUris, finishExit );
     } else {
-      // Use a reset (not navigate) to avoid piling up screen instances
-      navigation.dispatch(
-        CommonActions.reset( {
-          index: 0,
-          routes: [
-            {
-              name: "TabNavigator",
-              state: {
-                routes: [
-                  {
-                    name: "ObservationsTab",
-                    state: {
-                      index: 0,
-                      routes: [
-                        { name: "ObsList" },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        } ),
-      );
+      finishExit( );
     }
   }, [
     clearRollbackSnapshot,

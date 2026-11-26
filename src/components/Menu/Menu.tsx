@@ -25,6 +25,7 @@ import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
 import { log } from "sharedHelpers/logger";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
+import { isVideoStabilizerSupported } from "sharedHelpers/videoStabilizerNative";
 import {
   useCurrentUser, useDebugMode,
   useLayoutPrefs, useTranslation,
@@ -109,7 +110,6 @@ const Menu = ( ) => {
   const currentUser = useCurrentUser( );
   const { t } = useTranslation( );
   const { bottom, top } = useSafeAreaInsets( );
-
   const { isConnected } = useNetInfo( );
 
   const layoutPrefs = useLayoutPrefs();
@@ -121,6 +121,25 @@ const Menu = ( ) => {
       navigation: "Projects",
       icon: "briefcase",
     },
+    locationHistory: {
+      label: t( "LOCATION-HISTORY" ),
+      navigation: "LocationHistory",
+      icon: "location",
+    },
+    cameraPairs: {
+      label: t( "CAMERA-PAIRS" ),
+      navigation: "CameraPairs",
+      icon: "camera",
+    },
+    ...( isVideoStabilizerSupported( )
+      ? {
+        videoStabilizer: {
+          label: t( "VIDEO-STABILIZER" ),
+          navigation: "VideoStabilizer",
+          icon: "play-circle",
+        },
+      }
+      : {} ),
     about: {
       label: t( "ABOUT" ),
       navigation: "About",
@@ -140,6 +159,11 @@ const Menu = ( ) => {
       label: t( "HELP" ),
       navigation: "Help",
       icon: "help-circle",
+    },
+    cropLog: {
+      label: t( "CROP-LOG" ),
+      navigation: "CropLogViewer",
+      icon: "clipboard",
     },
     settings: {
       testID: "settings",
@@ -215,6 +239,7 @@ const Menu = ( ) => {
     const {
       isDefaultMode,
       isAllAddObsOptionsMode,
+      isPhotoLibraryAddObsMode,
       screenAfterPhotoEvidence,
     } = layoutPrefs;
     const modeContext = ( isDefaultMode
@@ -225,9 +250,9 @@ const Menu = ( ) => {
       }
       : {
         mode: "advanced",
-        observationButtonMode: isAllAddObsOptionsMode
-          ? "Obs Sheet"
-          : "AI Camera",
+        observationButtonMode: ( isAllAddObsOptionsMode && "Obs Sheet" )
+          || ( isPhotoLibraryAddObsMode && "Photo Library" )
+          || "AI Camera",
         screenAfterPhotoEvidence,
       } );
     const loggedInContext = currentUser

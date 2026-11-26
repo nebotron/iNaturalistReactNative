@@ -1,0 +1,134 @@
+import { mkdir } from "@dr.pogodin/react-native-fs";
+import { photoUploadPath } from "appConstants/paths";
+import { NativeModules } from "react-native";
+import { log } from "sharedHelpers/logger";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import pixelCropFromNormalizedCrop from "sharedHelpers/pixelCropBounds";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
+import { getTunable } from "sharedHelpers/tunableParams";
+import * as uuid from "uuid";
+
+const logger = log.extend( "cropImageFile" );
+
+interface CropResult {
+  path: string;
+  // Mean level (0-255) of what was written.
+  outputLevel: number;
+  // Decodes it took, and how long each ran; a raw that failed is tried again.
+  attempts: number;
+  attemptMs: number[];
+  // A raw's free memory at each try.
+  attemptFreeMB?: number[];
+}
+
+interface ImageCropperModule {
+  cropImage: (
+    inputPath: string,
+    originX: number,
+    originY: number,
+    width: number,
+    height: number,
+    outputPath: string,
+    // Gain multiplied into each channel before the one encode, capped per
+    // pixel once its brightest channel reaches 255 so its hue never shifts.
+    // 1 leaves pixels as is.
+    brightness: number,
+    // Longest side of what is written; a larger crop is scaled down with a
+    // high-quality filter before the one encode. 0 keeps the crop's own size.
+    maxPixel: number,
+  ) => Promise<CropResult>;
+}
+
+// Below this, a written crop is dark enough to be worth a line in the log.
+const DARK_OUTPUT_LEVEL = 24;
+
+// A crop within a few pixels of this is written at exactly this size, and a
+// larger one is scaled down to it in the same native pass, so the upload copy
+// is the crop file itself: one JPEG encode, never a second one on upload.
+const UPLOAD_MAX_SIDE = getTunable( "uploadMaxDimension" );
+
+const { ImageCropper } = NativeModules as {
+  ImageCropper?: ImageCropperModule;
+};
+
+const cropImageFile = async (
+  imageUri: string,
+  crop: NormalizedCrop,
+  imageWidth: number,
+  imageHeight: number,
+  outputDir = photoUploadPath,
+  // Exposure gain from the crop editor's brightness slider, baked into the
+  // cropped file. 1 leaves the pixels untouched.
+  brightness = 1,
+  // Longest side written. Defaults to the upload size; 0 keeps the crop's
+  // full resolution.
+  maxSide = UPLOAD_MAX_SIDE,
+): Promise<string> => {
+  if ( !ImageCropper?.cropImage ) {
+    throw new Error( "ImageCropper native module is unavailable" );
+  }
+
+  await mkdir( outputDir );
+  const outputPath = `${outputDir}/${uuid.v4()}.jpg`;
+  const inputPath = stripFilePrefix( imageUri );
+
+  const pixelCrop = pixelCropFromNormalizedCrop(
+    crop,
+    imageWidth,
+    imageHeight,
+    maxSide || undefined,
+  );
+
+  try {
+    const result = await ImageCropper.cropImage(
+      inputPath,
+      pixelCrop.originX,
+      pixelCrop.originY,
+      pixelCrop.width,
+      pixelCrop.height,
+      outputPath,
+      brightness,
+      maxSide,
+    );
+    const croppedPath = result.path;
+    // A crop that turned out black reached the grid with no error behind it.
+    if (
+      result.outputLevel < DARK_OUTPUT_LEVEL
+      || result.attempts > 1
+    ) {
+      logger.warnWithExtra( "crop_output_check", {
+        source: imageUri,
+        outputLevel: result.outputLevel,
+        attempts: result.attempts,
+        attemptMs: result.attemptMs,
+        attemptFreeMB: result.attemptFreeMB,
+      } );
+    }
+    // Native ImageCropper copies EXIF/metadata from the source image into the
+    // cropped JPEG and updates dimension/orientation tags for the new size.
+    return croppedPath.startsWith( "file://" )
+      ? croppedPath
+      : `file://${croppedPath}`;
+  } catch ( error ) {
+    // The crop the user framed is lost to a "Something went wrong" alert, so
+    // this line is the only record of which photo it was.
+    logger.errorWithExtra( "crop_failed", {
+      source: imageUri,
+      imageWidth,
+      imageHeight,
+      originX: pixelCrop.originX,
+      originY: pixelCrop.originY,
+      cropWidth: pixelCrop.width,
+      cropHeight: pixelCrop.height,
+      error: error instanceof Error
+        ? error.message
+        : String( error ),
+      // Why a raw decode drew nothing (see rawDecodeFailureDiagnostics).
+      diagnostics: ( error as { userInfo?: { diagnostics?: unknown } } )
+        ?.userInfo?.diagnostics,
+    } );
+    throw error;
+  }
+};
+
+export default cropImageFile;

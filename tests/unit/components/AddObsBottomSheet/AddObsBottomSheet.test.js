@@ -19,4 +19,9 @@ describe( "AddObsBottomSheet", ( ) => {
     );
     expect( aiCameraButton ).toBeOnTheScreen();
   } );
+
+  it( "shows the Audio ID button", async ( ) => {
+    render( <AddObsBottomSheet closeModal={jest.fn( )} /> );
+    expect( screen.getByTestId( "audio-id-button" ) ).toBeOnTheScreen();
+  } );
 } );

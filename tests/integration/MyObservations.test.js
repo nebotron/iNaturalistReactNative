@@ -24,12 +24,22 @@ import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
 
+// Mock retry to call functions immediately without delay, so upload errors
+// appear in the test without waiting for the retry timeout.
+jest.mock( "uploaders/utils/retry", ( ) => ( {
+  __esModule: true,
+  default: fn => fn( ),
+} ) );
+
+// An observation missing any of the basics (evidence, taxon, date, location)
+// offers an edit button instead of an upload button, so these all need a taxon
 const mockUnsyncedObservations = [
   factory( "LocalObservation", {
     _synced_at: null,
     observed_on_string: "2024-05-01",
     latitude: 1.2345,
     longitude: 1.2345,
+    taxon: factory( "LocalTaxon" ),
     observationPhotos: [
       factory( "LocalObservationPhoto", {
         photo: {
@@ -44,6 +54,7 @@ const mockUnsyncedObservations = [
     observed_on_string: "2024-05-02",
     latitude: 1.2345,
     longitude: 1.2345,
+    taxon: factory( "LocalTaxon" ),
     observationPhotos: [
       factory( "LocalObservationPhoto", {
         photo: {

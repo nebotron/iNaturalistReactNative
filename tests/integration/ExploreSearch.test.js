@@ -6,18 +6,23 @@ import {
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
+import isEqual from "lodash/isEqual";
+import { defaultExploreFilters } from "providers/ExploreContext";
+import useStore from "stores/useStore";
 import factory, { makeResponse } from "tests/factory";
 import {
-  focusSearchField,
+  addTaxonFilter,
   lastObservationsSearchParams,
   navigateToExplore,
-  openUniversalSearch,
+  openAdvancedSearch,
   searchForTaxon,
-  submitUniversalSearch,
-  typeIntoSearchField,
+  submitAdvancedSearch,
 } from "tests/helpers/explore";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
+import {
+  savedSearch, setSavedSearches, skipDefaultSavedSearches,
+} from "tests/helpers/savedSearch";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
@@ -37,8 +42,12 @@ const mockTaxon = factory( "RemoteTaxon", {
   rank_level: 10,
 } );
 
-const mockPlace = factory( "RemotePlace", {
-  display_name: "Oakland, CA",
+const mockOtherTaxon = factory( "RemoteTaxon", {
+  id: 746,
+  name: "Silphium laciniatum",
+  preferred_common_name: "Compass Plant",
+  rank: "species",
+  rank_level: 10,
 } );
 
 const mockObservations = [factory( "RemoteObservation", { taxon: mockTaxon } )];
@@ -72,14 +81,6 @@ afterAll( uniqueRealmAfterAll );
 
 const actor = userEvent.setup( );
 
-// The subject field and the location field both go through inatjs.search, told apart by source
-const mockAutocomplete = ( ) => inatjs.search.mockImplementation( params => {
-  if ( params.sources === "places" ) {
-    return makeResponse( [{ type: "place", score: 1, place: mockPlace }] );
-  }
-  return makeResponse( [{ type: "taxon", score: 1, taxon: mockTaxon }] );
-} );
-
 beforeAll( async ( ) => {
   await initI18next( );
   jest.useFakeTimers( );
@@ -92,8 +93,8 @@ beforeAll( async ( ) => {
 
 beforeEach( async ( ) => {
   setStoreStateLayout( { isDefaultMode: false, isAllAddObsOptionsMode: true } );
-  mockAutocomplete( );
   inatjs.observations.search.mockClear( );
+  skipDefaultSavedSearches( mockUser.id );
   await signIn( mockUser, { realm: global.mockRealms[__filename] } );
 } );
 
@@ -103,61 +104,128 @@ afterEach( async ( ) => {
 
 global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
 
-describe( "searching from Universal Search", ( ) => {
-  it( "searches for species the signed-in user has not observed", async ( ) => {
+describe( "searching from Advanced Search", ( ) => {
+  describe( "excluding the species in a saved search", ( ) => {
+    // The species fetch asks for just enough to find each taxon's species
+    const isSpeciesFetch = params => isEqual( params?.fields, {
+      taxon: { id: true, rank_level: true, ancestor_ids: true },
+    } );
+
+    beforeEach( ( ) => {
+      inatjs.observations.speciesCounts.mockClear( );
+      setSavedSearches( [{
+        ...savedSearch( { subject: { type: "taxon", taxon: { id: 47126, name: "Plantae" } } } ),
+        key: "saved-backyard",
+        name: "Backyard",
+      }] );
+    } );
+
+    afterEach( ( ) => setSavedSearches( [] ) );
+
+    it( "leaves out the saved search's species, and fails clearly once renamed", async ( ) => {
+      renderApp( );
+      await navigateToExplore( );
+      await openAdvancedSearch( );
+
+      await actor.press( screen.getByLabelText( "Exclude species in a saved search" ) );
+      // The saved search list shows it too; the sheet comes last
+      await actor.press( ( await screen.findAllByText( "Backyard" ) ).at( -1 ) );
+      await actor.press( screen.getByText( "CONFIRM" ) );
+      expect( await screen.findByText( "Excluding species in “Backyard”" ) ).toBeVisible( );
+      await submitAdvancedSearch( );
+
+      await waitFor( ( ) => {
+        expect( lastObservationsSearchParams( ) ).toMatchObject( {
+          without_taxon_id: String( mockTaxon.id ),
+        } );
+      } );
+      const speciesFetch = inatjs.observations.speciesCounts.mock.calls
+        .map( call => call[0] )
+        .find( isSpeciesFetch );
+      expect( speciesFetch ).toMatchObject( { taxon_id: 47126 } );
+
+      setSavedSearches( [{
+        ...useStore.getState( ).exploreSavedSearches.searches[0],
+        name: "Back yard",
+      }] );
+
+      expect( await screen.findByTestId( "ExploreResults.excludedSpeciesError" ) ).toBeVisible( );
+      expect( screen.getByText( /there’s no saved search with that name/ ) ).toBeVisible( );
+    } );
+  } );
+
+  it( "still excludes a saved search overwritten from a search that excludes it", async ( ) => {
+    setSavedSearches( [
+      {
+        ...savedSearch( { subject: { type: "taxon", taxon: { id: 47126, name: "Plantae" } } } ),
+        key: "saved-backyard",
+        name: "Backyard",
+      },
+      {
+        ...savedSearch( {
+          subject: null,
+          filters: { ...defaultExploreFilters, excludeSpeciesInSavedSearch: "Backyard" },
+        } ),
+        key: "saved-not-backyard",
+        name: "Not in backyard",
+      },
+    ] );
     renderApp( );
     await navigateToExplore( );
-    await openUniversalSearch( );
+    await openAdvancedSearch( );
+    await actor.press( screen.getByTestId( "SavedSearches.load.saved-not-backyard" ) );
+    await screen.findByTestId( "ExploreResults" );
 
-    await actor.press( await screen.findByTestId( "DefaultSearchOptions.unobserved" ) );
-    await submitUniversalSearch( );
+    // Edit Backyard from the search that excludes it
+    await openAdvancedSearch( );
+    await addTaxonFilter( mockOtherTaxon, global.mockRealms[__filename] );
+    inatjs.observations.speciesCounts.mockClear( );
+    await actor.press( screen.getByTestId( "SavedSearches.overwrite.saved-backyard" ) );
+    await actor.press( screen.getByTestId( "SavedSearches.load.saved-not-backyard" ) );
+    await screen.findByTestId( "ExploreResults" );
+
+    await waitFor( ( ) => {
+      const speciesFetches = inatjs.observations.speciesCounts.mock.calls
+        .map( call => call[0] )
+        .filter( params => isEqual( params?.fields, {
+          taxon: { id: true, rank_level: true, ancestor_ids: true },
+        } ) );
+      expect( speciesFetches.at( -1 ) ).toMatchObject( { taxon_id: mockOtherTaxon.id } );
+    } );
+    expect( screen.queryByTestId( "ExploreResults.excludedSpeciesError" ) ).toBeNull( );
+  } );
+
+  it( "searches for several taxa at once", async ( ) => {
+    renderApp( );
+    await navigateToExplore( );
+    await openAdvancedSearch( );
+
+    await addTaxonFilter( mockTaxon, global.mockRealms[__filename] );
+    await addTaxonFilter( mockOtherTaxon, global.mockRealms[__filename] );
+    await submitAdvancedSearch( );
 
     await waitFor( ( ) => {
       expect( lastObservationsSearchParams( ) ).toMatchObject( {
-        unobserved_by_user_id: mockUser.id,
+        taxon_id: `${mockTaxon.id},${mockOtherTaxon.id}`,
       } );
     } );
     const header = await screen.findByTestId( "ExploreHeader" );
-    expect( within( header ).getByTestId( "ExploreHeader.unobserved" ) ).toBeVisible( );
-  } );
-
-  it( "searches the place the user picked and offers it again later", async ( ) => {
-    renderApp( );
-    await navigateToExplore( );
-    await openUniversalSearch( );
-
-    await typeIntoSearchField( "UniversalSearch.locationInput", "oakland" );
-    await actor.press( await screen.findByText( mockPlace.display_name ) );
-    await submitUniversalSearch( );
-
-    await waitFor( ( ) => {
-      expect( lastObservationsSearchParams( ) ).toMatchObject( { place_id: mockPlace.id } );
-    } );
-    expect( lastObservationsSearchParams( ) ).not.toHaveProperty( "lat" );
-    const header = await screen.findByTestId( "ExploreHeader" );
-    expect( within( header ).getByText( mockPlace.display_name ) ).toBeVisible( );
-
-    // The place is remembered for the next search
-    await openUniversalSearch( );
-    await focusSearchField( "UniversalSearch.locationInput" );
-    expect(
-      within( await screen.findByTestId( "RecentLocations" ) )
-        .getByText( mockPlace.display_name ),
-    ).toBeVisible( );
+    expect( within( header ).getByText( mockTaxon.name ) ).toBeVisible( );
   } );
 
   it( "still has the search when the user comes back from another tab", async ( ) => {
     renderApp( );
     await navigateToExplore( );
-    await openUniversalSearch( );
-    await searchForTaxon( mockTaxon );
+    await searchForTaxon( mockTaxon, global.mockRealms[__filename] );
     await waitFor( ( ) => {
       expect( lastObservationsSearchParams( ) ).toMatchObject( { taxon_id: mockTaxon.id } );
     } );
 
-    const tabBar = await screen.findByTestId( "CustomTabBar" );
-    await actor.press( within( tabBar ).getByTestId( "NavButton.personIcon" ) );
-    await actor.press( within( tabBar ).getByText( "Explore" ) );
+    await actor.press( within( await screen.findByTestId( "CustomTabBar" ) )
+      .getByTestId( "NavButton.personIcon" ) );
+    // The Me tab resets its stack, which renders the tab bar afresh
+    await actor.press( within( await screen.findByTestId( "CustomTabBar" ) )
+      .getByText( "Explore" ) );
 
     await screen.findByTestId( "ExploreResults" );
     const header = await screen.findByTestId( "ExploreHeader" );

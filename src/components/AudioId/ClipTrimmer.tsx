@@ -1,0 +1,267 @@
+import { exists } from "@dr.pogodin/react-native-fs";
+import { INatIconButton } from "components/SharedComponents";
+import { View } from "components/styledComponents";
+import React, {
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
+} from "react";
+import { PanResponder } from "react-native";
+import { useTranslation } from "sharedHooks";
+
+import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
+import type { AudioIdSpecies } from "./audioIdModel";
+import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
+import ClipProbabilityGraph, { useClipTimeline } from "./ClipProbabilityGraph";
+import SoundSpectrogram from "./SoundSpectrogram";
+
+// `context` when it's the 15 s context clip rather than the 5 s one
+interface Span { path: string; startMs: number; endMs: number; context: boolean }
+
+// How close in points a touch has to land to grab a start or end handle
+const GRAB = 24;
+const MIN_CLIP = 0.2;
+// How long after the last change to a trim it's saved, so a drag saves once
+const SAVE_DELAY_MS = 500;
+
+// The audio around a clip, with the trim it starts with: the 15 s context
+// clip, trimmed to the call found in it, or else to the
+// 5 s window the call was heard in (the context clip ends 5 s after the
+// window, which ends about when the clip was heard). Clips from before
+// context clips were saved fall back to the 5 s window. A trim the user set
+// is saved with the clip and starts it instead.
+export const useClipSpan = (
+  id: string,
+  heardAt: number | undefined,
+  call?: [number, number],
+  // The context clip's length, when it isn't 15 s (see AudioIdClip.duration)
+  clipDuration?: number,
+  savedTrim?: [number, number],
+) => {
+  const [callStart, callEnd] = call || ( clipDuration
+    ? [0, clipDuration]
+    : [5, 10] );
+  const [span, setSpan] = useState<Span | null>( null );
+  const [trim, setTrim] = useState<[number, number]>( [0, 0] );
+  // Read when the span loads, so saving a trim doesn't reload it
+  const savedTrimRef = useRef( savedTrim );
+  useLayoutEffect( ( ) => { savedTrimRef.current = savedTrim; } );
+  const unsaved = useRef<[number, number] | null>( null );
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>( undefined );
+  const save = useCallback( ( ) => {
+    clearTimeout( saveTimer.current );
+    if ( !unsaved.current ) return;
+    useAudioIdHistory.getState( ).updateClip( id, { trim: unsaved.current } );
+    unsaved.current = null;
+  }, [id] );
+  // Leaving the clip saves a trim still waiting to be
+  useEffect( ( ) => save, [save] );
+  const changeTrim = useCallback( ( next: [number, number] ) => {
+    setTrim( next );
+    unsaved.current = next;
+    clearTimeout( saveTimer.current );
+    saveTimer.current = setTimeout( save, SAVE_DELAY_MS );
+  }, [save] );
+  useEffect( ( ) => {
+    if ( !heardAt ) return;
+    exists( contextClipPath( id ) ).then( hasContext => {
+      const s = hasContext
+        ? {
+          path: contextClipPath( id ),
+          startMs: clipDuration
+            ? heardAt - clipDuration * 1000
+            : heardAt - 10000,
+          endMs: clipDuration
+            ? heardAt
+            : heardAt + 5000,
+          context: true,
+        }
+        : {
+          path: clipPath( id ), startMs: heardAt - 5000, endMs: heardAt, context: false,
+        };
+      const duration = ( s.endMs - s.startMs ) / 1000;
+      setSpan( s );
+      const saved = savedTrimRef.current;
+      if ( saved ) {
+        const start = Math.min( Math.max( saved[0], 0 ), Math.max( duration - MIN_CLIP, 0 ) );
+        setTrim( [start, Math.min( Math.max( saved[1], start + MIN_CLIP ), duration )] );
+      } else {
+        setTrim( !hasContext
+          ? [0, duration]
+          : [callStart, callEnd] );
+      }
+    } );
+  }, [id, heardAt, callStart, callEnd, clipDuration] );
+  return { span, trim, setTrim: changeTrim };
+};
+
+interface Props {
+  span: Span;
+  trim: [number, number];
+  onTrimChange: ( trim: [number, number] ) => void;
+  // The species identified, whose probability is graphed below the spectrogram
+  sp: AudioIdSpecies;
+  // The live session's timeline of the context clip, when it was kept
+  timeline?: ( number | null )[];
+}
+
+// A clip's spectrogram: drag the handles to set where it starts and ends, or
+// anywhere else to scrub, then hear it from there.
+const ClipTrimmer = ( {
+  span, trim, onTrimChange, sp, timeline,
+}: Props ) => {
+  const { t } = useTranslation( );
+  const logits = useClipTimeline( span.path, sp, span.context
+    ? timeline
+    : undefined );
+  const duration = ( span.endMs - span.startMs ) / 1000;
+  // In seconds from the span's start
+  const [position, setPosition] = useState( trim[0] );
+  const [playing, setPlaying] = useState( false );
+  const [player] = useState( ( ) => ( {} ) );
+  const timer = useRef<ReturnType<typeof setInterval>>( undefined );
+  const playingRef = useRef( false );
+  const width = useRef( 1 );
+
+  useEffect( ( ) => {
+    setPlayingAudio( player, playing, ( ) => {
+      clearInterval( timer.current );
+      playingRef.current = false;
+      setPlaying( false );
+    } );
+    return ( ) => setPlayingAudio( player, false );
+  }, [player, playing] );
+
+  useEffect( ( ) => ( ) => {
+    clearInterval( timer.current );
+    if ( playingRef.current ) AudioBirdId?.stopClip( );
+  }, [] );
+
+  const stop = ( ) => AudioBirdId?.stopClip( );
+
+  const play = async ( at: number ) => {
+    const from = at >= trim[0] && at < trim[1] - 0.1
+      ? at
+      : trim[0];
+    const started = Date.now( );
+    setPlaying( true );
+    playingRef.current = true;
+    clearInterval( timer.current );
+    timer.current = setInterval( ( ) => setPosition(
+      Math.min( from + ( Date.now( ) - started ) / 1000, trim[1] ),
+    ), 50 );
+    await AudioBirdId?.playClipRange( span.path, from, trim[1] ).catch( ( ) => undefined );
+    clearInterval( timer.current );
+    playingRef.current = false;
+    setPlaying( false );
+  };
+
+  // The responder is made once, so it reads the latest of these through a ref.
+  const latest = useRef( { trim, onTrimChange, play } );
+  useLayoutEffect( ( ) => { latest.current = { trim, onTrimChange, play }; } );
+  const dragging = useRef<"start" | "end" | "scrub">( "scrub" );
+  // Where the touch began, in points from the left edge
+  const grantX = useRef( 0 );
+  const seconds = ( x: number ) => Math.min( Math.max( x / width.current, 0 ), 1 ) * duration;
+  const [responder] = useState( ( ) => PanResponder.create( {
+    onStartShouldSetPanResponder: ( ) => true,
+    onPanResponderTerminationRequest: ( ) => false,
+    onPanResponderGrant: e => {
+      const x = e.nativeEvent.locationX;
+      grantX.current = x;
+      const [start, end] = latest.current.trim;
+      const toStart = Math.abs( x - ( start / duration ) * width.current );
+      const toEnd = Math.abs( x - ( end / duration ) * width.current );
+      if ( Math.min( toStart, toEnd ) <= GRAB ) {
+        dragging.current = toStart < toEnd
+          ? "start"
+          : "end";
+      } else {
+        dragging.current = "scrub";
+        stop( );
+        setPosition( seconds( x ) );
+      }
+    },
+    onPanResponderMove: ( _e, g ) => {
+      const at = seconds( grantX.current + g.dx );
+      const [start, end] = latest.current.trim;
+      if ( dragging.current === "start" ) {
+        latest.current.onTrimChange( [Math.min( at, end - MIN_CLIP ), end] );
+      } else if ( dragging.current === "end" ) {
+        latest.current.onTrimChange( [start, Math.max( at, start + MIN_CLIP )] );
+      } else {
+        setPosition( at );
+      }
+    },
+    onPanResponderRelease: ( _e, g ) => {
+      if ( dragging.current !== "scrub" ) return;
+      const at = seconds( grantX.current + g.dx );
+      setPosition( at );
+      latest.current.play( at );
+    },
+  } ) );
+
+  const percent = ( at: number ) => `${( at / duration ) * 100}%`;
+  const handle = ( at: number ) => (
+    <View
+      className="absolute h-full w-1 -ml-0.5 bg-inatGreen items-center justify-center"
+      style={{ left: percent( at ) }}
+    >
+      <View className="w-3 h-8 rounded bg-inatGreen" />
+    </View>
+  );
+
+  return (
+    <View>
+      <View
+        className="mt-4 h-[140px] rounded overflow-hidden"
+        onLayout={e => { width.current = e.nativeEvent.layout.width || 1; }}
+        // eslint-disable-next-line react/jsx-props-no-spreading
+        {...responder.panHandlers}
+      >
+        <SoundSpectrogram uri={span.path} />
+        {/* Touches pass through to the container, so locations are relative to it */}
+        <View className="absolute inset-0" pointerEvents="none">
+          <View
+            className="absolute h-full left-0 bg-black/40"
+            style={{ width: percent( trim[0] ) }}
+          />
+          <View
+            className="absolute h-full right-0 bg-black/40"
+            style={{ width: percent( duration - trim[1] ) }}
+          />
+          <View
+            className="absolute h-full w-0.5 bg-warningRed"
+            style={{ left: percent( position ) }}
+          />
+          {handle( trim[0] )}
+          {handle( trim[1] )}
+        </View>
+      </View>
+      {logits && logits.length > 0 && (
+        <ClipProbabilityGraph
+          logits={logits}
+          duration={duration}
+          trim={trim}
+          position={position}
+        />
+      )}
+      <View className="flex-row items-center justify-center mt-1">
+        <INatIconButton
+          icon={playing
+            ? "stop"
+            : "play"}
+          onPress={playing
+            ? stop
+            : ( ) => play( position )}
+          accessibilityLabel={playing
+            ? t( "Stop--audio" )
+            : t( "Play--audio" )}
+          accessibilityHint={playing
+            ? t( "Stops-the-recording" )
+            : t( "Plays-the-trimmed-clip-from-the-playhead" )}
+        />
+      </View>
+    </View>
+  );
+};
+
+export default ClipTrimmer;

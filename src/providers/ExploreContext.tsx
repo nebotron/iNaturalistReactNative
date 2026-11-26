@@ -1,11 +1,16 @@
 import type { ApiProjectSummary, ApiTotalBounds, ApiUser } from "api/types";
-import type { IDENTIFIERS_TAB, OBSERVERS_TAB, SPECIES_TAB } from "appConstants/tabs";
+import type {
+  CAMERA_STATS_TAB, HOTSPOTS_TAB, IDENTIFICATIONS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB,
+  OBSERVERS_TAB, SPECIES_TAB,
+} from "appConstants/tabs";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import type { ExploreEntryParams } from "navigation/types";
 import * as React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import type { SpeciesCountsSort } from "sharedHelpers/speciesSort";
 import { SPECIES_SORT } from "sharedHelpers/speciesSort";
+import type { ExploreGridOverlays } from "stores/createLayoutSlice";
 
 export enum EXPLORE_ACTION {
   SET_SUBJECT = "SET_SUBJECT",
@@ -19,6 +24,8 @@ export enum EXPLORE_ACTION {
   SET_FILTERS = "SET_FILTERS",
   SET_ACTIVE_TAB = "SET_ACTIVE_TAB",
   APPLY_SEARCH = "APPLY_SEARCH",
+  SEARCH_SPECIES = "SEARCH_SPECIES",
+  GO_BACK = "GO_BACK",
   RESET = "RESET"
 }
 
@@ -78,6 +85,22 @@ export enum DATE_UPLOADED {
   ALL = "ALL",
   EXACT_DATE = "EXACT_DATE",
   DATE_RANGE = "DATE_RANGE"
+}
+
+export enum EVIDENCE_TYPE {
+  LIVE_ORGANISM = "LIVE_ORGANISM",
+  DEAD_ORGANISM = "DEAD_ORGANISM",
+  FEATHER = "FEATHER",
+  SCAT = "SCAT",
+  TRACK = "TRACK",
+  BONE = "BONE",
+  MOLT = "MOLT",
+  GALL = "GALL",
+  EGG = "EGG",
+  HAIR = "HAIR",
+  LEAFMINE = "LEAFMINE",
+  CONSTRUCTION = "CONSTRUCTION",
+  UNKNOWN = "UNKNOWN",
 }
 
 export enum MEDIA {
@@ -144,7 +167,12 @@ export type ExploreTab =
   | typeof OBSERVATIONS_TAB
   | typeof SPECIES_TAB
   | typeof OBSERVERS_TAB
-  | typeof IDENTIFIERS_TAB;
+  | typeof IDENTIFIERS_TAB
+  | typeof HOTSPOTS_TAB
+  | typeof LIFELIST_TAB
+  | typeof IDENTIFY_TAB
+  | typeof IDENTIFICATIONS_TAB
+  | typeof CAMERA_STATS_TAB;
 
 export type ExploreSubject =
   | { type: "taxon"; taxon: Taxon }
@@ -178,10 +206,19 @@ export interface ExploreFilters {
   wildStatus: WILD_STATUS;
   reviewedFilter: REVIEWED;
   photoLicense: PHOTO_LICENSE;
+  evidenceTypes?: EVIDENCE_TYPE[] | null;
+  // Observations the signed-in user has faved
+  favedByMe?: boolean | null;
   // User / project, in Explore parlance we always consider taxon to be the "subject"
   user?: ApiUser | null;
   unobservedByUser?: ApiUser | null;
+  // Name of a saved search whose species are left out of this one. Kept by name rather
+  // than copied, so editing that saved search changes this one too; if it's renamed or
+  // deleted the search fails with an error rather than quietly dropping the exclusion.
+  excludeSpeciesInSavedSearch?: string | null;
   project?: ApiProjectSummary | null;
+  // Taxa searched for beyond the subject taxon, and excluded taxa
+  taxonFilters?: ExploreTaxonFilter[] | null;
 }
 
 export const defaultExploreFilters: ExploreFilters = {
@@ -201,7 +238,7 @@ export const defaultExploreFilters: ExploreFilters = {
 
 export type ExploreLocationState =
   | { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE }
-  | { placeMode: EXPLORE_PLACE_MODE.NEARBY }
+  | { placeMode: EXPLORE_PLACE_MODE.NEARBY; radius?: number }
   | { placeMode: EXPLORE_PLACE_MODE.PLACE; place: Place }
   | { placeMode: EXPLORE_PLACE_MODE.MAP_AREA; bounds: ApiTotalBounds };
 
@@ -216,15 +253,34 @@ export interface ExploreState {
   // saved search. Lets a view tell "the search moved out from under me" apart from
   // "the same search re-rendered", which the search fields alone can't when they're equal.
   appliedSearchCount: number;
+  // Subjects, tabs and taxon filters to return to, pushed when a species card opens a
+  // search for it
+  backStack: {
+    subject: ExploreSubject | null;
+    activeTab: ExploreTab;
+    taxonFilters?: ExploreTaxonFilter[] | null;
+  }[];
 }
 
 // Everything that defines a search, as opposed to how the results are being viewed
-export type ExploreSearch = Omit<ExploreState, "activeTab" | "appliedSearchCount">;
+export type ExploreSearch = Omit<
+  ExploreState,
+  "activeTab" | "appliedSearchCount" | "backStack"
+>;
+
+// A saved search also remembers the view it was saved from: the tab, the observations
+// map/grid/list layout, and the info overlaid on grid photos. Optional because searches
+// saved before views were recorded don't have one.
+export type ExploreV2SearchWithTab = ExploreSearch & {
+  activeTab?: ExploreTab;
+  observationsLayout?: string;
+  gridOverlays?: ExploreGridOverlays;
+};
 
 export type ExploreAction =
   | { type: EXPLORE_ACTION.SET_SUBJECT; subject: ExploreSubject }
   | { type: EXPLORE_ACTION.CLEAR_SUBJECT }
-  | { type: EXPLORE_ACTION.SET_LOCATION_NEARBY }
+  | { type: EXPLORE_ACTION.SET_LOCATION_NEARBY; radius?: number }
   | { type: EXPLORE_ACTION.SET_LOCATION_WORLDWIDE }
   | {
     type: EXPLORE_ACTION.SET_LOCATION_PLACE;
@@ -238,8 +294,28 @@ export type ExploreAction =
   | { type: EXPLORE_ACTION.SET_SPECIES_SORT; speciesSortBy: SpeciesCountsSort }
   | { type: EXPLORE_ACTION.SET_FILTERS; filters: ExploreFilters }
   | { type: EXPLORE_ACTION.SET_ACTIVE_TAB; tab: ExploreTab }
-  | { type: EXPLORE_ACTION.APPLY_SEARCH; search: ExploreSearch }
+  | { type: EXPLORE_ACTION.APPLY_SEARCH; search: ExploreV2SearchWithTab }
+  | { type: EXPLORE_ACTION.SEARCH_SPECIES; subject: ExploreSubject }
+  | { type: EXPLORE_ACTION.GO_BACK }
   | { type: EXPLORE_ACTION.RESET };
+
+// "Unobserved by me" was replaced by excluding the species in a saved search.
+// Searches saved or restored from before then drop it, rather than carrying a
+// filter Advanced Search can no longer show or remove.
+export function withoutUnobservedFilter<S extends Pick<ExploreState, "subject" | "filters">>(
+  search: S,
+): S {
+  if ( search.subject?.type !== "unobserved" && !search.filters?.unobservedByUser ) {
+    return search;
+  }
+  return {
+    ...search,
+    subject: search.subject?.type === "unobserved"
+      ? null
+      : search.subject,
+    filters: { ...search.filters, unobservedByUser: null },
+  };
+}
 
 export const initialExploreState: ExploreState = {
   subject: null,
@@ -249,6 +325,7 @@ export const initialExploreState: ExploreState = {
   filters: defaultExploreFilters,
   activeTab: OBSERVATIONS_TAB,
   appliedSearchCount: 0,
+  backStack: [],
 };
 
 export function initialStateFromEntryParams(
@@ -263,6 +340,8 @@ export function initialStateFromEntryParams(
     subject: params?.subject || base.subject,
     location: params?.location || base.location,
     activeTab: params?.activeTab || base.activeTab,
+    filters: { ...base.filters, ...params?.filters },
+    sortBy: params?.sortBy || base.sortBy,
   };
 }
 
@@ -272,13 +351,13 @@ export function exploreReducer(
 ): ExploreState {
   switch ( action.type ) {
     case EXPLORE_ACTION.SET_SUBJECT:
-      return { ...state, subject: action.subject };
+      return { ...state, subject: action.subject, backStack: [] };
     case EXPLORE_ACTION.CLEAR_SUBJECT:
-      return { ...state, subject: null };
+      return { ...state, subject: null, backStack: [] };
     case EXPLORE_ACTION.SET_LOCATION_NEARBY:
       return {
         ...state,
-        location: { placeMode: EXPLORE_PLACE_MODE.NEARBY },
+        location: { placeMode: EXPLORE_PLACE_MODE.NEARBY, radius: action.radius },
       };
     case EXPLORE_ACTION.SET_LOCATION_WORLDWIDE:
       return {
@@ -320,7 +399,43 @@ export function exploreReducer(
         sortBy,
         speciesSortBy,
         filters,
+        activeTab: action.search.activeTab ?? state.activeTab,
         appliedSearchCount: state.appliedSearchCount + 1,
+        backStack: [],
+      };
+    }
+    case EXPLORE_ACTION.SEARCH_SPECIES: {
+      // The species replaces the searched taxa rather than joining them; exclusions stay
+      const excluded = ( state.filters.taxonFilters || [] ).filter( filter => filter.exclude );
+      return {
+        ...state,
+        subject: action.subject,
+        filters: {
+          ...state.filters,
+          taxonFilters: excluded.length > 0
+            ? excluded
+            : null,
+        },
+        activeTab: OBSERVATIONS_TAB,
+        backStack: [
+          ...state.backStack,
+          {
+            subject: state.subject,
+            activeTab: state.activeTab,
+            taxonFilters: state.filters.taxonFilters,
+          },
+        ],
+      };
+    }
+    case EXPLORE_ACTION.GO_BACK: {
+      const previous = state.backStack[state.backStack.length - 1];
+      if ( !previous ) return state;
+      return {
+        ...state,
+        subject: previous.subject,
+        activeTab: previous.activeTab,
+        filters: { ...state.filters, taxonFilters: previous.taxonFilters },
+        backStack: state.backStack.slice( 0, -1 ),
       };
     }
     case EXPLORE_ACTION.RESET:
@@ -342,12 +457,21 @@ const ExploreContext = React.createContext<ExploreContextValue | undefined>(
   undefined,
 );
 
+// Whether this Explore was opened from a link on the Hotspots view, which
+// keeps a layout and grid overlays of its own. False outside any Explore.
+const ExploreFromHotspotContext = React.createContext( false );
+
+export const useExploreFromHotspot = ( ) => React.useContext( ExploreFromHotspotContext );
+
 interface ExploreProviderProps {
   children: React.ReactNode;
   initialState: ExploreState;
+  fromHotspot?: boolean;
 }
 
-export const ExploreProvider = ( { children, initialState }: ExploreProviderProps ) => {
+export const ExploreProvider = ( {
+  children, initialState, fromHotspot = false,
+}: ExploreProviderProps ) => {
   const [state, dispatch] = React.useReducer( exploreReducer, initialState );
 
   const value = React.useMemo(
@@ -357,7 +481,9 @@ export const ExploreProvider = ( { children, initialState }: ExploreProviderProp
 
   return (
     <ExploreContext value={value}>
-      {children}
+      <ExploreFromHotspotContext value={fromHotspot}>
+        {children}
+      </ExploreFromHotspotContext>
     </ExploreContext>
   );
 };

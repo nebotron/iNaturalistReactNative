@@ -5,8 +5,10 @@ import {
   Alert,
 } from "react-native";
 import { checkMultiple, RESULTS } from "react-native-permissions";
+import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 import {
+  hasWriteMediaPermission,
   permissionResultFromMultiple,
   READ_WRITE_MEDIA_PERMISSIONS,
   requestWriteMediaPermission,
@@ -22,48 +24,115 @@ type SaveToCameraRollOptionsWithLocation = SaveToCameraRollOptions & {
   horizontalAccuracy?: number;
 };
 
+const extractDevicePhotoUriFromSavedAsset = (
+  savedAsset: Awaited<ReturnType<typeof CameraRoll.saveAsset>>,
+): string | null => {
+  const uri = savedAsset?.node?.image?.uri;
+  const id = savedAsset?.node?.id;
+  if ( id && ( !uri || uri.match( /placeholder/ ) ) ) {
+    return normalizeDevicePhotoUri( `ph://${id}` );
+  }
+  if ( uri && !uri.match( /placeholder/ ) ) {
+    return normalizeDevicePhotoUri( uri );
+  }
+  return null;
+};
+
+type SaveLocation = {
+  latitude: number;
+  longitude: number;
+  positional_accuracy?: number;
+} | null;
+
+const readWritePermissionGranted = async ( ) => permissionResultFromMultiple(
+  await checkMultiple( READ_WRITE_MEDIA_PERMISSIONS ),
+) === RESULTS.GRANTED;
+
+// Resolves to the saved photo's device URI, or null if it was saved but no URI
+// came back. Rejects if the save failed.
+const saveOne = async (
+  uri: string,
+  location: SaveLocation,
+  readWriteGranted: boolean,
+): Promise<string | null> => {
+  const saveOptions: SaveToCameraRollOptionsWithLocation = {};
+  // One quirk of CameraRoll is that if you want to write to an album, you
+  // need readwrite permission, but we don't want to ask for that here
+  // b/c it might come immediately after asking for *add only*
+  // permission, so we're checking to see if we have that permission
+  // and skipping the album if we don't
+  if ( readWriteGranted ) {
+    saveOptions.type = "photo";
+    // Note: we do not translate our brand name, so this should not be
+    // globalized
+    saveOptions.album = appName;
+  }
+  if ( location ) {
+    saveOptions.latitude = location.latitude;
+    saveOptions.longitude = location.longitude;
+    saveOptions.horizontalAccuracy = location.positional_accuracy;
+  }
+  const savedAsset = await CameraRoll.saveAsset( uri, saveOptions );
+  return extractDevicePhotoUriFromSavedAsset( savedAsset );
+};
+
+// Saves started at the shutter, by local URI, until savePhotosToPhotoLibrary
+// collects them. Chained so photos land in the library in the order taken.
+const savesStartedAtCapture = new Map<string, Promise<string | null>>( );
+let captureSaveChain: Promise<unknown> = Promise.resolve( );
+
+// Saves a photo to the library the moment it's taken, so it's there even if
+// the app dies before the user confirms the photos (it used to wait for the
+// checkmark, and a crash in between lost every photo of the session). Only
+// when permission is already granted: a permission prompt over the camera
+// would interrupt shooting, so without it the save waits for the checkmark,
+// which asks. The photo gets the observation's location later, in
+// saveObservation; this geotags it with the best recent fix meanwhile.
+export async function savePhotoToPhotoLibraryAtCapture( uri: string, location: SaveLocation ) {
+  if ( !await hasWriteMediaPermission( ) ) return;
+  const readWriteGranted = await readWritePermissionGranted( );
+  const save = captureSaveChain.then( ( ) => saveOne( uri, location, readWriteGranted ) );
+  captureSaveChain = save.catch( ( ) => undefined );
+  savesStartedAtCapture.set( uri, save );
+  save.catch( error => {
+    // Left for the checkmark to retry, which also tells the user if the
+    // device is out of space
+    savesStartedAtCapture.delete( uri );
+    logger.info( `Saving photo to photo library at capture failed: ${error}` );
+  } );
+}
+
 // Save URIs to camera photo library (if a photo was taken using the app,
 // we want it accessible in the camera's folder, as if the user has taken those photos
-// via their own camera app).
+// via their own camera app). Photos already saved when they were taken
+// (savePhotoToPhotoLibraryAtCapture) aren't saved again.
 // One could argue this is a private method and shouldn't be exported and
 // doesn't need to be tested... but hooks are complicated and this hook might
 // be too complicated, so this at least makes it easy to test this one part
 // ~~~kueda20240614
 async function savePhotosToPhotoLibrary(
   uris: string[],
-  location: { latitude: number; longitude: number; positional_accuracy?: number } | null,
+  location: SaveLocation,
 ) {
   if ( !await requestWriteMediaPermission( ) ) {
     logger.info( "Write media permission not granted, skipping save to photo library" );
     return [];
   }
 
-  const readWritePermissionResult = permissionResultFromMultiple(
-    await checkMultiple( READ_WRITE_MEDIA_PERMISSIONS ),
-  );
+  const readWriteGranted = await readWritePermissionGranted( );
   const savedPhotoUris = await uris.reduce(
     async ( memo, uri ) => {
       const savedUris = await memo;
       try {
-        const saveOptions: SaveToCameraRollOptionsWithLocation = {};
-        // One quirk of CameraRoll is that if you want to write to an album, you
-        // need readwrite permission, but we don't want to ask for that here
-        // b/c it might come immediately after asking for *add only*
-        // permission, so we're checking to see if we have that permission
-        // and skipping the album if we don't
-        if ( readWritePermissionResult === RESULTS.GRANTED ) {
-          saveOptions.type = "photo";
-          // Note: we do not translate our brand name, so this should not be
-          // globalized
-          saveOptions.album = appName;
+        const savedAtCapture = savesStartedAtCapture.get( uri );
+        savesStartedAtCapture.delete( uri );
+        // A save that failed at capture is retried here
+        const savedPhotoUri = savedAtCapture
+          ? await savedAtCapture.catch( ( ) => saveOne( uri, location, readWriteGranted ) )
+          : await saveOne( uri, location, readWriteGranted );
+        if ( savedPhotoUri ) {
+          savedUris.push( savedPhotoUri );
         }
-        if ( location ) {
-          saveOptions.latitude = location.latitude;
-          saveOptions.longitude = location.longitude;
-          saveOptions.horizontalAccuracy = location.positional_accuracy;
-        }
-        const savedPhotoUri = await CameraRoll.save( uri, saveOptions );
-        savedUris.push( savedPhotoUri );
         return savedUris;
       } catch ( cameraRollSaveError ) {
         // should never get here since in usePrepareStoreAndNavigate we check for device full

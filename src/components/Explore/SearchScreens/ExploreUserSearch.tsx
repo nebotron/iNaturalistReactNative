@@ -3,9 +3,8 @@ import type { ButtonConfiguration } from "components/SharedComponents/ButtonBar"
 import ButtonBar from "components/SharedComponents/ButtonBar";
 import SearchBar from "components/SharedComponents/SearchBar";
 import SearchHeader from "components/SharedComponents/SearchHeader";
-import Body1 from "components/SharedComponents/Typography/Body1";
 import ViewWrapper from "components/SharedComponents/ViewWrapper";
-import { Pressable, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import UserList from "components/UserList/UserList";
 import React, {
   useCallback,
@@ -31,12 +30,10 @@ export type ExploreSearchUser = ApiUser | UserPojo;
 interface Props {
   closeModal: ( ) => void;
   updateUser: ( user: ExploreSearchUser | null, exclude?: boolean ) => void;
-  onSelectUnobserved?: ( user: ExploreSearchUser ) => void;
+  defaultToCurrentUser?: boolean;
 }
 
-const DEFAULT_ROW_CLASSES = "px-[15px] py-[11px] border-b border-lightGray";
-
-const ExploreUserSearch = ( { closeModal, updateUser, onSelectUnobserved }: Props ) => {
+const ExploreUserSearch = ( { closeModal, updateUser, defaultToCurrentUser }: Props ) => {
   const [userQuery, setUserQuery] = useState( "" );
   const { t } = useTranslation();
   const { bottom } = useSafeAreaInsets( );
@@ -46,7 +43,7 @@ const ExploreUserSearch = ( { closeModal, updateUser, onSelectUnobserved }: Prop
 
   // The picker shows default results instead of an empty list before the user
   // has typed anything
-  const showDefaultResults = !!onSelectUnobserved && userQuery.trim( ).length === 0;
+  const showDefaultResults = !!defaultToCurrentUser && userQuery.trim( ).length === 0;
 
   const onUserSelected = useCallback( async ( user: ExploreSearchUser, exclude?: boolean ) => {
     if ( !user.id && !user.login ) {
@@ -66,12 +63,6 @@ const ExploreUserSearch = ( { closeModal, updateUser, onSelectUnobserved }: Prop
     [updateUser, closeModal],
   );
 
-  const onUnobservedSelected = useCallback( ( ) => {
-    if ( !currentUser || !onSelectUnobserved ) { return; }
-    onSelectUnobserved( currentUser );
-    closeModal();
-  }, [closeModal, currentUser, onSelectUnobserved] );
-
   // TODO: pagination like in ExploreFlashList ?
 
   const emptyListComponent = useMemo(
@@ -90,20 +81,7 @@ const ExploreUserSearch = ( { closeModal, updateUser, onSelectUnobserved }: Prop
     : bottom;
 
   const footerComponent = ( ) => (
-    <>
-      {showDefaultResults && currentUser && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t( "Species-I-havent-observed" )}
-          className={DEFAULT_ROW_CLASSES}
-          onPress={onUnobservedSelected}
-          testID="ExploreUserSearch.unobserved"
-        >
-          <Body1>{t( "Species-I-havent-observed" )}</Body1>
-        </Pressable>
-      )}
-      <View style={{ paddingBottom: keyboardPadding }} />
-    </>
+    <View style={{ paddingBottom: keyboardPadding }} />
   );
 
   const buttons: ButtonConfiguration[] = [
@@ -153,7 +131,7 @@ const ExploreUserSearch = ( { closeModal, updateUser, onSelectUnobserved }: Prop
           value={userQuery}
           testID="SearchUser"
         />
-        {currentUser && !onSelectUnobserved && (
+        {currentUser && !defaultToCurrentUser && (
           <ButtonBar
             buttonConfiguration={buttons}
             containerClass="justify-center pt-[15px]"

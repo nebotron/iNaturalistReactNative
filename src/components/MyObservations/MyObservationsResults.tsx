@@ -8,6 +8,7 @@ import { LIMITED_TAXON_FIELDS } from "api/fields";
 import { fetchSpeciesCounts } from "api/observations";
 import type { ApiSpeciesCountDetails } from "api/types";
 import { fetchTaxaObserved } from "api/users";
+import noop from "lodash/noop";
 import type { MyObservationsStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
 import {
@@ -21,10 +22,9 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert } from "react-native";
-import Observation from "realmModels/Observation";
 import type { RealmObservation } from "realmModels/types";
 import type { MyObservationsSort } from "sharedHelpers/observationsSort";
+import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
 import {
   earliestObservedOn,
@@ -42,7 +42,6 @@ import {
   useNavigateToObsEdit,
   useObservationsUpdates,
   useStoredLayout,
-  useTranslation,
 } from "sharedHooks";
 import {
   markCurrentUserSpeciesCountStale,
@@ -59,8 +58,10 @@ import useStore, { zustandStorage } from "stores/useStore";
 import type { SpeciesCount } from "types/sorting";
 
 import FullScreenActivityIndicator from "./FullScreenActivityIndicator";
+import { observationsFilterKey } from "./helpers/fetchAllObservations";
 import useMyObservationsQuery from "./hooks/useMyObservationsQuery";
 import useSyncObservations from "./hooks/useSyncObservations";
+import useTaxonomicSortFetch from "./hooks/useTaxonomicSortFetch";
 import useUploadObservations from "./hooks/useUploadObservations";
 import MyObservationsEmptySimple from "./MyObservationsEmptySimple";
 import MyObservationsSimple, {
@@ -74,11 +75,11 @@ export enum ACTIVE_SHEET {
   NONE = "NONE",
   LOGIN = "LOGIN",
   SORT = "SORT",
+  VIEW_OPTIONS = "VIEW_OPTIONS",
 }
 
 const MyObservationsResults = ( ) => {
   const { isDefaultMode, loggedInWhileInDefaultMode } = useLayoutPrefs();
-  const { t } = useTranslation( );
   const realm = useRealm( );
   const navigation = useNavigation<
     MyObservationsStackScreenProps<"MyObservationsResults">["navigation"]
@@ -98,6 +99,9 @@ const MyObservationsResults = ( ) => {
   const myObsOffsetToRestore = useStore( state => state.myObsOffsetToRestore );
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
   const clearMyObservationsViewState = useStore( state => state.clearMyObservationsViewState );
+  const setMyObservationsClosedIconicTaxaCategories = useStore(
+    state => state.setMyObservationsClosedIconicTaxaCategories,
+  );
   const uploadStatus = useStore( state => state.uploadStatus );
   const justFinishedSignup: boolean = useStore( state => state.layout.justFinishedSignup );
   // As soon as we leave this screen, the user is no longer considered as just finished signup
@@ -132,6 +136,8 @@ const MyObservationsResults = ( ) => {
   const {
     numUnuploadedObservations,
     numObsMissingBasics,
+    numObsMissingLocationOrDate,
+    numUnuploadedObsNoTaxon,
   } = useObservationCounts( );
   const prevObservationsLength = useRef( observationIds.length );
   const { layout, writeLayoutToStorage } = useStoredLayout( "myObservationsLayout" );
@@ -203,32 +209,49 @@ const MyObservationsResults = ( ) => {
     } );
   };
 
-  const setObservationsSortOptionId = ( value: MyObservationsSort ) => {
+  const { prepareTaxonomicSort } = useTaxonomicSortFetch( );
+  const searchedTaxonId = myObsState.searchedTaxon?.id;
+  const isTaxonomicSort = myObsState.observationsSort === OBSERVATIONS_SORT.TAXONOMY;
+
+  const setObservationsSortOptionId = async ( value: MyObservationsSort ) => {
+    if (
+      value === OBSERVATIONS_SORT.TAXONOMY
+      && !( await prepareTaxonomicSort( searchedTaxonId ) )
+    ) return;
     myObsDispatch( {
       type: MY_OBSERVATIONS_ACTION.SET_OBSERVATIONS_SORT,
       observationsSort: value,
     } );
   };
 
+  // Searching for something else while in taxonomic order needs those observations downloaded
+  // too. Also covers coming back to this screen, but only asks once per search
+  const taxonomicFetchCheckedFilterKey = useStore( state => state.taxonomicFetchCheckedFilterKey );
+  useEffect( ( ) => {
+    if ( !isTaxonomicSort || !currentUserId || isConnected === false ) return;
+    const filterKey = observationsFilterKey( { userId: currentUserId, taxonId: searchedTaxonId } );
+    if ( filterKey === taxonomicFetchCheckedFilterKey ) return;
+    prepareTaxonomicSort( searchedTaxonId );
+  }, [
+    currentUserId,
+    isConnected,
+    isTaxonomicSort,
+    prepareTaxonomicSort,
+    searchedTaxonId,
+    taxonomicFetchCheckedFilterKey,
+  ] );
+
   const updateObservationsView = ( value: string ) => {
-    // Map position and closed/expanded taxa categories belong to the view the user was in.
-    // Returning to MyObs from elsewhere in the app should restore the view you left, but
-    // switching views should reset the view to its default state.
+    // Closed/expanded taxa categories belong to the view the user was in, so switching
+    // views resets them. The map viewport is kept: going grid -> map should put the
+    // user back where they left the map.
     if ( value !== layout ) {
-      clearMyObservationsViewState( );
+      setMyObservationsClosedIconicTaxaCategories( new Set( ) );
     }
     writeLayoutToStorage( value );
   };
 
-  const confirmInternetConnection = useCallback( ( ) => {
-    if ( !isConnected ) {
-      Alert.alert(
-        t( "Internet-Connection-Required" ),
-        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
-      );
-    }
-    return isConnected;
-  }, [t, isConnected] );
+  const confirmInternetConnection = useCallback( ( ) => isConnected, [isConnected] );
 
   const confirmLoggedIn = useCallback( ( ) => {
     if ( !currentUser ) {
@@ -242,21 +265,11 @@ const MyObservationsResults = ( ) => {
     if ( !confirmInternetConnection( ) ) { return; }
 
     startManualSync( );
-    const syncOptions = isDefaultMode
-      ? {
-        skipSomeUploads: Observation
-          .filterUnsyncedObservations( realm )
-          .filter( ( obs: Observation ) => obs.missingBasics( ) )
-          .map( obs => obs.uuid ),
-      }
-      : { };
-    syncManually( syncOptions );
+    syncManually( {} );
   }, [
     confirmLoggedIn,
     confirmInternetConnection,
     startManualSync,
-    isDefaultMode,
-    realm,
     syncManually,
   ] );
 
@@ -383,16 +396,21 @@ const MyObservationsResults = ( ) => {
     const taxonIds: number[] = distinctTaxonObs
       .map( o => o.taxon?.id || 0 )
       .filter( Boolean );
-    const ancestorIds = distinctTaxonObs.map( o => {
+    // A Set, not an array: the leaf filter below asks "is this id an ancestor
+    // of anything?" once per distinct taxon, and Array.includes answers that by
+    // scanning. A library with a few hundred taxa has tens of thousands of
+    // ancestor ids between them, so the pair was quadratic and ran on the JS
+    // thread — this screen carries the app log's worst freeze, a 31s ui_hang.
+    const ancestorIds = new Set<number>( );
+    distinctTaxonObs.forEach( o => {
       // We're filtering b/c for taxa above species level, the taxon's own
       // ID is included in ancestor ids for some reason (this is a bug...
       // somewhere)
-      const taxonAncestorIds = (
-        o.taxon?.ancestor_ids || []
-      ).filter( id => Number( id ) !== Number( o.taxon?.id ) );
-      return taxonAncestorIds;
-    } ).flat( );
-    const leafTaxonIds = taxonIds.filter( taxonId => !ancestorIds.includes( taxonId ) );
+      ( o.taxon?.ancestor_ids || [] ).forEach( id => {
+        if ( Number( id ) !== Number( o.taxon?.id ) ) { ancestorIds.add( Number( id ) ); }
+      } );
+    } );
+    const leafTaxonIds = taxonIds.filter( taxonId => !ancestorIds.has( Number( taxonId ) ) );
 
     return {
       leafTaxonIds,
@@ -408,14 +426,40 @@ const MyObservationsResults = ( ) => {
     const localObs = realm.objects<RealmObservation>( "Observation" )
       .filtered( "taxon.id IN $0", leafTaxonIds );
 
-    return leafTaxonIds.map( id => {
-      const obs = localObs.filter( o => o.taxon.id === id );
-      return {
-        count: obs.length,
-        taxon: obs[0].taxon,
-        first_observed_on: earliestObservedOn( obs ),
-      };
+    // One pass over the observations, not one pass per taxon. This used to
+    // re-scan the whole collection for every leaf taxon, and each scan reads
+    // every object's taxon across the Realm boundary, so the cost was
+    // observations × taxa: a library with 1,400 observations and 500 leaf taxa
+    // meant 700,000 property reads in one synchronous go.
+    const countsByTaxonId = new Map<number, {
+      count: number;
+      taxon: RealmObservation["taxon"];
+      first_observed_on: string | null;
+    }>( );
+    localObs.forEach( o => {
+      const id = o.taxon?.id;
+      if ( id === undefined || id === null ) return;
+      const existing = countsByTaxonId.get( id );
+      if ( existing ) {
+        existing.count += 1;
+        existing.first_observed_on = earliestObservedOn( [
+          o,
+          { observed_on_string: existing.first_observed_on },
+        ] );
+      } else {
+        countsByTaxonId.set( id, {
+          count: 1,
+          taxon: o.taxon,
+          first_observed_on: earliestObservedOn( [o] ),
+        } );
+      }
     } );
+
+    // One entry per leaf taxon, in leafTaxonIds order, dropping any taxon the
+    // query returned nothing for.
+    return leafTaxonIds
+      .map( id => countsByTaxonId.get( id ) )
+      .filter( ( entry ): entry is NonNullable<typeof entry> => !!entry );
   }, [currentUser, activeTab, realm, leafTaxonIds] );
 
   // Count sorts use species_counts. Date sorts use taxa_observed, which can sort by first
@@ -496,9 +540,12 @@ const MyObservationsResults = ( ) => {
   const isFetchingNextPageForList = isServerAuthoritative
     ? isFetchingNextPageFromQuery
     : isFetchingNextPage;
-  const handleEndReached = isServerAuthoritative
+  // Taxonomic order downloads everything it sorts up front, and a page of the most recent
+  // uploads would land all over the list
+  let handleEndReached = isServerAuthoritative
     ? fetchNextPageFromQuery
     : fetchNextPage;
+  if ( isTaxonomicSort ) handleEndReached = noop;
 
   useEffect( ( ) => {
     // persist the latest observations count in zustand so a user can see it offline.
@@ -637,6 +684,8 @@ const MyObservationsResults = ( ) => {
       numTotalTaxa={displayedSpeciesCount}
       numUnuploadedObservations={numUnuploadedObservations}
       numObsMissingBasics={numObsMissingBasics}
+      numObsMissingLocationOrDate={numObsMissingLocationOrDate}
+      numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
       observationIds={observationIds}
       observationsSortOptionId={myObsState.observationsSort}
       onEndReached={handleEndReached}

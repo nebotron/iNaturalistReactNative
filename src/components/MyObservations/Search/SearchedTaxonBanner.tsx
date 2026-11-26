@@ -1,9 +1,10 @@
 import {
   Body3,
+  CachedImage,
   IconicTaxonIcon,
   INatIconButton,
 } from "components/SharedComponents";
-import { Image, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import {
   MY_OBSERVATIONS_ACTION,
   useMyObservations,
@@ -12,10 +13,14 @@ import React from "react";
 import { taxonDisplayName } from "sharedHelpers/taxon";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 
-const SearchedTaxonBanner = ( ) => {
+interface Props {
+  onBack: ( ) => void;
+}
+
+const SearchedTaxonBanner = ( { onBack }: Props ) => {
   const { t } = useTranslation( );
   const { state, dispatch } = useMyObservations( );
-  const { searchedTaxon } = state;
+  const { searchedTaxon, previousTaxonSearch } = state;
 
   const currentUser = useCurrentUser( );
 
@@ -29,13 +34,23 @@ const SearchedTaxonBanner = ( ) => {
       testID="SearchedTaxonBanner"
     >
       <View className="flex-1 flex-row items-center gap-x-[10px]">
+        {previousTaxonSearch && (
+          <INatIconButton
+            icon="chevron-left"
+            size={14}
+            accessibilityLabel={t( "Go-back" )}
+            onPress={( ) => {
+              dispatch( { type: MY_OBSERVATIONS_ACTION.RESTORE_PREVIOUS_TAXON_SEARCH } );
+              onBack( );
+            }}
+          />
+        )}
         <View className="w-[44px] h-[44px] bg-lightGray">
           {searchedTaxon.iconUri
             ? (
-              <Image
+              <CachedImage
                 source={{ uri: searchedTaxon.iconUri }}
                 className="w-full h-full"
-                accessibilityIgnoresInvertColors
               />
             )
             : (

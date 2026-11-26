@@ -2,11 +2,17 @@ import {
   refresh as refreshNetInfo,
   useNetInfo,
 } from "@react-native-community/netinfo";
-import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
+import type { SoundObservation } from "components/AudioId/audioIdModel";
+import { soundPlaceAndDate } from "components/AudioId/audioIdModel";
 import {
-  Body1,
+  BINS_PER_S, normalizedSoundUri, playerStarted, setPlayingAudio,
+} from "components/AudioId/audioIdSession";
+import ClipProbabilityGraph, { useSoundTimeline } from "components/AudioId/ClipProbabilityGraph";
+import SoundSpectrogram, { SPECTROGRAM_HEIGHT } from "components/AudioId/SoundSpectrogram";
+import {
   Body2,
+  Body3,
   Body4,
   INatIcon,
   INatIconButton,
@@ -16,50 +22,29 @@ import { View } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useTranslation } from "sharedHooks";
+import usePreventSwipeBack from "sharedHooks/usePreventSwipeBack";
 import colors from "styles/tailwindColors";
-
-interface SoundSliderProps {
-  playBackState: {
-    currentPosition: number;
-    duration: number;
-  };
-  onSlidingComplete: ( value: number ) => void;
-}
-
-const SoundSlider = ( { playBackState, onSlidingComplete }: SoundSliderProps ) => {
-  const sliderStyle = {
-    width: "100%",
-  } as const;
-  return (
-    <Slider
-      style={sliderStyle}
-      minimumValue={0}
-      maximumValue={playBackState.duration}
-      lowerLimit={0}
-      upperLimit={playBackState.duration}
-      minimumTrackTintColor="#FFFFFF"
-      maximumTrackTintColor="#FFFFFF"
-      thumbTintColor={colors.inatGreen}
-      tapToSeek
-      value={playBackState.currentPosition}
-      onSlidingComplete={onSlidingComplete}
-    />
-  );
-};
 
 export interface MediaSoundItem {
   file_url: string;
-  hidden: boolean;
+  // Absent on API sounds that were never moderated
+  hidden?: boolean;
 }
 
 interface SoundContainerProps {
   autoPlay?: boolean;
   isVisible: boolean;
+  // The observation the sound is of, so the graph under it only considers
+  // species likely where and when it was recorded
+  observation?: SoundObservation | null;
   sizeClass: string;
   sound: MediaSoundItem;
 }
@@ -67,6 +52,7 @@ interface SoundContainerProps {
 const SoundContainer = ( {
   autoPlay,
   isVisible,
+  observation,
   sizeClass,
   sound,
 }: SoundContainerProps ) => {
@@ -91,16 +77,57 @@ const SoundContainer = ( {
     formattedDuration: "00:00",
   } );
 
+  // Where a scrub that began before playback knew the duration should land,
+  // as a fraction of the sound
+  const pendingSeek = useRef<number | null>( null );
+  // Where the playhead is being dragged, as a fraction of the sound
+  const [dragAt, setDragAt] = useState<number | null>( null );
+  const dragging = useRef( false );
+  const width = useRef( 1 );
+  // The playhead, as a fraction of the sound. As on the Audio ID clip
+  // screen, it's moved by the wall clock from where playback started, not by
+  // the player's position events, whose timing jitters and pulls it back and
+  // forth.
+  const [position, setPosition] = useState( 0 );
+  const timer = useRef<ReturnType<typeof setInterval>>( undefined );
+  const clock = useRef( { fromMs: 0, started: 0 } );
+  const durationMs = useRef( 0 );
+  // How sure the model is of the most likely species at each moment
+  const { place, date } = soundPlaceAndDate( observation );
+  const logits = useSoundTimeline( sound.file_url, place, date );
+  const logitsDuration = ( logits?.length ?? 0 ) / BINS_PER_S;
+
+  const holdPlayhead = useCallback( ( fraction?: number ) => {
+    clearInterval( timer.current );
+    if ( fraction !== undefined ) setPosition( fraction );
+  }, [] );
+
+  // Move the playhead on from `fromMs` into the sound, starting now
+  const startPlayhead = useCallback( ( fromMs: number ) => {
+    clock.current = { fromMs, started: Date.now( ) };
+    clearInterval( timer.current );
+    timer.current = setInterval( ( ) => {
+      const duration = durationMs.current;
+      if ( dragging.current || duration <= 0 ) return;
+      const { fromMs: from, started } = clock.current;
+      setPosition( Math.min( ( from + Date.now( ) - started ) / duration, 1 ) );
+    }, 50 );
+  }, [] );
+
+  useEffect( ( ) => ( ) => clearInterval( timer.current ), [] );
+
   const mmss = useCallback( ( value: number ) => player.mmss(
     Math.floor( value / 1000 ),
   ), [player] );
 
-  const playSound = useCallback( ( position?: number ) => {
+  const playSound = useCallback( ( from?: number ) => {
     async function playSoundAsync( ) {
-      await player.startPlayer( sound.file_url );
-      if ( position ) {
+      await player.setSubscriptionDuration( 0.1 );
+      await player.startPlayer( await normalizedSoundUri( sound.file_url ) );
+      playerStarted( );
+      if ( from ) {
         try {
-          await player.seekToPlayer( position );
+          await player.seekToPlayer( from );
         } catch ( seekPlayerError ) {
           if ( seekPlayerError instanceof Error && seekPlayerError.message.match( /Player has already stopped/ ) ) {
             // Something else might be wrong, but it's not really something to
@@ -110,7 +137,16 @@ const SoundContainer = ( {
           throw seekPlayerError;
         }
       }
+      startPlayhead( from || 0 );
       player.addPlayBackListener( playBackEvent => {
+        durationMs.current = playBackEvent.duration;
+        // A scrub made before the duration was known lands once it is
+        if ( pendingSeek.current !== null && playBackEvent.duration > 0 ) {
+          const at = pendingSeek.current * playBackEvent.duration;
+          pendingSeek.current = null;
+          player.seekToPlayer( at ).catch( ( ) => undefined );
+          startPlayhead( at );
+        }
         setPlayBackState( {
           currentPosition: playBackEvent.currentPosition,
           duration: playBackEvent.duration,
@@ -119,6 +155,7 @@ const SoundContainer = ( {
         } );
         // Update UI when playback is complete
         if ( playBackEvent.currentPosition >= playBackEvent.duration ) {
+          holdPlayhead( 1 );
           setPlaying( false );
         }
       } );
@@ -129,9 +166,10 @@ const SoundContainer = ( {
     return ( ) => {
       player.removePlayBackListener( );
     };
-  }, [player, sound.file_url, mmss] );
+  }, [player, sound.file_url, mmss, startPlayhead, holdPlayhead] );
 
   const stopSound = useCallback( async ( ) => {
+    holdPlayhead( );
     setPlaying( false );
     setSwipedAway( !isVisible );
     try {
@@ -146,9 +184,21 @@ const SoundContainer = ( {
     }
     player.removePlayBackListener( );
   }, [
+    holdPlayhead,
     isVisible,
     player,
   ] );
+
+  useEffect( ( ) => {
+    setPlayingAudio( player, playing, ( ) => {
+      player.removePlayBackListener( );
+      holdPlayhead( );
+      setPlaying( false );
+      // Resuming has to re-init the player, as after a swipe
+      setSwipedAway( true );
+    } );
+    return ( ) => setPlayingAudio( player, false );
+  }, [holdPlayhead, player, playing] );
 
   // Tapping the button can play, pause, or resume
   const togglePlay = useCallback( ( ) => {
@@ -158,11 +208,17 @@ const SoundContainer = ( {
       playBackState.currentPosition > 0
       && playBackState.currentPosition < playBackState.duration
     ) {
+      // Resume where the playhead stopped, as on the Audio ID clip screen: the
+      // player's last reported position can be up to 100 ms behind it, which
+      // pulled the playhead back on every resume.
+      const resumeAt = durationMs.current > 0
+        ? Math.min( position, 0.999 ) * durationMs.current
+        : playBackState.currentPosition;
       // player.resumePlayer() doesn't work if another sound was played after
       // this one was paused, so if we swiped away, we re-init the player and
       // seek to the previous position
       if ( swipedAway ) {
-        playSound( playBackState.currentPosition );
+        playSound( resumeAt );
       } else {
         // If we haven't swiped away, we can use resumePlayer, which also
         // seems to not cause the progress to jump back to 0 and then to the
@@ -171,7 +227,7 @@ const SoundContainer = ( {
         // resumePlayer seemed to make slider stop when audio kept playing
         // when toggle was pressed repeatedly
         // occasionally jumps back to 0, havent been able to repicate consistently.
-        playSound( playBackState.currentPosition );
+        playSound( resumeAt );
       }
     } else {
       playSound( );
@@ -181,6 +237,7 @@ const SoundContainer = ( {
     playBackState.duration,
     playing,
     playSound,
+    position,
     swipedAway,
     stopSound] );
 
@@ -210,6 +267,65 @@ const SoundContainer = ( {
     }
   }, [autoPlay, isVisible, playSound] );
 
+  // Hear the sound from `fraction` of the way through it
+  const seekTo = ( fraction: number ) => {
+    const { duration } = playBackState;
+    if ( duration <= 0 ) {
+      pendingSeek.current = fraction;
+      playSound( );
+      return;
+    }
+    const at = Math.min( fraction, 0.999 ) * duration;
+    holdPlayhead( at / duration );
+    setPlayBackState( {
+      ...playBackState,
+      currentPosition: at,
+      formattedCurrentPosition: mmss( at ),
+    } );
+    if ( playing ) {
+      player.seekToPlayer( at ).catch( ( ) => undefined );
+      startPlayhead( at );
+    } else {
+      playSound( at );
+    }
+  };
+
+  usePreventSwipeBack( );
+  // The gesture is made once, so it reads the latest seekTo through a ref.
+  const latestSeekTo = useRef( seekTo );
+  useLayoutEffect( ( ) => { latestSeekTo.current = seekTo; } );
+  // A gesture-handler pan that takes the touch from the first point, so a
+  // drag moves only the playhead and never pages the carousel it's in
+  const scrub = useMemo( ( ) => {
+    const fraction = ( x: number ) => Math.min( Math.max( x / width.current, 0 ), 1 );
+    const dragTo = ( x: number ) => {
+      dragging.current = true;
+      setDragAt( fraction( x ) );
+    };
+    const release = ( x: number ) => {
+      dragging.current = false;
+      setDragAt( null );
+      latestSeekTo.current( fraction( x ) );
+    };
+    const pan = Gesture.Pan( )
+      .runOnJS( true )
+      .minDistance( 0 )
+      .maxPointers( 1 )
+      .onStart( e => dragTo( e.x ) )
+      .onUpdate( e => dragTo( e.x ) )
+      .onEnd( e => release( e.x ) )
+      .onFinalize( ( _e, success ) => {
+        if ( !success && dragging.current ) {
+          dragging.current = false;
+          setDragAt( null );
+        }
+      } );
+    const tap = Gesture.Tap( )
+      .runOnJS( true )
+      .onEnd( ( e, success ) => { if ( success ) release( e.x ); } );
+    return Gesture.Race( pan, tap );
+  }, [] );
+
   if ( sound.hidden ) {
     return (
       <View className={`${sizeClass} p-4 items-center justify-center`}>
@@ -232,53 +348,59 @@ const SoundContainer = ( {
       />
     );
   }
+  let shownPosition = playBackState.formattedCurrentPosition;
+  if ( dragAt !== null && playBackState.duration > 0 ) {
+    shownPosition = mmss( dragAt * playBackState.duration );
+  }
+
+  const playhead = dragAt ?? position;
+  // The same spectrogram interface as Audio ID clips, with the same graph
+  // below it, here for whichever species is likeliest at each moment: drag or
+  // tap anywhere on either to hear the sound from there.
   return (
-    <View className={`${sizeClass} items-center justify-center`}>
-      <INatIconButton
-        className="mx-auto"
-        icon={
-          playing
-            ? "pause-circle"
-            : "play-circle"
-        }
-        onPress={togglePlay}
-        mode="contained"
-        color="white"
-        accessibilityLabel="Play"
-        width={82}
-        height={82}
-        size={80}
-      />
-      <View className="flex-row mt-[30px] mb-2">
-        <View className="text-white w-full items-end">
-          <Body1 className="text-white text-end">
-            {playBackState.formattedCurrentPosition}
-          </Body1>
+    <View className={`${sizeClass} justify-center px-4`}>
+      <GestureDetector gesture={scrub}>
+        <View
+          collapsable={false}
+          onLayout={e => { width.current = e.nativeEvent.layout.width || 1; }}
+        >
+          <View
+            className="rounded overflow-hidden"
+            style={{ height: SPECTROGRAM_HEIGHT }}
+          >
+            <SoundSpectrogram uri={sound.file_url} />
+            <View
+              className="absolute h-full w-0.5 bg-warningRed"
+              style={{ left: `${playhead * 100}%` }}
+              pointerEvents="none"
+            />
+          </View>
+          {logits && logits.some( logit => logit != null ) && (
+            <ClipProbabilityGraph
+              logits={logits}
+              duration={logitsDuration}
+              position={playhead * logitsDuration}
+            />
+          )}
         </View>
-        <Body1 className="text-white mx-1 self-center">{ t( "sound-playback-separator" ) }</Body1>
-        <Body1 className="text-white w-full items-start">
-          {playBackState.formattedDuration}
-        </Body1>
-      </View>
-      <View className="relative w-3/4 h-4 justify-center">
-        <SoundSlider
-          playBackState={playBackState}
-          onSlidingComplete={value => {
-            setPlayBackState( {
-              ...playBackState,
-              currentPosition: value,
-              formattedCurrentPosition: mmss( value ),
-            } );
-            player.seekToPlayer( value )
-              .catch( seekToPlayerError => {
-                if ( seekToPlayerError.message.match( /Player is null/ ) ) {
-                  // Occurs when player reaches end of audio and tries to seek.
-                  return;
-                }
-                throw seekToPlayerError;
-              } );
-          }}
+      </GestureDetector>
+      <View className="flex-row items-center">
+        <INatIconButton
+          icon={playing
+            ? "pause"
+            : "play"}
+          onPress={togglePlay}
+          color={colors.white}
+          accessibilityLabel={playing
+            ? t( "Pause--audio" )
+            : t( "Play--audio" )}
+          accessibilityHint={playing
+            ? t( "Pauses-the-sound" )
+            : t( "Plays-the-sound" )}
         />
+        <Body3 className="text-white">
+          {`${shownPosition} ${t( "sound-playback-separator" )} ${playBackState.formattedDuration}`}
+        </Body3>
       </View>
     </View>
   );

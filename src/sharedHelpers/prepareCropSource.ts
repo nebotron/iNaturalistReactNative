@@ -1,0 +1,188 @@
+import { cropSourcesPath } from "appConstants/paths";
+import { NativeModules } from "react-native";
+import { getAnimalCrop } from "sharedHelpers/animalCropLog";
+import type { DetectedBounds } from "sharedHelpers/detectSubjectInImage";
+import {
+  logSubjectDetectionTiming,
+  subjectCropFromBounds,
+} from "sharedHelpers/detectSubjectInImage";
+import getCropForUri from "sharedHelpers/getCropForUri";
+import imageFileSize from "sharedHelpers/imageFileSize";
+import { log } from "sharedHelpers/logger";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+
+const logger = log.extend( "prepareCropSource" );
+
+// Longest side of the file the cropper displays. Large enough to never
+// downscale, so the cropper draws the photo at full resolution.
+// DESIGN REQUIREMENT: the cropper always shows a full-resolution image (see
+// ImageCropView). NEVER reduce this, or display a downsampled decode in the cropper, to speed
+// up loading: the user needs full resolution to see the subject clearly.
+// Speed up loading some other way.
+const DISPLAY_MAX_PIXEL = 99999;
+
+// Free memory under which a prepare is logged: twice what native reserves for
+// one (kPrepareReserveMB). The prepare killed on Nov 12 started with 1090MB.
+const LOW_MEMORY_MB = 1536;
+
+export interface PreparedSourceFile {
+  type?: string;
+  depth?: number;
+  profile?: string;
+  bytes?: number;
+  // How ImageIO decoded it (non-raw only): bits per component and pixel, the
+  // colour space, whether that space is HDR (PQ/HLG), and whether the eager
+  // decode was used, which is when stageMs splits draw into decode + convert.
+  bpc?: number;
+  bpp?: number;
+  space?: string;
+  hdr?: boolean;
+  eager?: boolean;
+  // Whether ImageIO was asked to tone-map a >8-bit (HDR) photo to SDR as it
+  // decoded, instead of leaving that to the convert stage.
+  toSDR?: boolean;
+  // Memory iOS would still let the app allocate when this prepare started,
+  // after waiting (stageMs.memWait) for room beside other running prepares.
+  freeMB?: number;
+  // The app's own memory footprint (what iOS's memory limit is measured on)
+  // as the prepare started: climbing photo after photo means memory is being
+  // kept, not just peaking during a prepare.
+  footprintMB?: number;
+}
+
+interface PreparedSource {
+  // The file the cropper draws: the source itself for a HEIC, which React
+  // Native decodes directly, else a JPEG decoded from it. The crop itself is
+  // still applied to the original.
+  displayUri: string;
+  // Dimensions of the original as a decoder sees it, which is the pixel space
+  // the crop is expressed in.
+  size: { w: number; h: number };
+  crop: NormalizedCrop;
+  // Native stage durations (queue and lock waits, decode, encode, write,
+  // detection), for telling a slow prepare's waiting from its work.
+  stageMs?: Record<string, number>;
+  // What the native side decoded: its format, bit depth, colour profile and
+  // file size, which is what a slow draw stage depends on.
+  source?: PreparedSourceFile;
+}
+
+interface ImageCropperModule {
+  prepareCropSource?: (
+    inputPath: string,
+    maxPixel: number,
+    outputPath: string,
+    detectSubject: boolean,
+  ) => Promise<{
+    displayUri: string;
+    width: number;
+    height: number;
+    bounds: DetectedBounds | null;
+    // Mean level (0-255) of the display file.
+    displayLevel: number;
+    // Decodes it took, and how long each ran; a raw that failed is tried again.
+    attempts: number;
+    attemptMs: number[];
+    stageMs?: Record<string, number>;
+    source?: PreparedSourceFile;
+    // A raw's free memory at each try.
+    attemptFreeMB?: number[];
+  }>;
+}
+
+// djb2 hash → a stable filename per source, so a photo revisited in the same
+// session (or after the editor was left and re-entered) reuses the file it
+// already decoded. cropSourcesPath is swept by TTL on launch.
+const displayPathFor = ( uri: string ): string => {
+  let hash = 5381;
+  for ( let i = 0; i < uri.length; i += 1 ) {
+    // eslint-disable-next-line no-bitwise
+    hash = ( ( ( hash << 5 ) + hash ) ^ uri.charCodeAt( i ) ) >>> 0;
+  }
+  return `${cropSourcesPath}/${hash.toString( 16 )}-display.jpg`;
+};
+
+// Everything the crop editor needs from a photo, from one decode of it: the
+// dimensions a crop is expressed against, a display-sized file to draw, and the
+// initial framing. Reads the size and detects separately (each its own decode)
+// wherever the native call isn't available.
+const prepareCropSource = async (
+  imageUri: string,
+  sourceUri: string,
+  existingSavedCrop: NormalizedCrop | null,
+): Promise<PreparedSource | null> => {
+  const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
+  // A crop the user already made, or one the crop log remembers for this photo,
+  // both outrank detection -- so there is no subject to detect.
+  const knownCrop = existingSavedCrop ?? getAnimalCrop( imageUri );
+
+  if ( ImageCropper?.prepareCropSource ) {
+    const prepared = await ImageCropper.prepareCropSource(
+      sourceUri,
+      DISPLAY_MAX_PIXEL,
+      displayPathFor( sourceUri ),
+      !knownCrop,
+    ).catch( ( error: Error & { userInfo?: { diagnostics?: unknown } } ) => {
+      logger.errorWithExtra( "crop_source_prepare_failed", {
+        source: sourceUri,
+        error: error?.message ?? String( error ),
+        // Why a raw decode drew nothing (see rawDecodeFailureDiagnostics).
+        diagnostics: error?.userInfo?.diagnostics,
+      } );
+      return null;
+    } );
+    if ( prepared && (
+      prepared.displayLevel < 24
+      || prepared.attempts > 1
+    ) ) {
+      // The cropper is about to draw a near-black frame, or a raw needed
+      // another decode to come out at all.
+      logger.warnWithExtra( "crop_source_dark", {
+        source: sourceUri,
+        displayLevel: prepared.displayLevel,
+        attempts: prepared.attempts,
+        attemptMs: prepared.attemptMs,
+        attemptFreeMB: prepared.attemptFreeMB,
+      } );
+    }
+    if ( !prepared || prepared.width <= 0 || prepared.height <= 0 ) {
+      return null;
+    }
+    if ( ( prepared.source?.freeMB ?? Infinity ) < LOW_MEMORY_MB ) {
+      // iOS kills the app for memory without anything reaching the log, and a
+      // killed bulk crop never writes its crop_session_summary, so say when a
+      // prepare started this close to the limit while the app can still say it.
+      logger.warnWithExtra( "crop_prepare_low_memory", {
+        freeMB: prepared.source?.freeMB,
+        footprintMB: prepared.source?.footprintMB,
+        memWaitMs: prepared.stageMs?.memWait,
+        bytes: prepared.source?.bytes,
+        type: prepared.source?.type,
+      } );
+    }
+    logSubjectDetectionTiming( prepared.bounds );
+    const size = { w: prepared.width, h: prepared.height };
+    return {
+      displayUri: prepared.displayUri,
+      size,
+      crop: knownCrop ?? subjectCropFromBounds( prepared.bounds, size.w, size.h ),
+      stageMs: prepared.stageMs && {
+        ...prepared.stageMs,
+        ...( prepared.bounds?.detectMs !== undefined && { detect: prepared.bounds.detectMs } ),
+      },
+      source: prepared.source,
+    };
+  }
+
+  const size = await imageFileSize( sourceUri );
+  if ( !size ) {
+    return null;
+  }
+  return {
+    displayUri: sourceUri,
+    size,
+    crop: knownCrop ?? await getCropForUri( imageUri, sourceUri, size.w, size.h ),
+  };
+};
+
+export default prepareCropSource;

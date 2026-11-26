@@ -172,9 +172,9 @@ describe( "logged in", ( ) => {
       expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
         taxon_id: mockTaxon.id,
         verifiable: true,
-      } ), {
+      } ), expect.objectContaining( {
         api_token: TEST_JWT,
-      } );
+      } ) );
       // Seeding the entry point's context at mount means Explore never searches
       // with its default state, i.e. no subject and nearby
       const exploreSearches = inatjs.observations.search.mock.calls
@@ -225,9 +225,9 @@ describe( "logged in", ( ) => {
       expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
         user_id: mockUser.id,
         verifiable: true,
-      } ), {
+      } ), expect.objectContaining( {
         api_token: TEST_JWT,
-      } );
+      } ) );
       const header = await screen.findByTestId( "ExploreHeader" );
       expect( within( header ).getByText( mockUser.login ) ).toBeVisible( );
 
@@ -304,9 +304,9 @@ describe( "logged in", ( ) => {
       expect( inatjs.observations.search ).toHaveBeenCalledWith( expect.objectContaining( {
         place_id: mockPlace.id,
         verifiable: true,
-      } ), {
+      } ), expect.objectContaining( {
         api_token: TEST_JWT,
-      } );
+      } ) );
       const header = await screen.findByTestId( "ExploreHeader" );
       expect( within( header ).queryByTestId( "ExploreHeader.subject" ) ).toBeNull( );
       expect( within( header ).getByText( mockPlace.display_name ) ).toBeVisible( );

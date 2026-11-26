@@ -33,7 +33,7 @@ setup_permissions(
     # 'Contacts',
     # 'FaceID',
     "LocationAccuracy",
-    # "LocationAlways",
+    "LocationAlways",
     "LocationWhenInUse",
     "MediaLibrary",
     "Microphone",
@@ -67,6 +67,7 @@ target "iNaturalistReactNative" do
   )
 
   pod "react-native-config", path: "../node_modules/react-native-config"
+  pod "onnxruntime-c"
 
   envfiles = {
     "Debug" => "$(PODS_ROOT)/../../.env.staging",
@@ -94,6 +95,13 @@ target "iNaturalistReactNative" do
     installer.pods_project.targets.each do | target |
       target.build_configurations.each do | build_config |
         build_config.build_settings["APPLICATION_EXTENSION_API_ONLY"] = "NO"
+        # Xcode 27 refuses deployment targets below iOS 15, which some pods'
+        # targets (mostly privacy-manifest bundles) still declare
+        target_version = build_config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"]
+        if target_version && Gem::Version.new( target_version ) <
+            Gem::Version.new( min_ios_version_supported )
+          build_config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = min_ios_version_supported
+        end
       end
     end
   end

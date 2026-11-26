@@ -5,30 +5,36 @@ import DateFilterSection
   from "components/Explore/components/DateFilterSection";
 import RadioGroupSection
   from "components/Explore/components/RadioGroupSection";
-import SavedSearches from "components/Explore/components/SavedSearches";
+import SavedSearches, { SavedSearchSheets }
+  from "components/Explore/components/SavedSearches";
 import SelectedFilterRow
   from "components/Explore/components/SelectedFilterRow";
+import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import {
   getDateObservedValues,
   getDateUploadedValues,
   getEstablishmentValues,
+  getEvidenceTypeValues,
   getMediaValues,
   getMonthValues,
   getPhotoLicenseValues,
   getReviewedValues,
-  getSortByValues,
   getTaxonomicRankValues,
   getWildValues,
 } from "components/Explore/helpers/advancedSearchOptions";
-import type { SubjectTaxon }
-  from "components/Explore/helpers/advancedSearchReducer";
 import {
   advancedSearchReducer,
   defaultAdvancedSearchDraft,
   draftFromV2State,
+  searchTaxonFilters,
 } from "components/Explore/helpers/advancedSearchReducer";
 import locationLabel from "components/Explore/helpers/locationLabel";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import useApplySavedSearch from "components/Explore/hooks/useApplySavedSearch";
+import {
+  useExploreGridOverlays, useExploreLayoutKey,
+} from "components/Explore/hooks/useExploreDisplaySettings";
 import ExploreLocationSearchModal from "components/Explore/Modals/ExploreLocationSearchModal";
 import ExploreProjectSearchModal from "components/Explore/Modals/ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "components/Explore/Modals/ExploreTaxonSearchModal";
@@ -42,7 +48,6 @@ import {
   Button,
   ButtonBar,
   Checkbox,
-  DisplayTaxon,
   Heading4,
   IconicTaxonChooser,
   INatIcon,
@@ -50,9 +55,7 @@ import {
   RadioButtonSheet,
 } from "components/SharedComponents";
 import SearchHeader from "components/SharedComponents/SearchHeader";
-import BottomSheetV2 from "components/SharedComponents/Sheets/BottomSheetV2";
 import WarningSheet from "components/SharedComponents/Sheets/WarningSheet";
-import Body1 from "components/SharedComponents/Typography/Body1";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { ScrollView, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
@@ -62,22 +65,22 @@ import {
   DATE_OBSERVED,
   DATE_UPLOADED,
   EXPLORE_ACTION,
+  EXPLORE_PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
 import React, { useMemo, useReducer, useState } from "react";
-import Taxon from "realmModels/Taxon";
-import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
+import { formatObsFieldDate, getMonthsAroundDate } from "sharedHelpers/dateAndTime";
+import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
+import useStoredLayout from "sharedHooks/useStoredLayout";
+import type { SavedSearch } from "stores/createExploreSearchesSlice";
+import { findSavedSearchByName } from "stores/createExploreSearchesSlice";
 import useStore from "stores/useStore";
 
-type SheetName = "sortBy" | "hrank" | "lrank" | "photoLicense";
+type SheetName = "hrank" | "lrank" | "photoLicense" | "excludeSavedSearch";
 
 type PickerKind = "taxon" | "user" | "project" | "location";
-
-type ExitTarget = "back" | "standardSearch";
-
-const ALL_MONTHS = new Array( 12 ).fill( 0 ).map( ( _, i ) => i + 1 );
 
 const isoToday = ( ) => formatObsFieldDate( new Date( ) );
 
@@ -89,10 +92,6 @@ const AdvancedSearch = ( ) => {
   const currentUser = useCurrentUser();
 
   const { state: v2State, dispatch: dispatchV2 } = useExplore();
-  const setAdvancedSearchMode = useStore(
-    state => state.exploreAdvancedSearch.setAdvancedSearchMode,
-  );
-  const savedSearchCount = useStore( state => state.exploreSavedSearches.searches.length );
   const applySavedSearch = useApplySavedSearch( );
   const [initialDraft] = useState( ( ) => draftFromV2State( v2State ) );
   const [draft, dispatch] = useReducer( advancedSearchReducer, initialDraft );
@@ -100,32 +99,52 @@ const AdvancedSearch = ( ) => {
     subject, location, sortBy, filters,
   } = draft;
 
+  const {
+    layout: observationsLayout,
+    writeLayoutToStorage: writeObservationsLayout,
+  } = useStoredLayout( useExploreLayoutKey( ) );
+  const showingObservationsMap = v2State.activeTab === OBSERVATIONS_TAB
+    && observationsLayout === "map";
+  // Reset also returns Explore to the observations map, once the search is run
+  const [viewReset, setViewReset] = useState( false );
+  const pendingViewChange = viewReset && !showingObservationsMap;
+
   const differsFromInitial = useMemo(
-    ( ) => !isEqual( draft, initialDraft ),
-    [draft, initialDraft],
+    ( ) => pendingViewChange || !isEqual( draft, initialDraft ),
+    [pendingViewChange, draft, initialDraft],
   );
 
   const resetDisabled = useMemo(
-    ( ) => isEqual( draft, defaultAdvancedSearchDraft ),
-    [draft],
+    ( ) => isEqual( draft, defaultAdvancedSearchDraft )
+      && ( viewReset || showingObservationsMap ),
+    [draft, viewReset, showingObservationsMap],
   );
 
-  const [pendingExit, setPendingExit] = useState<ExitTarget | null>( null );
-  const [showSavedSearches, setShowSavedSearches] = useState( false );
-  const savedSearchesOpen = showSavedSearches && savedSearchCount > 0;
-  const exit = ( target: ExitTarget ) => {
-    if ( target === "standardSearch" ) {
-      navigation.replace( "UniversalSearch" );
-    } else {
-      navigation.goBack( );
-    }
+  const reset = ( ) => {
+    dispatch( { type: "RESET" } );
+    setViewReset( true );
   };
-  const requestExit = ( target: ExitTarget ) => {
+  const { overlays: gridOverlays } = useExploreGridOverlays( );
+  const savedSearches = useStore( state => state.exploreSavedSearches.searches );
+  const [pendingExit, setPendingExit] = useState( false );
+  const [showSaveSheet, setShowSaveSheet] = useState( false );
+  const [searchToDelete, setSearchToDelete] = useState<SavedSearch | null>( null );
+  const currentSearch = {
+    subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
+  };
+  // Saved searches also remember the view they were saved from
+  const currentSavedSearch = {
+    ...currentSearch,
+    activeTab: v2State.activeTab,
+    observationsLayout: observationsLayout ?? undefined,
+    gridOverlays,
+  };
+  const requestExit = ( ) => {
     if ( differsFromInitial ) {
-      setPendingExit( target );
+      setPendingExit( true );
       return;
     }
-    exit( target );
+    navigation.goBack( );
   };
 
   // Which in-screen search picker (taxon/user/project/location) is open.
@@ -133,9 +152,9 @@ const AdvancedSearch = ( ) => {
   const [openSheet, setOpenSheet] = useState<SheetName | null>( null );
   const closeSheet = ( ) => setOpenSheet( null );
 
-  const updateTaxon = ( taxon: SubjectTaxon | null ) => dispatch( {
-    type: "SET_TAXON",
-    taxon,
+  const updateTaxonFilters = ( taxonFilters: ExploreTaxonFilter[] ) => dispatch( {
+    type: "SET_TAXON_FILTERS",
+    taxonFilters,
   } );
 
   const filterByIconicTaxonUnknown = () => dispatch( {
@@ -147,16 +166,10 @@ const AdvancedSearch = ( ) => {
     user: selectedUser,
   } );
 
-  const updateUnobservedByUser = ( selectedUser: ExploreSearchUser ) => dispatch( {
-    type: "SET_UNOBSERVED_BY_USER",
-    user: {
-      id: selectedUser.id,
-      login: selectedUser.login,
-      icon_url: selectedUser.icon_url,
-    },
+  const updateExcludeSpeciesInSavedSearch = ( name: string | null ) => dispatch( {
+    type: "SET_EXCLUDE_SPECIES_IN_SAVED_SEARCH",
+    name,
   } );
-
-  const clearUserFilters = ( ) => dispatch( { type: "SET_USER", user: null } );
 
   const updateProject = ( selectedProject: ApiProjectSummary | null ) => dispatch( {
     type: "SET_PROJECT",
@@ -177,15 +190,23 @@ const AdvancedSearch = ( ) => {
 
   const closePicker = ( ) => setOpenPicker( null );
 
+  const isNearby = location.placeMode === EXPLORE_PLACE_MODE.NEARBY;
+  const nearbyRadiusKm = ( isNearby && location.radius ) || DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM;
+  const setNearby = ( radius = nearbyRadiusKm ) => dispatch( {
+    type: "SET_LOCATION_NEARBY",
+    radius,
+  } );
+
   const handleSearch = () => {
+    if ( viewReset ) {
+      writeObservationsLayout( "map" );
+    }
     dispatchV2( {
       type: EXPLORE_ACTION.APPLY_SEARCH,
-      search: {
-        subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
-      },
+      search: viewReset
+        ? { ...currentSearch, activeTab: OBSERVATIONS_TAB }
+        : currentSearch,
     } );
-    dispatchV2( { type: EXPLORE_ACTION.SET_ACTIVE_TAB, tab: OBSERVATIONS_TAB } );
-    setAdvancedSearchMode( true );
     navigation.popTo( "ExploreResults" );
   };
 
@@ -199,6 +220,7 @@ const AdvancedSearch = ( ) => {
     dateObserved,
     dateUploaded,
     establishmentMean,
+    evidenceTypes,
     hrank,
     lrank,
     media,
@@ -206,27 +228,35 @@ const AdvancedSearch = ( ) => {
     needsID,
     observed_on: observedOn,
     photoLicense,
+    favedByMe,
     project,
     researchGrade,
     reviewedFilter,
-    unobservedByUser,
+    excludeSpeciesInSavedSearch,
     user,
     wildStatus,
   } = filters;
 
-  const taxon = subject?.type === "taxon"
-    ? subject.taxon
-    : null;
+  // Saved searches are referenced by name, so only named ones can be picked
+  const namedSavedSearches = savedSearches.filter( saved => !!saved.name?.trim( ) );
+  const excludedSavedSearchMissing = !!excludeSpeciesInSavedSearch
+    && !findSavedSearchByName( savedSearches, excludeSpeciesInSavedSearch );
+  const excludeSavedSearchValues = Object.fromEntries( namedSavedSearches.map( saved => [
+    saved.key,
+    { label: saved.name as string, value: saved.name as string },
+  ] ) );
+
+  const taxonFilters = searchTaxonFilters( subject, filters );
   const taxonUnknown = subject?.type === "unknown";
-  const chosenIconicTaxa = ( ) => {
-    if ( taxonUnknown ) { return ["unknown"]; }
-    if ( taxon?.name ) { return [taxon.name.toLowerCase()]; }
-    return [];
-  };
+  const chosenIconicTaxa = taxonUnknown
+    ? ["unknown"]
+    : taxonFilters
+      .filter( filter => !filter.exclude )
+      .map( filter => filter.taxon.name?.toLowerCase( ) )
+      .filter( ( name ): name is string => !!name );
 
   const displayProject = project;
 
-  const sortByValues = getSortByValues( t );
   const taxonomicRankValues = getTaxonomicRankValues( t );
   const dateObservedValues = getDateObservedValues( t );
   const dateUploadedValues = getDateUploadedValues( t );
@@ -256,7 +286,7 @@ const AdvancedSearch = ( ) => {
     } else if ( newDateObserved === DATE_OBSERVED.MONTHS ) {
       dispatch( {
         type: "SET_DATE_OBSERVED_MONTHS",
-        months: newMonths || ALL_MONTHS,
+        months: newMonths || getMonthsAroundDate( ),
       } );
     }
   };
@@ -298,89 +328,94 @@ const AdvancedSearch = ( ) => {
   // silently run an unfiltered search; block Search until a month is selected.
   const noMonthsSelected = dateObserved === DATE_OBSERVED.MONTHS
     && ( months || [] ).length === 0;
-  const hasError = observedEndBeforeStart || uploadedEndBeforeStart || noMonthsSelected;
+  const hasError = observedEndBeforeStart || uploadedEndBeforeStart || noMonthsSelected
+    || excludedSavedSearchMissing;
 
   return (
     <SharedStackViewWrapper testID="AdvancedSearch">
       <SearchHeader
-        headerText={t( "ADVANCED-SEARCH" )}
-        onClose={( ) => requestExit( "back" )}
-        onReset={() => dispatch( { type: "RESET" } )}
+        headerText={t( "SEARCH" )}
+        onClose={requestExit}
+        onReset={reset}
         resetDisabled={resetDisabled}
         testID="AdvancedSearch.back"
       />
 
       <ScrollView className="py-4">
-        <View className="px-4 mb-7">
-          <Button
-            text={t( "RETURN-TO-STANDARD-SEARCH" )}
-            onPress={( ) => requestExit( "standardSearch" )}
-            testID="AdvancedSearch.returnToStandardSearch"
-          />
-        </View>
-        {savedSearchCount > 0 && (
-          <View className="mb-7">
-            <Heading4 className="px-4 mb-5">{t( "SAVED-SEARCHES" )}</Heading4>
-            <View className="px-4">
-              <Button
-                text={t( "CHOOSE-A-SAVED-SEARCH" )}
-                onPress={( ) => setShowSavedSearches( true )}
-                testID="AdvancedSearch.savedSearchesButton"
-              />
-            </View>
-          </View>
-        )}
+        <SavedSearches
+          currentSearch={currentSavedSearch}
+          onDelete={setSearchToDelete}
+          onSave={( ) => setShowSaveSheet( true )}
+          onSelect={applySavedSearch}
+        />
 
         {/* Taxon Section */}
+        <ExploreTaxonFiltersSection
+          iconicTaxonNames={taxonUnknown
+            ? ["unknown"]
+            : []}
+          onOpenTaxonSearch={() => setOpenPicker( "taxon" )}
+          taxonFilters={taxonFilters}
+          updateTaxonFilters={updateTaxonFilters}
+        />
         <View className="mb-7">
-          <Heading4 className="px-4 mb-5">{t( "TAXON" )}</Heading4>
-          <View className="px-4 mb-5">
-            {( taxon || taxonUnknown )
-              ? (
-                <SelectedFilterRow
-                  accessibilityLabel={t( "Change-taxon" )}
-                  onEdit={() => setOpenPicker( "taxon" )}
-                  onRemove={() => updateTaxon( null )}
-                  removeAccessibilityLabel={t( "Remove-taxon-filter" )}
-                >
-                  <DisplayTaxon
-                    handlePress={() => setOpenPicker( "taxon" )}
-                    taxon={taxon || "unknown"}
-                  />
-                </SelectedFilterRow>
-              )
-              : (
-                <Button
-                  text={t( "SEARCH-FOR-A-TAXON" )}
-                  onPress={() => {
-                    setOpenPicker( "taxon" );
-                  }}
-                  accessibilityLabel={t( "Search" )}
-                />
-              )}
-          </View>
           <IconicTaxonChooser
-            before
-            chosen={chosenIconicTaxa()}
+            chosen={chosenIconicTaxa}
             onTaxonChosen={( taxonName: string ) => {
               if ( taxonName === "unknown" ) {
                 if ( taxonUnknown ) {
-                  updateTaxon( null );
+                  updateTaxonFilters( [] );
                 } else {
                   filterByIconicTaxonUnknown();
                 }
-              } else if ( taxon?.name?.toLowerCase() === taxonName ) {
-                updateTaxon( null );
-              } else {
-                const selectedTaxon = iconicTaxa
-                  ?.filtered( "name ==[c] $0", taxonName );
-                const iconicTaxon = selectedTaxon && selectedTaxon.length > 0
-                  ? Taxon.mapRealmToPojo( selectedTaxon[0] )
-                  : null;
-                updateTaxon( iconicTaxon );
+                return;
+              }
+              const selectedTaxon = iconicTaxa
+                ?.filtered( "name ==[c] $0", taxonName );
+              if ( selectedTaxon && selectedTaxon.length > 0 ) {
+                updateTaxonFilters(
+                  toggleTaxonFilter( taxonFilters, selectedTaxon[0], false ),
+                );
               }
             }}
           />
+          <View className="px-4 mt-5" testID="AdvancedSearch.excludeSavedSearch">
+            {excludeSpeciesInSavedSearch
+              ? (
+                <>
+                  <SelectedFilterRow
+                    accessibilityLabel={t( "Change-saved-search-to-exclude" )}
+                    onEdit={() => setOpenSheet( "excludeSavedSearch" )}
+                    onRemove={() => updateExcludeSpeciesInSavedSearch( null )}
+                    removeAccessibilityLabel={t( "Stop-excluding-saved-search" )}
+                  >
+                    <Body3 className="flex-1">
+                      {t( "Excluding-species-in-saved-search", {
+                        name: excludeSpeciesInSavedSearch,
+                      } )}
+                    </Body3>
+                  </SelectedFilterRow>
+                  {excludedSavedSearchMissing && (
+                    <Body3
+                      className="mt-2 text-warningRed"
+                      testID="AdvancedSearch.excludeSavedSearchMissing"
+                    >
+                      {t( "Excluded-saved-search-not-found", {
+                        name: excludeSpeciesInSavedSearch,
+                      } )}
+                    </Body3>
+                  )}
+                </>
+              )
+              : namedSavedSearches.length > 0 && (
+                <Button
+                  level="neutral"
+                  text={t( "EXCLUDE-SPECIES-IN-A-SAVED-SEARCH" )}
+                  onPress={() => setOpenSheet( "excludeSavedSearch" )}
+                  accessibilityLabel={t( "Exclude-species-in-a-saved-search" )}
+                />
+              )}
+          </View>
         </View>
         <View className="px-4 pb-4">
           {/* Location Section */}
@@ -400,22 +435,6 @@ const AdvancedSearch = ( ) => {
                   accessibilityLabel={t( "Edit" )}
                 />
               </View>
-            </View>
-          </View>
-
-          {/* Sort-By Section */}
-          <View className="mb-7">
-            <Heading4 className="mb-5">{t( "SORT-BY" )}</Heading4>
-            <View className="mb-5">
-              <Button
-                text={sortByValues[sortBy]?.labelCaps}
-                className="shrink"
-                dropdown
-                onPress={() => {
-                  setOpenSheet( "sortBy" );
-                }}
-                accessibilityLabel={t( "Sort-by" )}
-              />
             </View>
           </View>
 
@@ -447,22 +466,12 @@ const AdvancedSearch = ( ) => {
           <View className="mb-7">
             <Heading4 className="mb-5">{t( "USER" )}</Heading4>
             <View className="mb-5">
-              {unobservedByUser && (
-                <SelectedFilterRow
-                  accessibilityLabel={t( "Change-user" )}
-                  onEdit={() => setOpenPicker( "user" )}
-                  onRemove={clearUserFilters}
-                  removeAccessibilityLabel={t( "Remove-user-filter" )}
-                >
-                  <Body1>{t( "Species-I-havent-observed" )}</Body1>
-                </SelectedFilterRow>
-              )}
               {user && (
                 <SelectedFilterRow
                   accessibilityLabel={t( "Change-user" )}
                   justify="justify-around"
                   onEdit={() => setOpenPicker( "user" )}
-                  onRemove={clearUserFilters}
+                  onRemove={() => updateUser( null )}
                   removeAccessibilityLabel={t( "Remove-user-filter" )}
                 >
                   <UserListItem
@@ -472,7 +481,7 @@ const AdvancedSearch = ( ) => {
                   />
                 </SelectedFilterRow>
               )}
-              {!user && !unobservedByUser && (
+              {!user && (
                 <Button
                   text={t( "FILTER-BY-A-USER" )}
                   onPress={() => {
@@ -482,6 +491,13 @@ const AdvancedSearch = ( ) => {
                 />
               )}
             </View>
+            {currentUser && (
+              <Checkbox
+                text={t( "Faved-by-me-observations-filter" )}
+                isChecked={!!favedByMe}
+                onPress={() => dispatch( { type: "TOGGLE_FAVED_BY_ME" } )}
+              />
+            )}
           </View>
 
           {/* Project Section */}
@@ -655,6 +671,20 @@ const AdvancedSearch = ( ) => {
             } )}
           />
 
+          {/* Evidence Type section */}
+          <View className="mb-7">
+            <Heading4 className="mb-5">{t( "EVIDENCE-TYPE" )}</Heading4>
+            {Object.values( getEvidenceTypeValues( t ) ).map( ( { label, value } ) => (
+              <View key={value} className="mb-4">
+                <Checkbox
+                  text={label}
+                  isChecked={!!evidenceTypes?.includes( value )}
+                  onPress={() => dispatch( { type: "TOGGLE_EVIDENCE_TYPE", evidenceType: value } )}
+                />
+              </View>
+            ) )}
+          </View>
+
           {/* Reviewed section */}
           {currentUser && (
             <RadioGroupSection
@@ -681,6 +711,7 @@ const AdvancedSearch = ( ) => {
               accessibilityLabel={t( "View-photo-licensing-info" )}
             />
           </View>
+
         </View>
       </ScrollView>
       <ButtonBar containerClass="bg-white border-t border-lightGray">
@@ -698,21 +729,6 @@ const AdvancedSearch = ( ) => {
       </ButtonBar>
 
       {/* BottomSheets */}
-      {openSheet === "sortBy" && (
-        <RadioButtonSheet
-          headerText={t( "SORT-BY" )}
-          confirm={newSortBy => {
-            dispatch( {
-              type: "SET_SORT",
-              sortBy: newSortBy,
-            } );
-            closeSheet();
-          }}
-          onPressClose={closeSheet}
-          radioValues={sortByValues}
-          selectedValue={sortBy}
-        />
-      )}
       {openSheet === "hrank" && (
         <PickerSheet
           headerText={t( "HIGHEST-RANK" )}
@@ -758,15 +774,24 @@ const AdvancedSearch = ( ) => {
           selectedValue={photoLicense}
         />
       )}
+      {openSheet === "excludeSavedSearch" && (
+        <RadioButtonSheet
+          headerText={t( "EXCLUDE-SPECIES-IN-A-SAVED-SEARCH" )}
+          confirm={( name: string ) => {
+            updateExcludeSpeciesInSavedSearch( name );
+            closeSheet();
+          }}
+          onPressClose={closeSheet}
+          radioValues={excludeSavedSearchValues}
+          selectedValue={excludeSpeciesInSavedSearch ?? ""}
+        />
+      )}
       {openPicker === "taxon" && (
         <ExploreTaxonSearchModal
           showModal
           closeModal={closePicker}
-          updateTaxon={realmTaxon => updateTaxon(
-            realmTaxon
-              ? Taxon.mapRealmToPojo( realmTaxon )
-              : null,
-          )}
+          taxonFilters={taxonFilters}
+          updateTaxonFilters={updateTaxonFilters}
         />
       )}
       {openPicker === "user" && (
@@ -774,7 +799,7 @@ const AdvancedSearch = ( ) => {
           showModal
           closeModal={closePicker}
           updateUser={updateUser}
-          onSelectUnobserved={updateUnobservedByUser}
+          defaultToCurrentUser
         />
       )}
       {openPicker === "project" && (
@@ -788,30 +813,34 @@ const AdvancedSearch = ( ) => {
         <ExploreLocationSearchModal
           showModal
           closeModal={closePicker}
-          onSelectNearby={() => dispatch( { type: "SET_LOCATION_NEARBY" } )}
+          nearbyRadius={{
+            selected: isNearby,
+            radiusKm: nearbyRadiusKm,
+            defaultRadiusKm: DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM,
+            onChange: setNearby,
+          }}
+          onSelectNearby={() => setNearby( )}
           updateLocation={updateLocation}
         />
       )}
-      {savedSearchesOpen && (
-        <BottomSheetV2
-          enableSwipeToClose={false}
-          headerText={t( "SAVED-SEARCHES" )}
-          onPressClose={( ) => setShowSavedSearches( false )}
-        >
-          <SavedSearches hideHeader onSelect={applySavedSearch} />
-        </BottomSheetV2>
-      )}
+      <SavedSearchSheets
+        currentSearch={currentSavedSearch}
+        onCloseDelete={( ) => setSearchToDelete( null )}
+        onCloseSave={( ) => setShowSaveSheet( false )}
+        searchToDelete={searchToDelete}
+        showSaveSheet={showSaveSheet}
+      />
       {pendingExit && (
         <WarningSheet
-          onPressClose={( ) => setPendingExit( null )}
+          onPressClose={( ) => setPendingExit( false )}
           confirm={( ) => {
-            setPendingExit( null );
-            exit( pendingExit );
+            setPendingExit( false );
+            navigation.goBack( );
           }}
           headerText={t( "DISCARD-FILTER-CHANGES" )}
           text={t( "You-changed-filters-will-be-discarded" )}
           buttonText={t( "DISCARD-CHANGES" )}
-          handleSecondButtonPress={( ) => setPendingExit( null )}
+          handleSecondButtonPress={( ) => setPendingExit( false )}
           secondButtonText={t( "CANCEL" )}
           loading={false}
         />

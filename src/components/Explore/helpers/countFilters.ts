@@ -5,7 +5,11 @@ const countedDefaults = {
   ...defaultExploreFilters,
   user: null,
   unobservedByUser: null,
+  excludeSpeciesInSavedSearch: null,
   project: null,
+  taxonFilters: null,
+  evidenceTypes: null,
+  favedByMe: null,
 };
 
 type CountedKey = keyof typeof countedDefaults;

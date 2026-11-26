@@ -1,6 +1,12 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
+import AudioId from "components/AudioId/AudioId";
+import AudioIdClip from "components/AudioId/AudioIdClip";
+import AudioIdHistory from "components/AudioId/AudioIdHistory";
+import AudioIdTaxa from "components/AudioId/AudioIdTaxa";
+import CameraPairs from "components/CameraPairs/CameraPairs";
+import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
 import SuggestionsHarness from "components/Developer/SuggestionsHarness";
@@ -10,6 +16,9 @@ import Donate from "components/Donate/Donate";
 import ExploreContainer from "components/Explore/ExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
+import LocationHistory from "components/LocationHistory/LocationHistory";
+import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
+import LocationHistoryPointsMap from "components/LocationHistory/LocationHistoryPointsMap";
 import Menu from "components/Menu/Menu";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
 import Notifications from "components/Notifications/Notifications";
@@ -21,10 +30,13 @@ import ProjectRequirements from "components/ProjectDetails/ProjectRequirements";
 import ProjectListContainer from "components/ProjectList/ProjectListContainer";
 import ProjectsContainer from "components/Projects/ProjectsContainer";
 import Settings from "components/Settings/Settings";
+import StorageUsage from "components/Settings/StorageUsage";
+import TunableParams from "components/Settings/TunableParams";
 import { Heading4 } from "components/SharedComponents";
 import FollowersList from "components/UserProfile/FollowersList";
 import FollowingList from "components/UserProfile/FollowingList";
 import UserProfile from "components/UserProfile/UserProfile";
+import VideoStabilizer from "components/VideoStabilizer/VideoStabilizer";
 import { t } from "i18next";
 import ContextHeader from "navigation/ContextHeader";
 import {
@@ -42,6 +54,7 @@ import type { BottomTabProps, TabStackParamList } from "navigation/types";
 import React from "react";
 import colors from "styles/tailwindColors";
 
+import PhotoImporterStackScreens from "./PhotoImporterStackScreens";
 import SharedStackScreens from "./SharedStackScreens";
 
 const aboutTitle = () => (
@@ -74,12 +87,62 @@ const settingsTitle = () => (
     {t( "SETTINGS" )}
   </Heading4>
 );
+const tunableParamsTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "TUNABLE-PARAMETERS" )}
+  </Heading4>
+);
+const storageUsageTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "STORAGE-USAGE" )}
+  </Heading4>
+);
 const notificationsTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "NOTIFICATIONS" )}
   </Heading4>
 );
 
+const audioIdTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "AUDIO-ID" )}
+  </Heading4>
+);
+const audioIdHistoryTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "HEARD--audio-id" )}
+  </Heading4>
+);
+const audioIdClipTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "CLIP--audio-id" )}
+  </Heading4>
+);
+const audioIdTaxaTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "LISTENING-FOR" )}
+  </Heading4>
+);
+const cropLogTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "CROP-LOG" )}
+  </Heading4>
+);
+const cameraPairsTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "CAMERA-PAIRS" )}
+  </Heading4>
+);
+const videoStabilizerTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "VIDEO-STABILIZER" )}
+  </Heading4>
+);
+const locationHistoryTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "LOCATION-HISTORY" )}
+  </Heading4>
+);
 // eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -103,6 +166,8 @@ const FadeInProjectDetailsContainer = ( ) => fadeInComponent( <ProjectDetailsCon
 const FadeInProjectRequirements = ( ) => fadeInComponent( <ProjectRequirements /> );
 const FadeInProjectMembers = ( ) => fadeInComponent( <ProjectMembers /> );
 const FadeInSettings = ( ) => fadeInComponent( <Settings /> );
+const FadeInTunableParams = ( ) => fadeInComponent( <TunableParams /> );
+const FadeInStorageUsage = ( ) => fadeInComponent( <StorageUsage /> );
 const FadeInHelp = ( ) => fadeInComponent( <Help /> );
 const FadeInAbout = ( ) => fadeInComponent( <About /> );
 const FadeInDonate = ( ) => fadeInComponent( <Donate /> );
@@ -222,6 +287,7 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           options={DQA_OPTIONS}
         />
         {SharedStackScreens( )}
+        {PhotoImporterStackScreens( )}
         {/* Project Stack Group */}
         <Stack.Group
           screenOptions={{
@@ -276,6 +342,72 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={FadeInJournal}
             options={LIST_OPTIONS}
           />
+          <Stack.Screen
+            name="AudioId"
+            component={AudioId}
+            options={{
+              headerTitle: audioIdTitle,
+            }}
+          />
+          <Stack.Screen
+            name="AudioIdHistory"
+            component={AudioIdHistory}
+            options={{ headerTitle: audioIdHistoryTitle }}
+          />
+          <Stack.Screen
+            name="AudioIdClip"
+            component={AudioIdClip}
+            options={{ headerTitle: audioIdClipTitle, ...preventSwipeToGoBack }}
+          />
+          <Stack.Screen
+            name="AudioIdTaxa"
+            component={AudioIdTaxa}
+            options={{ headerTitle: audioIdTaxaTitle }}
+          />
+          <Stack.Screen
+            name="CropLogViewer"
+            component={CropLogViewer}
+            options={{
+              headerTitle: cropLogTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistory"
+            component={LocationHistory}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="CameraPairs"
+            component={CameraPairs}
+            options={{
+              headerTitle: cameraPairsTitle,
+            }}
+          />
+          <Stack.Screen
+            name="VideoStabilizer"
+            component={VideoStabilizer}
+            options={{
+              headerTitle: videoStabilizerTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryPointsMap"
+            component={LocationHistoryPointsMap}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryDetailMap"
+            component={LocationHistoryDetailMap}
+            options={{
+              // Reuses the LocationPicker interface, which renders its own
+              // header and close button, so hide the native stack header.
+              headerShown: false,
+            }}
+          />
         </Stack.Group>
         {/* Developer Stack Group */}
         <Stack.Group
@@ -320,6 +452,20 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={FadeInSettings}
             options={{
               headerTitle: settingsTitle,
+            }}
+          />
+          <Stack.Screen
+            name="TunableParams"
+            component={FadeInTunableParams}
+            options={{
+              headerTitle: tunableParamsTitle,
+            }}
+          />
+          <Stack.Screen
+            name="StorageUsage"
+            component={FadeInStorageUsage}
+            options={{
+              headerTitle: storageUsageTitle,
             }}
           />
           <Stack.Screen

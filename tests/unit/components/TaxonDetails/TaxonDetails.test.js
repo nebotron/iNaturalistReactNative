@@ -10,6 +10,7 @@ import Photo from "realmModels/Photo";
 import { useAuthenticatedQuery } from "sharedHooks";
 import * as useCurrentUser from "sharedHooks/useCurrentUser";
 import factory from "tests/factory";
+import cachedImageUri from "tests/helpers/cachedImageUri";
 import faker from "tests/helpers/faker";
 // Mock inaturalistjs so we can make some fake responses
 jest.mock( "inaturalistjs" );
@@ -122,8 +123,8 @@ describe( "TaxonDetails", ( ) => {
     expect( screen.getByTestId( `TaxonDetails.${mockTaxon.id}` ) ).toBeTruthy( );
     const photo
       = await screen.findByTestId( `TaxonDetails.photo.${mockTaxon.taxonPhotos[0].photo.id}` );
-    expect( photo.props.source )
-      .toStrictEqual( { uri: Photo.displayMediumPhoto( mockTaxon.taxonPhotos[0].photo.url ) } );
+    expect( cachedImageUri( photo ) )
+      .toStrictEqual( Photo.displayMediumPhoto( mockTaxon.taxonPhotos[0].photo.url ) );
   } );
 
   // fails because of image carousel

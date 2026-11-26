@@ -1,0 +1,658 @@
+import { CachesDirectoryPath, unlink } from "@dr.pogodin/react-native-fs";
+import i18n from "i18next";
+import { navigationRef } from "navigation/navigationUtils";
+import { AppState, NativeEventEmitter, NativeModules } from "react-native";
+import { MMKV } from "react-native-mmkv";
+import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
+import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
+import { log } from "sharedHelpers/logger";
+import { setMemoryContext } from "sharedHelpers/memoryWatermark";
+import createMmkvRecordStore, { AUDIO_ID_HEARD_MMKV_ID } from "sharedHelpers/mmkvRecordStore";
+import { getTunable } from "sharedHelpers/tunableParams";
+import * as uuid from "uuid";
+import { create } from "zustand";
+
+import useAudioIdHistory, { clipPath, contextClipPath, NO_SPECIES } from "./audioIdHistory";
+import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
+import { prepareAudioId, speciesOutput } from "./audioIdModel";
+
+// The Audio ID listening session, kept outside the screen so it carries on
+// while the user is elsewhere in the app or the app is in the background. The
+// AudioBirdId native module runs BirdNET on the last 5 s of microphone audio
+// every 2.5 s and emits probabilities for the species likely at the user's
+// place and week (see audioIdModel.ts): the top one, and any that clear
+// THRESHOLD. A species counts as heard, and is listed, when its score clears
+// THRESHOLD; it vibrates only when its score clears VIBRATE_THRESHOLD.
+
+type VibrateMode = "auto" | "core" | "system";
+
+export const { AudioBirdId } = NativeModules as {
+  AudioBirdId?: {
+    start: (
+      outputs: number[],
+      minScore: number,
+    ) => Promise<{ sampleRate: number; channels: number; outputsGeneration: number }>;
+    setOutputs: ( outputs: number[] ) => Promise<number>;
+    stop: ( ) => void;
+    scoreSound: ( uri: string, outputs: number[] ) => Promise<number[]>;
+    setPlayingClip: ( playing: boolean ) => void;
+    vibrate: ( mode: VibrateMode ) => Promise<{
+      allowed: boolean; error: string | null; method: string; appState: number;
+    }>;
+    geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
+    saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
+    playClip: ( path: string ) => Promise<void>;
+    playClipRange: ( path: string, from: number, to: number ) => Promise<void>;
+    normalizeSound: ( uri: string ) => Promise<string>;
+    trimClip: ( path: string, from: number, to: number, outPath: string ) => Promise<string>;
+    timeline: ( index: number, endFrame: number, seconds: number ) => Promise<( number | null )[]>;
+    clipTimeline: ( uri: string, outputs: number[] ) => Promise<( number | null )[]>;
+    stopClip: ( ) => void;
+  };
+};
+
+// Up from 0.3: on users' labeled detections it cut wrong birds from 23 to 8
+// and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
+// Listing and vibrating have thresholds of their own, so a lower bar can fill
+// the list without buzzing the user for every doubtful call.
+const THRESHOLD = getTunable( "audioIdThreshold" );
+const VIBRATE_THRESHOLD = getTunable( "audioIdVibrateThreshold" );
+const NEW_CALL_GAP_MS = getTunable( "audioIdNewCallGapSeconds" ) * 1000;
+const REALERT_MS = getTunable( "audioIdRealertHours" ) * 3600000;
+// Scores by output index, as the native module sends them
+type Scores = Record<number, number>;
+export const isHeard = ( s: number ) => s >= THRESHOLD;
+
+const logger = log.extend( "AudioId" );
+// Runs summarized per log line, so field problems show up in the app log.
+const LOG_EVERY = 30;
+
+interface ScoresEvent {
+  scores: Scores;
+  level: number;
+  // Native sample count at the window's end, for saving its clip
+  windowFrame: number;
+  // Which outputs the run scored, as start and setOutputs return it
+  outputsGeneration?: number;
+  inferMs: number;
+  memMB: number;
+  // malloc's bytes in use and held from the system, and what handing freed
+  // memory back to iOS released this run (0 when it didn't run)
+  heapUsedMB?: number;
+  heapHeldMB?: number;
+  reliefMB?: number;
+  // Live spectrogram views on screen when it ran.
+  spectrogramViews?: number;
+  error: string | null;
+}
+export interface Heard {
+  sp: AudioIdSpecies; lastHeard: number; best: number; count: number;
+  // When its score last cleared VIBRATE_THRESHOLD, 0 for never. Missing from
+  // entries saved before the thresholds were split, which fall back to lastHeard.
+  lastConfident?: number;
+}
+
+// The clip of each species' current call, by taxon ID.
+const callClips = new Map<number, string>( );
+// Pending saves of 15 s centered on each clip's window, by clip ID.
+const contextTimers = new Map<string, ReturnType<typeof setTimeout>>( );
+// Where listening started, for clips heard where no fix comes back.
+let sessionLocation: UserLocation | null = null;
+
+// Where in a 15 s context clip the call is, in seconds from its start, from
+// the model's per-frame logits in 1/3 s bins: of the stretches of bins at the
+// call logit or more (or within the peak range of the peak, when it is
+// weaker), joined across gaps of up to the call gap, the strongest one in the
+// 5 s window the call was heard in, padded by some bins each side to at least
+// the minimum length.
+export const BINS_PER_S = 3;
+const CONTEXT_S = 15;
+const WINDOW_BINS = [5 * BINS_PER_S, 10 * BINS_PER_S - 1];
+const CALL_LOGIT = getTunable( "audioIdCallLogit" );
+const CALL_PEAK_RANGE = getTunable( "audioIdCallPeakRange" );
+const CALL_GAP_BINS = Math.round( getTunable( "audioIdCallGapSeconds" ) * BINS_PER_S );
+const CALL_PADDING_BINS = getTunable( "audioIdCallPaddingBins" );
+const MIN_CALL_S = Math.min( getTunable( "audioIdMinCallSeconds" ), CONTEXT_S );
+const findCall = ( timeline: ( number | null )[] ): [number, number] | null => {
+  const bins = timeline.map( b => b ?? -Infinity );
+  const peak = Math.max( ...bins.slice( WINDOW_BINS[0], WINDOW_BINS[1] + 1 ) );
+  if ( !Number.isFinite( peak ) ) return null;
+  const on = Math.min( CALL_LOGIT, peak - CALL_PEAK_RANGE );
+  const stretches: [number, number][] = [];
+  bins.forEach( ( b, i ) => {
+    if ( b < on ) return;
+    const last = stretches[stretches.length - 1];
+    if ( last && i - last[1] <= CALL_GAP_BINS + 1 ) last[1] = i;
+    else stretches.push( [i, i] );
+  } );
+  const best = ( [a, b]: [number, number] ) => Math.max( ...bins.slice( a, b + 1 ) );
+  const call = stretches
+    .filter( ( [a, b] ) => b >= WINDOW_BINS[0] && a <= WINDOW_BINS[1] )
+    .sort( ( x, y ) => best( y ) - best( x ) )[0];
+  if ( !call ) return null;
+  let start = Math.max( 0, ( call[0] - CALL_PADDING_BINS ) / BINS_PER_S );
+  let end = Math.min( CONTEXT_S, ( call[1] + 1 + CALL_PADDING_BINS ) / BINS_PER_S );
+  if ( end - start < MIN_CALL_S ) {
+    const half = MIN_CALL_S / 2;
+    const mid = Math.min( Math.max( ( start + end ) / 2, half ), CONTEXT_S - half );
+    start = mid - half;
+    end = mid + half;
+  }
+  return [start, end];
+};
+
+// What Identify will score `sp` at for `from` to `to` s of the clip at
+// `path`: that stretch saved as the observation sound would be, then scored
+// as Suggestions scores sounds. Live runs see 5 s of audio around a call and
+// Identify only the trimmed call, so the two often differ a lot (by more than
+// 0.25 on a quarter of 158 labeled detections); the call alone is the better
+// guide, keeping 92 of 96 right detections and 18 of 53 wrong ones.
+export const scoreTrim = async (
+  path: string,
+  [from, to]: [number, number],
+  sp: AudioIdSpecies,
+): Promise<number | null> => {
+  const output = speciesOutput( sp );
+  if ( !AudioBirdId || output < 0 ) return null;
+  const out = `${CachesDirectoryPath}/${uuid.v4( )}.m4a`;
+  try {
+    await AudioBirdId.trimClip( path, from, to, out );
+    const [score] = await AudioBirdId.scoreSound( out, [output] );
+    return score ?? null;
+  } finally {
+    unlink( out ).catch( ( ) => undefined );
+  }
+};
+
+// Keeps the 5 s clip of the run a call scored best in.
+const saveCallClip = (
+  sp: AudioIdSpecies,
+  output: number,
+  score: number,
+  isNewCall: boolean,
+  windowFrame: number,
+) => {
+  const history = useAudioIdHistory.getState( );
+  const existing = callClips.get( sp.taxonId );
+  const clip = !isNewCall && existing
+    ? history.clips[existing]
+    : undefined;
+  if ( clip && score <= clip.confidence ) return;
+  const id = clip
+    ? clip.id
+    : history.addClip( sp, score ).id;
+  if ( clip ) {
+    history.updateClip( id, { confidence: score } );
+  } else {
+    // Where it was heard, falling back to where listening started.
+    fetchCoarseUserLocation( ).catch( ( ) => null ).then( loc => {
+      const l = loc || sessionLocation;
+      if ( l ) {
+        history.updateClip( id, {
+          location: {
+            latitude: l.latitude, longitude: l.longitude, accuracy: l.positional_accuracy,
+          },
+        } );
+      }
+    } );
+  }
+  callClips.set( sp.taxonId, id );
+  AudioBirdId?.saveClip( clipPath( id ), 5, windowFrame )
+    .catch( ( e: Error ) => logger.error( `saving clip failed: ${e.message}` ) );
+  // 5 s on, 15 s centered on this window can be saved, with where the call is in it.
+  clearTimeout( contextTimers.get( id ) );
+  contextTimers.set( id, setTimeout( ( ) => {
+    contextTimers.delete( id );
+    const endFrame = windowFrame + 5 * 32000;
+    AudioBirdId?.saveClip( contextClipPath( id ), CONTEXT_S, endFrame )
+      .then( ( ) => AudioBirdId?.timeline( output, endFrame, CONTEXT_S ) )
+      .then( timeline => {
+        if ( !timeline ) return null;
+        const call = findCall( timeline );
+        // Kept for the clip's graph, so it needs no runs of the model.
+        history.updateClip( id, {
+          timeline: timeline.map( b => ( b == null
+            ? null
+            : Math.round( b * 100 ) / 100 ) ),
+          ...( call
+            ? { call }
+            : {} ),
+        } );
+        return call
+          ? scoreTrim( contextClipPath( id ), call, sp )
+          : null;
+      } )
+      .then( score => {
+        if ( score != null ) history.updateClip( id, { callConfidence: score } );
+      } )
+      .catch( ( e: Error ) => logger.error( `saving context clip failed: ${e.message}` ) );
+  }, 5000 ) );
+};
+
+// Saves the last 15 s heard as a clip of its own, whether or not anything was
+// detected in it, and returns its ID. It plays, trims and makes observations
+// like a detected clip, and is kept until deleted.
+export const saveRecentClip = async ( ): Promise<string> => {
+  if ( !AudioBirdId ) throw new Error( "Audio ID is unavailable" );
+  const time = Date.now( );
+  const id = `${time}-saved`;
+  // An end past the newest sample saves up to the newest one.
+  await AudioBirdId.saveClip( contextClipPath( id ), CONTEXT_S, Number.MAX_SAFE_INTEGER );
+  const history = useAudioIdHistory.getState( );
+  history.addClip( NO_SPECIES, 0, {
+    id, time, duration: CONTEXT_S, manual: true,
+  } );
+  logger.info( "saved the last 15 s by hand" );
+  fetchCoarseUserLocation( ).catch( ( ) => null ).then( loc => {
+    const l = loc || sessionLocation;
+    if ( l ) {
+      history.updateClip( id, {
+        location: {
+          latitude: l.latitude, longitude: l.longitude, accuracy: l.positional_accuracy,
+        },
+      } );
+    }
+  } );
+  return id;
+};
+
+interface AudioIdState {
+  listening: boolean;
+  // Set from the moment start is called until the mic is running, so the
+  // screen shows it as listening rather than offering to start
+  starting: boolean;
+  error: string | null;
+  current: Scores | null; // null until the first run
+  level: number;
+  inferMs: number;
+  heard: Record<number, Heard>; // by taxon ID
+  setup: AudioIdSetup | null;
+  seen: Set<number> | null; // null when signed out
+  // Seen at research grade in the last 30 days
+  recent: Set<number> | null;
+  setSeen: ( seen: Set<number> | null, recent: Set<number> | null ) => void;
+  start: ( ) => Promise<void>;
+  stop: ( ) => void;
+}
+
+// Set while listening, so a session the app died in (iOS kills it at its
+// memory limit without a crash report) is logged on the next launch, with
+// the footprint at the last summary line.
+const listeningMarker = new MMKV( { id: "audio-id-listening" } );
+const lastSession = listeningMarker.getString( "session" );
+if ( lastSession ) {
+  logger.error( `listening ended without stopping, app killed or crashed: ${lastSession}` );
+  listeningMarker.clearAll( );
+}
+const markListening = ( detail: string | null ) => {
+  if ( detail ) listeningMarker.set( "session", detail );
+  else listeningMarker.clearAll( );
+};
+let sessionStarted = "";
+// Runs scored this session, for the memory snapshots (setMemoryContext)
+let sessionRuns = 0;
+let starting = false;
+let sessionId = 0;
+// Every species, unfiltered by place, for scoring until the user is located
+let allSpecies: AudioIdSetup | null = null;
+// The outputs generation runs must have scored to count, null until the
+// session's species are settled.
+let scoringGeneration: number | null = null;
+
+// What was heard is kept across app restarts, one key per species
+const heardStore = createMmkvRecordStore<Heard>( AUDIO_ID_HEARD_MMKV_ID );
+heardStore.migrateFrom( "audio-id-session", "heard" );
+
+const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
+  listening: false,
+  starting: false,
+  error: null,
+  current: null,
+  level: 0,
+  inferMs: 0,
+  heard: heardStore.loadAll( ),
+  setup: null,
+  seen: null,
+  recent: null,
+  setSeen: ( seen, recent ) => set( { seen, recent } ),
+  start: async ( ) => {
+    if ( !AudioBirdId ) {
+      set( { error: i18n.t( "Audio-ID-is-only-available-on-iOS" ) } );
+      return;
+    }
+    if ( get( ).listening || starting ) return;
+    starting = true;
+    sessionId += 1;
+    const id = sessionId;
+    set( { error: null, starting: true } );
+    callClips.clear( );
+    // The mic starts at once, scoring every species, while the user's place
+    // and the species likely there are worked out (a location fix can take
+    // seconds); runs until then only move the level meter.
+    scoringGeneration = null;
+    const located = prepareAudioId( AudioBirdId.geo );
+    located.catch( ( ) => undefined );
+    let mic: Awaited<ReturnType<typeof AudioBirdId.start>>;
+    try {
+      allSpecies ||= await prepareAudioId( AudioBirdId.geo, null );
+      mic = await AudioBirdId.start( allSpecies.outputs, THRESHOLD );
+    } catch ( e ) {
+      logger.error( `start failed: ${( e as Error ).message}` );
+      set( { error: ( e as Error ).message } );
+      return;
+    } finally {
+      starting = false;
+      set( { starting: false } );
+    }
+    // Stopped while the mic was starting
+    if ( sessionId !== id ) {
+      AudioBirdId.stop( );
+      return;
+    }
+    set( { listening: true } );
+    sessionStarted = new Date( ).toISOString( );
+    sessionRuns = 0;
+    markListening( `started ${sessionStarted}, no summary yet` );
+    logger.info( `mic started, ${mic.sampleRate} Hz x${mic.channels}` );
+    const current = ( ) => sessionId === id && get( ).listening;
+    let s: AudioIdSetup = allSpecies;
+    let generation = mic.outputsGeneration;
+    try {
+      const local = await located;
+      if ( !current( ) ) return;
+      if ( local.located ) {
+        generation = await AudioBirdId.setOutputs( local.outputs );
+        s = local;
+      }
+    } catch ( e ) {
+      logger.error( `locating failed, scoring every species: ${( e as Error ).message}` );
+    }
+    if ( !current( ) ) return;
+    sessionLocation = s.location;
+    scoringGeneration = generation;
+    set( { setup: s } );
+    logger.info( `scoring ${s.species.length} species, located ${s.located}` );
+  },
+  stop: ( ) => {
+    sessionId += 1;
+    scoringGeneration = null;
+    AudioBirdId?.stop( );
+    markListening( null );
+    setMemoryContext( "audioId" );
+    set( { listening: false, starting: false } );
+  },
+} ) );
+
+// "auto" uses Core Haptics in the foreground and the system vibration in the background
+const vibrate = ( mode: VibrateMode = "auto" ) => {
+  AudioBirdId?.vibrate( mode )
+    ?.then( r => {
+      const detail = `${r.method}, mode ${mode}, app state ${r.appState}, `
+        + `allowed ${r.allowed}: ${r.error}`;
+      if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${detail}` );
+      else logger.debug( `vibrated: ${detail}` );
+    } )
+    .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
+};
+
+// While the screen is focused it goes black after DIM_AFTER_MS without a
+// touch, to save battery: an opaque overlay covers it, the screen stops
+// rendering, and only listening and vibrating carry on. Alerts vibrate
+// without lighting it up; only a touch brings it back. The device brightness
+// is left alone.
+const DIM_AFTER_MS = getTunable( "audioIdDimAfterSeconds" ) * 1000;
+let focused = false;
+let dimmed = false;
+let dimTimer: ReturnType<typeof setTimeout> | undefined;
+export const useScreenDimmed = create<boolean>( ( ) => false );
+// Whether the screen skips the re-renders the runs would cause: while it's
+// dimmed, and while nobody can see it at all (another screen or tab on top,
+// where it stays mounted, or the app in the background). Re-rendering its
+// list on every run while away from it left Fabric shadow trees for Hermes'
+// GC to free, and native memory climbed to the ~3 GB kill limit within an
+// hour or two of listening (killed Nov 9 at 3211 and 3080 MB).
+export const useScreenPaused = create<boolean>( ( ) => true );
+let appActive = AppState.currentState !== "background"
+  && AppState.currentState !== "inactive";
+const applyBrightness = ( ) => {
+  const dim = focused && dimmed;
+  useScreenDimmed.setState( dim, true );
+  useScreenPaused.setState( !focused || !appActive || dim, true );
+};
+// Opens the Audio ID screen, unless it or one of its own screens is showing.
+const openAudioId = ( ) => {
+  if ( !navigationRef.isReady( ) ) return;
+  if ( navigationRef.getCurrentRoute( )?.name.startsWith( "AudioId" ) ) return;
+  navigationRef.navigate( "TabNavigator", {
+    screen: "MenuTab",
+    params: { screen: "AudioId" },
+  } );
+};
+let lastAppState = AppState.currentState;
+AppState.addEventListener( "change", state => {
+  appActive = state === "active";
+  applyBrightness( );
+  // Opening the app while it listens in the background goes straight to
+  // Audio ID. Coming back from "inactive" (Control Center, a system prompt)
+  // isn't opening it, so that leaves the user where they were.
+  if ( state === "active" && lastAppState === "background"
+    && useAudioIdSession.getState( ).listening ) {
+    openAudioId( );
+  }
+  lastAppState = state;
+} );
+// Renders of the screen since the last summary line, so a screen that keeps
+// rendering while paused shows up in the app log.
+let screenRenders = 0;
+export const noteScreenRender = ( ) => { screenRenders += 1; };
+const screenState = ( ) => {
+  if ( !focused ) return "away";
+  if ( !appActive ) return "background";
+  return useScreenDimmed.getState( )
+    ? "dimmed"
+    : "shown";
+};
+// Returns whether the screen was dimmed, so the touch only wakes it
+export const noteActivity = ( ) => {
+  if ( !focused ) return false;
+  clearTimeout( dimTimer );
+  dimTimer = setTimeout( ( ) => {
+    dimmed = true;
+    applyBrightness( );
+  }, DIM_AFTER_MS );
+  if ( !dimmed ) return false;
+  dimmed = false;
+  applyBrightness( );
+  return true;
+};
+// Also called when the app returns to the foreground, so the screen is bright
+// again whenever it regains focus.
+export const startDimming = ( ) => {
+  focused = true;
+  dimmed = false;
+  applyBrightness( );
+  noteActivity( );
+};
+export const stopDimming = ( ) => {
+  clearTimeout( dimTimer );
+  focused = false;
+  dimmed = false;
+  applyBrightness( );
+};
+
+// A copy of the sound at `uri` at the same level Audio ID clips play at, or
+// `uri` itself when it can't be made (e.g. a format iOS can't decode).
+const normalizedSounds = new Map<string, Promise<string>>( );
+export const normalizedSoundUri = ( uri: string ): Promise<string> => {
+  if ( !AudioBirdId ) return Promise.resolve( uri );
+  let normalized = normalizedSounds.get( uri );
+  if ( !normalized ) {
+    normalized = AudioBirdId.normalizeSound( uri ).catch( ( e: Error ) => {
+      logger.error( `normalizing sound failed: ${e.message}` );
+      normalizedSounds.delete( uri );
+      return uri;
+    } );
+    normalizedSounds.set( uri, normalized );
+  }
+  return normalized;
+};
+
+// The native module zeroes the mic audio while the app plays a sound, so
+// playback isn't identified. Starting one player calls the others'
+// onStopped, since only one sound plays at a time.
+type OnStopped = ( ) => void;
+const players = new Map<object, OnStopped>( );
+export const setPlayingAudio = (
+  player: object,
+  playing: boolean,
+  onStopped: OnStopped = ( ) => undefined,
+) => {
+  if ( playing ) {
+    players.forEach( ( stopped, other ) => {
+      if ( other !== player ) stopped( );
+    } );
+    players.clear( );
+    players.set( player, onStopped );
+  } else {
+    players.delete( player );
+  }
+  AudioBirdId?.setPlayingClip( players.size > 0 );
+};
+
+// Call once a player has started: its library sets the audio session itself,
+// which would make it play at a different level than clips.
+export const playerStarted = ( ) => AudioBirdId?.setPlayingClip( players.size > 0 );
+
+let runs: ScoresEvent[] = [];
+
+// Hermes' heap, which also counts toward the footprint iOS kills the app at.
+const jsHeapMB = ( ): number | null => {
+  const stats = ( global as { HermesInternal?: {
+    getInstrumentedStats?: ( ) => { js_heapSize?: number };
+  }; } ).HermesInternal?.getInstrumentedStats?.( );
+  return stats?.js_heapSize
+    ? stats.js_heapSize / 1048576
+    : null;
+};
+const mb = ( n: number | null | undefined ) => ( n == null
+  ? "?"
+  : String( Math.round( n ) ) );
+
+const onScores = ( event: ScoresEvent ) => {
+  const { level } = event;
+  // Scored before the session's species were settled, against other outputs
+  if ( scoringGeneration == null || event.outputsGeneration !== scoringGeneration ) {
+    useAudioIdSession.setState( { level } );
+    return;
+  }
+  const {
+    setup, recent, heard,
+  } = useAudioIdSession.getState( );
+  const { scores } = event;
+  const sps = setup?.species || [];
+  runs.push( event );
+  sessionRuns += 1;
+  // Long sessions have climbed to the memory limit (Nov 5, Nov 20)
+  setMemoryContext( "audioId", {
+    runs: sessionRuns,
+    minutes: sessionStarted
+      ? Math.round( ( Date.now( ) - Date.parse( sessionStarted ) ) / 60000 )
+      : null,
+    heapUsedMB: event.heapUsedMB,
+    screen: screenState( ),
+  } );
+  if ( runs.length >= LOG_EVERY ) {
+    const last = runs[runs.length - 1];
+    const best = runs.reduce( ( b, r ) => Object.entries( r.scores ).reduce(
+      ( rb, [i, s] ) => ( s > rb.score
+        ? { score: s, index: Number( i ) }
+        : rb ),
+      b,
+    ), { score: 0, index: -1 } );
+    const mean = ( f: ( r: ScoresEvent ) => number ) => runs
+      .reduce( ( sum, r ) => sum + f( r ), 0 ) / runs.length;
+    logger.info( `${runs.length} runs: level ${
+      ( 20 * Math.log10( mean( r => r.level ) + 1e-9 ) ).toFixed( 0 )} dBFS, `
+      + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, `
+      + `mem ${mb( last.memMB )} MB (malloc ${mb( last.heapUsedMB )}/${
+        mb( last.heapHeldMB )}, js ${mb( jsHeapMB( ) )}), `
+      + `relief ${mb( runs.reduce( ( sum, r ) => sum + ( r.reliefMB || 0 ), 0 ) )} MB, `
+      + `spectrogram ${last.spectrogramViews ?? "?"}, best ${
+        best.index >= 0
+          ? sps[best.index]?.commonName
+          : "none"} ${best.score.toFixed( 2 )}, errors ${
+        runs.filter( r => r.error ).length} ${runs.find( r => r.error )?.error || ""}, `
+      + `screen ${screenState( )}${useScreenPaused.getState( )
+        ? " paused"
+        : ""} renders ${screenRenders}` );
+    if ( useAudioIdSession.getState( ).listening ) {
+      markListening( `started ${sessionStarted}, last summary ${new Date( ).toISOString( )}: `
+        + `mem ${mb( last.memMB )} MB (malloc ${mb( last.heapUsedMB )}/${
+          mb( last.heapHeldMB )}, js ${mb( jsHeapMB( ) )}), screen ${screenState( )}` );
+    }
+    screenRenders = 0;
+    runs = [];
+  }
+  const now = Date.now( );
+  // Alert on a species not confidently heard in the last REALERT_MS, and on
+  // every confident call of a species the user hasn't observed at research
+  // grade recently.
+  const alerts: AudioIdSpecies[] = [];
+  let next = heard;
+  Object.entries( scores ).forEach( ( [i, s] ) => {
+    const sp = sps[Number( i )];
+    if ( !isHeard( s ) || !sp ) return;
+    const old = next[sp.taxonId];
+    const isNewCall = !old || now - old.lastHeard > NEW_CALL_GAP_MS;
+    saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame );
+    const confident = s >= VIBRATE_THRESHOLD;
+    const lastConfident = old
+      ? old.lastConfident ?? old.lastHeard
+      : 0;
+    if ( confident && ( !lastConfident || now - lastConfident > REALERT_MS
+      || ( now - lastConfident > NEW_CALL_GAP_MS && recent && !recent.has( sp.taxonId ) ) ) ) {
+      alerts.push( sp );
+    }
+    const entry: Heard = {
+      sp,
+      lastHeard: now,
+      lastConfident: confident
+        ? now
+        : lastConfident,
+      best: Math.max( old?.best || 0, s ),
+      count: ( old?.count || 0 ) + ( isNewCall
+        ? 1
+        : 0 ),
+    };
+    next = { ...next, [sp.taxonId]: entry };
+    // lastHeard moves every run of a call; saving it only with a new call or
+    // a better score keeps a call to one or two writes rather than one a second.
+    const newConfidentCall = confident
+      && ( !old?.lastConfident || now - old.lastConfident > NEW_CALL_GAP_MS );
+    if ( isNewCall || newConfidentCall || entry.best > ( old?.best || 0 ) ) {
+      heardStore.put( sp.taxonId, entry );
+    }
+  } );
+  if ( alerts.length > 0 ) {
+    logger.info( `alert: ${alerts.map( sp => sp.commonName ).join( ", " )}` );
+    vibrate( );
+  }
+  useAudioIdSession.setState( {
+    current: scores,
+    level,
+    inferMs: event.inferMs,
+    heard: next,
+    ...( event.error
+      ? { error: i18n.t( "Audio-ID-model-error", { error: event.error } ) }
+      : {} ),
+  } );
+};
+
+if ( AudioBirdId ) {
+  const emitter = new NativeEventEmitter( AudioBirdId as never );
+  emitter.addListener( "AudioBirdIdScores", onScores );
+  emitter.addListener( "AudioBirdIdStatus", ( message: string ) => logger.info( message ) );
+  emitter.addListener( "AudioBirdIdOpen", openAudioId );
+}
+
+export default useAudioIdSession;

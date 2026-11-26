@@ -1,16 +1,13 @@
 import {
   exists, readDir, stat,
 } from "@dr.pogodin/react-native-fs";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { unlink } from "sharedHelpers/util";
 
-const TRASHABLE_VINTAGE_MS
-  = 1000 // 1 second
-  * 60 // 1 minute
-  * 60 // 1 hour
-  * 24 // 1 day
-  * 30; // 1 month
+// 60s is enough to cover any Realm write race; filesToKeep already protects unsynced photos
+const TRASHABLE_VINTAGE_MS = 60 * 1000;
 
-const MAX_FOLDER_SIZE = 5 * 1024 * 1024 * 1024; // 5GB in bytes
+const MAX_FOLDER_SIZE = getTunable( "syncedPhotoFolderMaxGb" ) * 1024 * 1024 * 1024;
 const TOO_NEW_THRESHOLD = 24 * 60 * 60 * 1000; // Files modified in the last 1 day (in milliseconds)
 
 interface FileDetails {
@@ -28,6 +25,11 @@ const removeSyncedFilesFromDirectory = async (
   if ( !directoryExists ) {
     return null;
   }
+
+  // Membership is asked once per file in the directory, so an array turned the
+  // two checks below into files × filesToKeep. Both are one entry per photo on
+  // a device with a large library, and this runs at startup.
+  const keepSet = new Set( filesToKeep );
 
   const files = await readDir( directoryPath );
   let totalSize = 0;
@@ -47,7 +49,7 @@ const removeSyncedFilesFromDirectory = async (
       }
       const { name, path } = file;
 
-      if ( filesToKeep.includes( name ) ) {
+      if ( keepSet.has( name ) ) {
         skipFile = true;
       }
 
@@ -78,7 +80,7 @@ const removeSyncedFilesFromDirectory = async (
   console.log( `Folder size exceeds limit. Current size: ${totalSize} bytes` );
 
   // Filter out files that are to be kept (e.g. unsynced files)
-  let deletableFiles = fileDetails.filter( file => !filesToKeep.includes( file.name ) );
+  let deletableFiles = fileDetails.filter( file => !keepSet.has( file.name ) );
 
   // Filter out files that are too new
   const now = Date.now();

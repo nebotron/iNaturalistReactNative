@@ -4,7 +4,8 @@ import {
   DisplayTaxonName,
   IconicTaxonIcon,
 } from "components/SharedComponents";
-import { Image, Pressable, View } from "components/styledComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
+import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import type { TextProps } from "react-native";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
@@ -58,7 +59,7 @@ const DisplayTaxon = ( {
         <View className="flex-row items-center">
           {taxonPhoto
             ? (
-              <Image
+              <CachedImage
                 source={{ uri: taxonPhoto }}
                 className={classnames(
                   imageClassName,
@@ -66,7 +67,6 @@ const DisplayTaxon = ( {
                     "opacity-50": withdrawn,
                   },
                 )}
-                accessibilityIgnoresInvertColors
                 testID="DisplayTaxon.image"
               />
             )

@@ -1,6 +1,7 @@
 import "../../global.css";
 
 import { useNavigation } from "@react-navigation/native";
+import useDefaultSavedSearches from "components/Explore/hooks/useDefaultSavedSearches";
 import RootStackNavigator from "navigation/RootStackNavigator";
 import type { PropsWithChildren } from "react";
 import React, { useCallback } from "react";
@@ -12,8 +13,12 @@ import AppStateListener from "./AppStateListener";
 import EnvironmentNotice from "./EnvironmentNotice";
 import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
+import useQueuedDeletionAlbum from "./hooks/useQueuedDeletionAlbum";
+import useResumeGroupPhotos from "./hooks/useResumeGroupPhotos";
+import useUsbImport from "./hooks/useUsbImport";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
+import UploadService from "./UploadService";
 
 const handleShare = ( navigation, item?: SharedData | null ) => {
   if ( !item ) {
@@ -53,6 +58,10 @@ const App = ( { children }: PropsWithChildren ) => {
   useLinking( currentUser );
   useShare( onShare );
   useDeferredStartup( );
+  useResumeGroupPhotos( );
+  useUsbImport( );
+  useQueuedDeletionAlbum( );
+  useDefaultSavedSearches( currentUser );
 
   // this children prop is here for the sake of testing with jest
   // normally we would never do this in code
@@ -60,6 +69,7 @@ const App = ( { children }: PropsWithChildren ) => {
     <>
       <StartupService />
       <NetworkService />
+      <UploadService />
       <AppStateListener />
       <EnvironmentNotice />
       {children || <RootStackNavigator />}

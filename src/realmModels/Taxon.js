@@ -73,13 +73,21 @@ class Taxon extends Realm.Object {
 
   static INFRAHYBRID_LEVEL = 5;
 
+  // Strips whitespace and hyphens (and any other non-alphanumeric
+  // characters) so search is agnostic to them: "Ring-billed Gull" is stored
+  // as "RingbilledGull", matching a query of "ring-billed", "ring billed",
+  // or "ringbilled" cleaned the same way in validateRealmSearch.
   static compileSearchableName( taxon ) {
     const names = [
       taxon.name,
       taxon.preferred_common_name,
       taxon.preferredCommonName,
+      ...Array.from( taxon.birdCodes || [] ),
     ];
-    return [...new Set( names )].filter( Boolean ).join( "; " );
+    return [...new Set( names )]
+      .filter( Boolean )
+      .join( ";" )
+      .replace( /[^a-zA-Z0-9;]/g, "" );
   }
 
   static forUpdate( taxon, extra = {} ) {
@@ -159,11 +167,12 @@ class Taxon extends Realm.Object {
       id: "int",
       _searchableName: {
         type: "string",
-        indexed: "full-text",
         optional: true,
       },
       _synced_at: "date?",
       ancestor_ids: "int[]",
+      // Official 4-letter bird codes, e.g. "CANG", loaded by loadBirdCodes
+      birdCodes: "string[]",
       default_photo: {
         type: "object",
         objectType: "Photo",

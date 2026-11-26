@@ -1,8 +1,12 @@
 import { screen, userEvent } from "@testing-library/react-native";
 import ExploreHeader from "components/Explore/components/ExploreHeader";
-import { defaultExploreFilters, EXPLORE_PLACE_MODE, MEDIA } from "providers/ExploreContext";
+import {
+  defaultExploreFilters,
+  EXPLORE_ACTION,
+  EXPLORE_PLACE_MODE,
+  MEDIA,
+} from "providers/ExploreContext";
 import React from "react";
-import useStore from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 
 const mockNavigate = jest.fn();
@@ -32,19 +36,35 @@ jest.mock( "providers/ExploreContext", () => {
 
 const { useExplore } = require( "providers/ExploreContext" );
 
+const mockOnPressChangeView = jest.fn( );
+const viewProps = {
+  exploreViewIcon: "binoculars",
+  exploreViewLabel: "Observations View",
+  onPressChangeView: mockOnPressChangeView,
+};
+
 const PLACE_LOCATION = {
   placeMode: EXPLORE_PLACE_MODE.PLACE,
   place: { id: 1, display_name: "California" },
 };
 
-const setState = ( subject, location = PLACE_LOCATION, filters = defaultExploreFilters ) => {
+const mockDispatch = jest.fn( );
+
+const setState = (
+  subject,
+  location = PLACE_LOCATION,
+  filters = defaultExploreFilters,
+  backStack = [],
+) => {
   useExplore.mockReturnValue( {
     state: {
       subject,
       location,
       sortBy: "created_at",
       filters,
+      backStack,
     },
+    dispatch: mockDispatch,
   } );
 };
 
@@ -52,12 +72,11 @@ describe( "ExploreHeader", () => {
   beforeEach( () => {
     mockNavigate.mockClear();
     mockCanGoBack.mockReturnValue( false );
-    useStore.getState().exploreAdvancedSearch.setAdvancedSearchMode( false );
   } );
 
   it( "renders a user subject with login and location", () => {
     setState( { type: "user", user: { id: 7, login: "seth_msp" } } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "seth_msp" ) ).toBeTruthy();
     expect( screen.getByText( "California" ) ).toBeTruthy();
@@ -68,7 +87,7 @@ describe( "ExploreHeader", () => {
       type: "user",
       user: { id: 7, login: "seth_msp", icon_url: "https://example.com/u.jpg" },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByTestId( "UserIcon.photo" ) ).toBeTruthy();
   } );
@@ -78,7 +97,7 @@ describe( "ExploreHeader", () => {
       type: "project",
       project: { id: 9, title: "Backyard Birds", icon: "https://example.com/p.jpg" },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "Backyard Birds" ) ).toBeTruthy();
     expect( screen.getByTestId( "ExploreHeader.projectImage" ) ).toBeTruthy();
@@ -90,7 +109,7 @@ describe( "ExploreHeader", () => {
       type: "project",
       project: { id: 9, title: "Backyard Birds" },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "Backyard Birds" ) ).toBeTruthy();
     expect( screen.queryByTestId( "ExploreHeader.projectImage" ) ).toBeNull();
@@ -107,7 +126,7 @@ describe( "ExploreHeader", () => {
         iconic_taxon_name: "Aves",
       },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByTestId( "ExploreHeader.taxonImage" ) ).toBeTruthy();
     expect( screen.getByText( "California" ) ).toBeTruthy();
@@ -122,7 +141,7 @@ describe( "ExploreHeader", () => {
         iconic_taxon_name: "Aves",
       },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.queryByTestId( "ExploreHeader.taxonImage" ) ).toBeNull();
     expect( screen.getByTestId( "IconicTaxonName.iconicTaxonIcon" ) ).toBeTruthy();
@@ -133,9 +152,9 @@ describe( "ExploreHeader", () => {
       { type: "unobserved", user: { id: 7, login: "seth_msp" } },
       { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE },
     );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
-    expect( screen.getByText( "Unobserved" ) ).toBeTruthy();
+    expect( screen.getByText( "Unobserved by me" ) ).toBeTruthy();
     expect( screen.getByText( "Worldwide" ) ).toBeTruthy();
     expect( screen.getByTestId( "ExploreHeader.unobserved" ) ).toBeTruthy();
     expect( screen.queryByTestId( "ExploreHeader.subject" ) ).toBeNull();
@@ -143,7 +162,7 @@ describe( "ExploreHeader", () => {
 
   it( "renders an unknown subject with the iconic-unknown icon and Unknown label", () => {
     setState( { type: "unknown" } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByTestId( "ExploreHeader.subject" ) ).toBeTruthy();
     expect( screen.getByTestId( "IconicTaxonName.iconicTaxonIcon" ) ).toBeTruthy();
@@ -156,7 +175,7 @@ describe( "ExploreHeader", () => {
       ...defaultExploreFilters,
       user: { id: 7, login: "seth_msp", icon_url: "https://example.com/u.jpg" },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "seth_msp" ) ).toBeVisible();
     expect( screen.getByTestId( "UserIcon.photo" ) ).toBeVisible();
@@ -168,7 +187,7 @@ describe( "ExploreHeader", () => {
       ...defaultExploreFilters,
       project: { id: 9, title: "Backyard Birds", icon: "https://example.com/p.jpg" },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "Backyard Birds" ) ).toBeVisible();
     expect( screen.getByTestId( "ExploreHeader.projectImage" ) ).toBeVisible();
@@ -181,7 +200,7 @@ describe( "ExploreHeader", () => {
       user: { id: 7, login: "seth_msp" },
       project: { id: 9, title: "Backyard Birds" },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "seth_msp" ) ).toBeVisible();
     expect( screen.queryByText( "Backyard Birds" ) ).toBeNull();
@@ -197,7 +216,7 @@ describe( "ExploreHeader", () => {
         project: { id: 9, title: "Backyard Birds" },
       },
     );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.queryByText( "seth_msp" ) ).toBeNull();
     expect( screen.queryByText( "Backyard Birds" ) ).toBeNull();
@@ -206,7 +225,7 @@ describe( "ExploreHeader", () => {
 
   it( "renders only the place name when there is no subject", () => {
     setState( null );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "California" ) ).toBeTruthy();
     expect( screen.queryByTestId( "ExploreHeader.subject" ) ).toBeNull();
@@ -214,14 +233,14 @@ describe( "ExploreHeader", () => {
 
   it( "renders the Worldwide label when location is worldwide", () => {
     setState( null, { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "Worldwide" ) ).toBeTruthy();
   } );
 
   it( "renders the Nearby label when location is nearby", () => {
     setState( null, { placeMode: EXPLORE_PLACE_MODE.NEARBY } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "Nearby" ) ).toBeTruthy();
   } );
@@ -233,7 +252,7 @@ describe( "ExploreHeader", () => {
         swlat: 1, swlng: 2, nelat: 3, nelng: 4,
       },
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "Map Area" ) ).toBeTruthy();
   } );
@@ -241,28 +260,17 @@ describe( "ExploreHeader", () => {
   it( "navigates to Universal Search when the header is tapped", async () => {
     const actor = userEvent.setup();
     setState( null );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     await actor.press( screen.getByTestId( "ExploreHeader.pressable" ) );
 
-    expect( mockNavigate ).toHaveBeenCalledWith( "UniversalSearch" );
+    expect( mockNavigate ).toHaveBeenCalledWith( "AdvancedSearch" );
   } );
 
-  it( "navigates to Universal Search when the search button is tapped", async () => {
+  it( "navigates to Advanced Search when the filters button is tapped", async () => {
     const actor = userEvent.setup();
     setState( null );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
-
-    await actor.press( screen.getByLabelText( "Search" ) );
-
-    expect( mockNavigate ).toHaveBeenCalledWith( "UniversalSearch" );
-  } );
-
-  it( "navigates to Advanced Search from a filters button in advanced search mode", async () => {
-    const actor = userEvent.setup();
-    useStore.getState().exploreAdvancedSearch.setAdvancedSearchMode( true );
-    setState( null );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.queryByLabelText( "Search" ) ).toBeNull();
     await actor.press( screen.getByLabelText( "Filters" ) );
@@ -275,7 +283,7 @@ describe( "ExploreHeader", () => {
     // the user arrived from another tab
     mockCanGoBack.mockReturnValue( true );
     setState( null );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.queryByTestId( "BackButton" ) ).toBeNull();
   } );
@@ -283,31 +291,46 @@ describe( "ExploreHeader", () => {
   it( "renders a back button when Explore was pushed onto another screen", () => {
     mockCanGoBack.mockReturnValue( true );
     setState( null );
-    renderComponent( <ExploreHeader showBackButton /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton /> );
 
     expect( screen.getByTestId( "BackButton" ) ).toBeVisible();
   } );
 
+  it( "goes back to the previous search after a species card was tapped", async () => {
+    const actor = userEvent.setup();
+    setState( null, PLACE_LOCATION, defaultExploreFilters, [{ subject: null }] );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
+
+    await actor.press( screen.getByTestId( "BackButton" ) );
+
+    expect( mockDispatch ).toHaveBeenCalledWith( { type: EXPLORE_ACTION.GO_BACK } );
+  } );
+
   it( "badges the filters button with the number of filters applied", () => {
-    useStore.getState().exploreAdvancedSearch.setAdvancedSearchMode( true );
     setState( null, PLACE_LOCATION, {
       ...defaultExploreFilters,
       casual: true,
       media: MEDIA.SOUNDS,
     } );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect( screen.getByText( "2", { includeHiddenElements: true } ) ).toBeTruthy();
   } );
 
   it( "shows no badge when the search has no filters", () => {
-    useStore.getState().exploreAdvancedSearch.setAdvancedSearchMode( true );
     setState( null );
-    renderComponent( <ExploreHeader showBackButton={false} /> );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
 
     expect(
       screen.queryByTestId( "ExploreHeader.filterCount", { includeHiddenElements: true } ),
     ).toBeNull();
     expect( screen.getByLabelText( "Filters" ) ).toBeVisible();
+  } );
+
+  it( "opens the view picker when the view button is tapped", async () => {
+    setState( null );
+    renderComponent( <ExploreHeader {...viewProps} showBackButton={false} /> );
+    await userEvent.setup().press( screen.getByLabelText( "Observations View" ) );
+    expect( mockOnPressChangeView ).toHaveBeenCalled();
   } );
 } );

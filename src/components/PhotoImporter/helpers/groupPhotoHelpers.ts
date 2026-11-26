@@ -1,22 +1,25 @@
-import type { GroupedPhoto } from "stores/createObservationFlowSlice";
+interface TimedGroup {
+  photos?: { image?: { timestamp?: unknown } }[];
+  timestamp?: number;
+}
 
-type GroupedPhotoItems = GroupedPhoto["photos"]
+const getGroupTimestamp = ( group: TimedGroup ): number => (
+  ( group.photos?.[0]?.image?.timestamp as number ) || group.timestamp || 0
+);
 
-const sortByTime = (
-  array: GroupedPhotoItems,
-) => array.sort( ( a, b ) => b.timestamp - a.timestamp );
+export const sortGroupsByTime = <T extends TimedGroup>( groups: T[] ): T[] => [...groups].sort(
+  ( a, b ) => getGroupTimestamp( b ) - getGroupTimestamp( a ),
+);
 
-const flattenAndOrderSelectedPhotos = (
-  selectedObservations: GroupedPhoto[],
-) => {
-  // combine selected observations into a single array
-  let combinedPhotos: GroupedPhotoItems = [];
+const flattenAndOrderSelectedPhotos = <P, >(
+  selectedObservations?: { photos?: P[] }[],
+): P[] => {
+  let combinedPhotos: P[] = [];
   selectedObservations?.forEach( obs => {
-    combinedPhotos = combinedPhotos.concat( obs.photos );
+    combinedPhotos = combinedPhotos.concat( obs.photos || [] );
   } );
 
-  // sort selected observations by timestamp and avoid duplicates
-  return [...new Set( sortByTime( combinedPhotos ) )];
+  return [...new Set( combinedPhotos )];
 };
 
 export default flattenAndOrderSelectedPhotos;

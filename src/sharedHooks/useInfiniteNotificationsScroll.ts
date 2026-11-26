@@ -6,11 +6,14 @@ import type {
   ApiOpts,
 } from "api/types";
 import flatten from "lodash/flatten";
+import merge from "lodash/merge";
 import { RealmContext } from "providers/contexts";
 import { useEffect, useMemo, useState } from "react";
 import type Realm from "realm";
 import Observation from "realmModels/Observation";
+import type { UserPojo } from "realmModels/User";
 import { useAuthenticatedInfiniteQuery, useCurrentUser } from "sharedHooks";
+import { persistedQueryUserKey } from "sharedHooks/useAuthenticatedInfiniteQuery";
 
 const { useRealm } = RealmContext;
 
@@ -26,6 +29,7 @@ interface InfiniteNotificationsScrollResponse {
   fetchNextPage: ( ) => void;
   isError?: boolean;
   isFetching?: boolean;
+  isFetchingNextPage?: boolean;
   isInitialLoading?: boolean;
   showStillLoadingMessage: boolean;
   notifications: Notification[];
@@ -60,6 +64,16 @@ const BASE_PARAMS: ApiObservationsUpdatesParams = {
   page: 1,
 };
 
+// Everything ObsDetails shows, so tapping a notification opens it with its
+// activity already there instead of waiting on another request. Login is added
+// because the list fields only ask for user.id.
+const NOTIFICATION_OBSERVATION_FIELDS = merge(
+  {},
+  Observation.ADVANCED_MODE_LIST_FIELDS,
+  Observation.FIELDS,
+  { user: { login: true } },
+);
+
 async function fetchObsByUUIDs(
   uuids: string[],
   authOptions: ApiOpts,
@@ -71,21 +85,77 @@ async function fetchObsByUUIDs(
   // TODO convert api/observations to TS
   const observations: ApiObservation[] | null = await fetchRemoteObservations(
     uuids,
-    {
-      fields: {
-        ...Observation.ADVANCED_MODE_LIST_FIELDS,
-        user: {
-          ...Observation.ADVANCED_MODE_LIST_FIELDS.user,
-          login: true,
-        },
-      },
-    },
+    { fields: NOTIFICATION_OBSERVATION_FIELDS },
     authOptions,
   );
   if ( options.save ) {
     Observation.upsertRemoteObservations( observations, realm );
   }
   return observations;
+}
+
+// Shared with useUnviewedNotificationsCount, which prefetches this same
+// query in the background when it sees the unviewed count go up.
+export const getNotificationsQueryKey = (
+  notificationParams: ApiObservationsUpdatesParams,
+): string[] => ["useInfiniteNotificationsScroll", JSON.stringify( notificationParams )];
+
+// The key the query is actually cached (and saved to disk) under
+export const getNotificationsFullQueryKey = (
+  notificationParams: ApiObservationsUpdatesParams,
+  currentUser: UserPojo | null,
+) => [
+  ...getNotificationsQueryKey( notificationParams ),
+  undefined,
+  persistedQueryUserKey( currentUser ),
+];
+
+export const getNextNotificationsPageParam = (
+  lastPage: Notification[],
+  allPages: Notification[][],
+) => ( lastPage.length > 0
+  ? allPages.length + 1
+  : undefined );
+
+export async function fetchNotificationsPage(
+  notificationParams: ApiObservationsUpdatesParams,
+  pageParam: number,
+  optsWithAuth: ApiOpts,
+  realm: Realm,
+  currentUserId?: number,
+): Promise<Notification[]> {
+  const params = { ...BASE_PARAMS, ...notificationParams, page: pageParam || 1 };
+
+  const response: null | ApiNotification[] = await fetchObservationUpdates(
+    params,
+    optsWithAuth,
+  );
+
+  // Sometimes updates linger after notifiers that generated them have been deleted
+  const updatesWithContent = response?.filter(
+    update => update.comment || update.identification,
+  ) || [];
+  const obsUUIDs = updatesWithContent.map( obsUpdate => obsUpdate.resource_uuid );
+  if ( obsUUIDs.length > 0 ) {
+    const observations = await fetchObsByUUIDs(
+      obsUUIDs,
+      optsWithAuth,
+      realm,
+      { save: params.observations_by === "owner" },
+    );
+    if ( observations ) {
+      return updatesWithContent.map( ( update: Notification ) => {
+        const resource = observations.find(
+          ( o: ApiObservation ) => o.uuid === update.resource_uuid,
+        );
+        update.resource = resource;
+        update.viewerOwnsResource = resource?.user?.id === currentUserId;
+        return update;
+      } );
+    }
+  }
+
+  return updatesWithContent;
 }
 
 const useInfiniteNotificationsScroll = (
@@ -96,64 +166,35 @@ const useInfiniteNotificationsScroll = (
   const [showStillLoadingMessage, setShowStillLoadingMessage] = useState( false );
 
   const queryKey = useMemo(
-    () => ["useInfiniteNotificationsScroll", JSON.stringify( notificationParams )],
+    () => getNotificationsQueryKey( notificationParams ),
     [notificationParams],
   );
 
   const {
     data,
     isFetching,
+    isFetchingNextPage,
     isInitialLoading,
     isError,
     refetch,
     fetchNextPage,
   } = useAuthenticatedInfiniteQuery(
     queryKey,
-    async ( { pageParam }: { pageParam: number }, optsWithAuth: ApiOpts ) => {
-      const params = { ...BASE_PARAMS, ...notificationParams };
-
-      if ( pageParam ) {
-        params.page = pageParam;
-      } else {
-        params.page = 1;
-      }
-
-      const response: null | ApiNotification[] = await fetchObservationUpdates(
-        params,
-        optsWithAuth,
-      );
-
-      // Sometimes updates linger after notifiers that generated them have been deleted
-      const updatesWithContent = response?.filter(
-        update => update.comment || update.identification,
-      ) || [];
-      const obsUUIDs = updatesWithContent.map( obsUpdate => obsUpdate.resource_uuid );
-      if ( obsUUIDs.length > 0 ) {
-        const observations = await fetchObsByUUIDs(
-          obsUUIDs,
-          optsWithAuth,
-          realm,
-          { save: params.observations_by === "owner" },
-        );
-        if ( observations ) {
-          return updatesWithContent.map( ( update: Notification ) => {
-            const resource = observations.find(
-              ( o: ApiObservation ) => o.uuid === update.resource_uuid,
-            );
-            update.resource = resource;
-            update.viewerOwnsResource = resource?.user?.id === currentUser?.id;
-            return update;
-          } );
-        }
-      }
-
-      return updatesWithContent;
-    },
+    ( { pageParam }: { pageParam: number }, optsWithAuth: ApiOpts ) => fetchNotificationsPage(
+      notificationParams,
+      pageParam,
+      optsWithAuth,
+      realm,
+      currentUser?.id,
+    ),
     {
-      getNextPageParam: ( lastPage, allPages ) => ( lastPage.length > 0
-        ? allPages.length + 1
-        : undefined ),
+      getNextPageParam: getNextNotificationsPageParam,
       enabled: !!( currentUser ),
+      // Saved to disk, so the list opens straight away after a restart
+      persist: true,
+      // Still checked for new notifications on every mount, from the network
+      staleTime: 0,
+      cacheFirst: false,
     },
   );
 
@@ -187,17 +228,27 @@ const useInfiniteNotificationsScroll = (
     }
   }, [isFetching] );
 
+  // Stable sort: unviewed notifications float to the top, newest-first
+  // within each group (the server already returns pages newest-first).
+  const notifications = useMemo(
+    ( ) => flatten( data?.pages ).sort(
+      ( a: Notification, b: Notification ) => Number( a.viewed ) - Number( b.viewed ),
+    ),
+    [data],
+  );
+
   return {
     refetch,
     isError,
     isFetching,
+    isFetchingNextPage,
     isInitialLoading,
     showStillLoadingMessage,
     // Disable fetchNextPage if signed out
     fetchNextPage: currentUser
       ? fetchNextPage
       : ( ) => undefined,
-    notifications: flatten( data?.pages ),
+    notifications,
   };
 };
 

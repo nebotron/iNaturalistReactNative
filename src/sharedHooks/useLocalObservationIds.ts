@@ -2,32 +2,48 @@ import { RealmContext } from "providers/contexts";
 import { useMemo } from "react";
 import Observation from "realmModels/Observation";
 import type { MyObservationsSort } from "sharedHelpers/observationsSort";
-import { observationSortToRealmSort } from "sharedHelpers/observationsSort";
+import {
+  OBSERVATIONS_SORT,
+  observationSortToRealmSort,
+} from "sharedHelpers/observationsSort";
+import { sortByTaxonomy, TAXON_AND_DESCENDANTS_QUERY } from "sharedHelpers/taxonomicSort";
+import useSubjectDistances, { sortBySubjectDistance } from "sharedHooks/useSubjectDistances";
+import useTaxonomicLineages from "sharedHooks/useTaxonomicLineages";
 
 const { useQuery } = RealmContext;
 
-const useLocalObservationIds = ( sortBy?: MyObservationsSort ) => {
+// taxonId limits the results to that taxon and its descendants, like the API's taxon_id
+const useLocalObservationIds = ( sortBy?: MyObservationsSort, taxonId?: number ) => {
   const unsyncedObs = useQuery(
     {
       type: Observation,
-      query: observations => observations
+      query: observations => ( taxonId
+        ? observations.filtered( TAXON_AND_DESCENDANTS_QUERY, taxonId )
+        : observations )
         .filtered( "_deleted_at == nil OR _pending_deletion == false OR _pending_deletion == nil" )
         .sorted( sortBy
           ? [observationSortToRealmSort( sortBy )]
-          : [["needs_sync", true], ["_created_at", true]] ),
+          : [["_created_at", true]] ),
       // widening this beyond uuid means more frequent re-renders for every consumer,
       // so we only do it when we need a local sort applied to the results
       keyPaths: sortBy
         ? ["uuid", "_created_at", "observed_on_string"]
         : ["uuid"],
     },
-    [sortBy],
+    [sortBy, taxonId],
   );
 
-  return useMemo(
-    ( ) => unsyncedObs.map( ( { uuid }: { uuid: string } ) => ( { uuid } ) ),
-    [unsyncedObs],
-  );
+  const bySubjectDistance = sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;
+  const subjectDistances = useSubjectDistances( bySubjectDistance );
+  const byTaxonomy = sortBy === OBSERVATIONS_SORT.TAXONOMY;
+  const taxonomicLineages = useTaxonomicLineages( byTaxonomy );
+
+  return useMemo( ( ) => {
+    const ids = unsyncedObs.map( ( { uuid }: { uuid: string } ) => ( { uuid } ) );
+    if ( bySubjectDistance ) return sortBySubjectDistance( ids, subjectDistances );
+    if ( byTaxonomy ) return sortByTaxonomy( ids, taxonomicLineages );
+    return ids;
+  }, [unsyncedObs, bySubjectDistance, subjectDistances, byTaxonomy, taxonomicLineages] );
 };
 
 export default useLocalObservationIds;

@@ -9,27 +9,45 @@
  * Uses requestIdleCallback to schedule each task in its own callback so the
  * runtime can interleave user interactions between them.
  */
+import { expireOldClips, retryLabelUploads } from "components/AudioId/audioIdHistory";
 import { cleanupLogFiles } from "components/Developer/logManagementHelpers";
 import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { navigationRef } from "navigation/navigationUtils";
 import { RealmContext } from "providers/contexts";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { AppState } from "react-native";
+import type { RealmObservation } from "realmModels/types";
 import User from "realmModels/User";
+import { maintainAnimalCropLog } from "sharedHelpers/animalCropLog";
+import backfillCameraInfo from "sharedHelpers/backfillCameraInfo";
+import { maintainBrightnessLog } from "sharedHelpers/brightnessLog";
 import {
   clearComputerVisionPhotos,
+  clearExpiredCropSources,
+  clearExpiredDeviceThumbnails,
+  clearExpiredMediaCaches,
+  clearExpiredTempFiles,
   clearGalleryPhotos,
+  clearRetiredOfflineExplore,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
   clearSyncedMediaForUpload,
+  clearVideoLibrary,
+  trimRemoteImageCache,
 } from "sharedHelpers/clearCaches";
 import { formatApiDatetime } from "sharedHelpers/dateAndTime";
 import { LAST_CRASH_DATA, store as installDataMMKVStorage } from "sharedHelpers/installData";
+import loadBirdCodes from "sharedHelpers/loadBirdCodes";
 import { log } from "sharedHelpers/logger";
+import { clearRetiredMmkvData } from "sharedHelpers/mmkvRecordStore";
+import { takeUnfinishedPhotoImport } from "sharedHelpers/photoImportMarker";
 import { logSentinelFiles } from "sharedHelpers/sentinelFiles";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import syncFeatureFlags from "sharedHelpers/syncFeatureFlags";
 import syncJoinedProjects from "sharedHelpers/syncJoinedProjects";
+import { logThumbnailDiagnostics } from "sharedHelpers/useDeviceImageThumbnail";
 import { useTranslation } from "sharedHooks";
+import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
 const { useRealm } = RealmContext;
 const logger = log.extend( "useDeferredStartup" );
@@ -85,8 +103,21 @@ const checkForPreviousCrash = async () => {
 const useDeferredStartup = ( ) => {
   const realm = useRealm( );
   const { i18n } = useTranslation( );
+  // iOS relaunches the app in the background for location events
+  // (LocationRelaunch.h), where none of this is wanted: cache sweeps, iCloud
+  // downloads for camera settings, and syncs, on every relaunch, with no one
+  // looking. They run once the app is opened instead.
+  const [opened, setOpened] = useState( AppState.currentState !== "background" );
+  useEffect( ( ) => {
+    if ( opened ) return ( ) => undefined;
+    const subscription = AppState.addEventListener( "change", state => {
+      if ( state === "active" ) setOpened( true );
+    } );
+    return ( ) => subscription.remove( );
+  }, [opened] );
 
   useEffect( ( ) => {
+    if ( !opened ) return ( ) => undefined;
     const id0 = deferTask( "checkLoggedInStatuses", async () => {
       const currentUser = User.currentUser( realm );
       if ( currentUser && !( await isLoggedIn() ) && navigationRef.isReady() ) {
@@ -98,6 +129,20 @@ const useDeferredStartup = ( ) => {
     // should have a timeout to ensure they run eventually.
     const id1 = deferTask( "checkForPreviousCrash", checkForPreviousCrash, 30000 );
     const id2 = deferTask( "logSentinelFiles", logSentinelFiles, 30000 );
+    // A gallery import that never came back — the app was killed or the import
+    // is still wedged, and either way the "settled" line never made it out.
+    // See photoImportMarker.ts.
+    const idImport = deferTask( "reportUnfinishedPhotoImport", async () => {
+      const unfinished = takeUnfinishedPhotoImport( );
+      if ( !unfinished ) return;
+      logger.errorWithExtra( "photo_import_never_finished", {
+        selected: unfinished.selected,
+        settled: unfinished.settled,
+        failed: unfinished.failed,
+        msRunning: Date.now( ) - unfinished.startedAt,
+      } );
+    }, 30000 );
+
     const id3 = deferTask( "logStorageMetrics", async () => {
       const metrics = await getStorageMetrics( realm?.path );
       logger.infoWithExtra( "storage_metrics", metrics );
@@ -110,6 +155,35 @@ const useDeferredStartup = ( ) => {
     const id6 = deferTask( "clearComputerVisionPhotos", clearComputerVisionPhotos );
     const id7 = deferTask( "clearSyncedMediaForUpload", () => clearSyncedMediaForUpload( realm ) );
     const id8 = deferTask( "clearRollbackPhotos", clearRollbackPhotos );
+    const id11 = deferTask( "clearExpiredCropSources", clearExpiredCropSources );
+    const id13 = deferTask( "clearExpiredDeviceThumbnails", clearExpiredDeviceThumbnails );
+    const id15 = deferTask( "clearExpiredTempFiles", clearExpiredTempFiles );
+    const id16 = deferTask( "clearVideoLibrary", clearVideoLibrary );
+    const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
+    const id18 = deferTask( "trimRemoteImageCache", trimRemoteImageCache );
+    const idOffline = deferTask( "clearRetiredOfflineExplore", clearRetiredOfflineExplore );
+    const idClips = deferTask( "expireOldAudioIdClips", async ( ) => {
+      expireOldClips( );
+      await retryLabelUploads( );
+    } );
+    // MMKV files never shrink on their own, and data has moved out of this one
+    const idLogs = deferTask( "maintainFirebaseLogs", async ( ) => {
+      await Promise.all( [maintainAnimalCropLog( ), maintainBrightnessLog( )] );
+    } );
+    const idTrim = deferTask( "trimMmkv", async ( ) => {
+      zustandMMKVBackingStorage.trim( );
+      clearRetiredMmkvData( );
+    } );
+    const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
+    // Camera settings of every observation photo still without them, newest
+    // first, a few at a time: originals in iCloud are downloaded to be read,
+    // which is what made the media viewer slow to show them.
+    const idCameraInfo = deferTask( "backfillCameraInfo", ( ) => backfillCameraInfo(
+      realm,
+      realm.objects<RealmObservation>( "Observation" ).sorted( "_created_at", true ),
+      3,
+    ) );
+    const idBirdCodes = deferTask( "loadBirdCodes", async ( ) => loadBirdCodes( realm ), 30000 );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
     const id10 = deferTask( "warmIntlCache", () => {
@@ -119,7 +193,7 @@ const useDeferredStartup = ( ) => {
       formatApiDatetime( "1970", i18n, { timeZone: "Etc/UTC" } );
       return Promise.resolve();
     } );
-    const id11 = deferTask( "syncJoinedProjects", async () => {
+    const id12 = deferTask( "syncJoinedProjects", async () => {
       const currentUserId = User.currentUser( realm )?.id;
       if ( !currentUserId ) {
         return;
@@ -129,7 +203,7 @@ const useDeferredStartup = ( ) => {
     // Once per launch, which also covers logout: signOut restarts the app. Login refetches in
     // AuthenticationService. Short timeout because flags read their hard-coded defaults until
     // this settles
-    const id12 = deferTask(
+    const idFeatureFlags = deferTask(
       "syncFeatureFlags",
       async ( ) => syncFeatureFlags( await getJWT( ) ),
       500,
@@ -137,6 +211,8 @@ const useDeferredStartup = ( ) => {
 
     return ( ) => {
       cancelIdleCallback( id0 );
+      cancelIdleCallback( idTrim );
+      cancelIdleCallback( idLogs );
       cancelIdleCallback( id1 );
       cancelIdleCallback( id2 );
       cancelIdleCallback( id3 );
@@ -149,8 +225,28 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id10 );
       cancelIdleCallback( id11 );
       cancelIdleCallback( id12 );
+      cancelIdleCallback( id13 );
+      cancelIdleCallback( id14 );
+      cancelIdleCallback( idCameraInfo );
+      cancelIdleCallback( id15 );
+      cancelIdleCallback( id16 );
+      cancelIdleCallback( id17 );
+      cancelIdleCallback( id18 );
+      cancelIdleCallback( idOffline );
+      cancelIdleCallback( idClips );
+      cancelIdleCallback( idImport );
+      cancelIdleCallback( idBirdCodes );
+      cancelIdleCallback( idFeatureFlags );
     };
-  }, [i18n, realm] );
+  }, [i18n, opened, realm] );
+
+  // Crop sources expire after an hour, which a session can outlast.
+  useEffect( ( ) => {
+    const subscription = AppState.addEventListener( "change", state => {
+      if ( state === "background" ) clearExpiredCropSources( );
+    } );
+    return ( ) => subscription.remove( );
+  }, [] );
 };
 
 export default useDeferredStartup;

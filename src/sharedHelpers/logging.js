@@ -23,6 +23,48 @@ function handleRetryDelay( failureCount, error ) {
   return Math.min( 1000 * 2 ** failureCount, 30000 );
 }
 
+// A stalled fetch has no upper bound of its own, so a network hiccup that
+// never surfaces a connection error just sits there. Aborting authenticated
+// requests (see useAuthenticatedQuery / useAuthenticatedInfiniteQuery) turns
+// that indefinite hang into a retryable failure instead.
+const REQUEST_TIMEOUT_MS = 20000;
+
+// Also aborts when parentSignal does, e.g. React Query's signal for a query
+// nothing shows any more, so a search replaced by a newer one stops using the
+// connection instead of finishing in the background
+const createRequestTimeoutSignal = parentSignal => {
+  const controller = new AbortController( );
+  const timer = setTimeout( ( ) => controller.abort( ), REQUEST_TIMEOUT_MS );
+  const abort = ( ) => controller.abort( );
+  if ( parentSignal?.aborted ) {
+    abort( );
+  } else {
+    parentSignal?.addEventListener?.( "abort", abort );
+  }
+  return {
+    signal: controller.signal,
+    clear: ( ) => {
+      clearTimeout( timer );
+      parentSignal?.removeEventListener?.( "abort", abort );
+    },
+  };
+};
+
+// The signal above is sized for a single request, but some features are a
+// pipeline of many sequential ones (paging a whole observation history, say).
+// Handing the pipeline one signal aborts every request after the first 20
+// seconds, so the pipeline can never finish. This gives each request in such a
+// pipeline its own timeout instead, replacing whatever signal the caller's
+// opts carry.
+const withRequestTimeout = async ( opts, request ) => {
+  const { signal, clear } = createRequestTimeoutSignal( );
+  try {
+    return await request( { ...opts, signal } );
+  } finally {
+    clear( );
+  }
+};
+
 function handleTooManyRequestsErrors( failureCount, error, options = {} ) {
   if ( error.status === 429 || ( error.response && error.response.status === 429 ) ) {
     // Use progressive backoff for rate limit errors using handleRetryDelay;
@@ -123,9 +165,10 @@ function reactQueryRetry( failureCount, error, options = {} ) {
   return shouldRetry;
 }
 
-// eslint-disable-next-line import/prefer-default-export
 export {
+  createRequestTimeoutSignal,
   handleRetryDelay,
   inspect,
   reactQueryRetry,
+  withRequestTimeout,
 };

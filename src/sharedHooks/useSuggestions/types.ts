@@ -28,6 +28,7 @@ export interface UseSuggestionsOfflineSuggestion {
     name: string;
     rank_level: number;
     iconic_taxon_name?: string;
+    ancestor_ids?: number[];
   };
 }
 
@@ -41,6 +42,7 @@ export interface UseSuggestionsResult {
     topSuggestionType: TopSuggestionType;
   };
   usingOfflineSuggestions: boolean;
+  tryOfflineSuggestions: boolean;
   urlWillCrashOffline: boolean;
   refetchSuggestions: () => void;
   onlineSuggestionsUpdatedAt: number;
@@ -49,8 +51,6 @@ export interface UseSuggestionsResult {
     results: UseSuggestionsOnlineSuggestion[];
     commonAncestor?: UseSuggestionsOnlineSuggestion;
   };
-  timedOut: boolean;
-  resetTimeout: ( options?: { isRetry?: boolean } ) => void;
 }
 
 type MaybeLatLng = { lat: number; lng: number } | { lat: undefined; lng: undefined };
@@ -72,4 +72,8 @@ export interface UseSuggestionsOptions {
   scoreImageParams?: ScoreImageParams;
   queryKey: string[];
   onlineSuggestionsAttempted: boolean;
+  preferOfflineModel?: boolean;
+  // Location for the on-device model while scoreImageParams is still being
+  // built, so it doesn't score once without a location and again with it
+  pendingLocation?: { latitude?: number; longitude?: number };
 }

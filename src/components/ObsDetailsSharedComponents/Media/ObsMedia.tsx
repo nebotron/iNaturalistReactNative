@@ -14,22 +14,33 @@ type ObsMediaItem = MediaPhotoItem | MediaSoundItem;
 const isSound = ( item: ObsMediaItem ): item is MediaSoundItem => "file_url" in item;
 
 interface Props {
+  autoDetectSubject?: boolean;
   loading: boolean;
+  latitude?: number;
+  longitude?: number;
   photos: MediaPhotoItem[];
   sounds?: MediaSoundItem[];
   tablet?: boolean;
+  timeObservedAt?: string;
 }
 
 const ObsMedia = ( {
+  autoDetectSubject,
   loading,
+  latitude,
+  longitude,
   photos = [],
   sounds = [],
   tablet = false,
+  timeObservedAt,
 }: Props ) => {
   const [index, setIndex] = useState( 0 );
   const [mediaViewerVisible, setMediaViewerVisible] = useState( false );
 
   const items = useMemo<ObsMediaItem[]>( ( ) => ( [...photos, ...sounds] ), [photos, sounds] );
+  const soundObservation = useMemo( ( ) => (
+    { latitude, longitude, time_observed_at: timeObservedAt }
+  ), [latitude, longitude, timeObservedAt] );
 
   const CarouselSlide: ListRenderItem<ObsMediaItem> = useCallback(
     ( { item } ) => ( isSound( item )
@@ -37,13 +48,20 @@ const ObsMedia = ( {
         <SoundContainer
           sizeClass="h-72 w-screen"
           sound={item}
+          observation={soundObservation}
           isVisible={items.indexOf( item ) === index}
         />
       )
       : (
-        <PhotoContainer photo={item} onPress={() => setMediaViewerVisible( true )} />
+        <PhotoContainer
+          photo={item}
+          onPress={() => {
+            setIndex( items.indexOf( item ) );
+            setMediaViewerVisible( true );
+          }}
+        />
       ) ),
-    [setMediaViewerVisible, items, index],
+    [setMediaViewerVisible, setIndex, items, index, soundObservation],
   );
 
   const currentPhotoUrl = index >= photos.length
@@ -84,6 +102,7 @@ const ObsMedia = ( {
     <View className="w-full h-full">
       <MasonryLayout
         items={items}
+        soundObservation={soundObservation}
         onImagePress={newIndex => {
           setIndex( newIndex );
           setMediaViewerVisible( true );
@@ -98,11 +117,16 @@ const ObsMedia = ( {
         ? renderPhone( )
         : renderTablet( )}
       <MediaViewerModal
+        autoDetectSubject={autoDetectSubject}
         showModal={mediaViewerVisible}
         onClose={( ) => setMediaViewerVisible( false )}
         uri={currentPhotoUrl}
+        initialIndex={index}
+        latitude={latitude}
+        longitude={longitude}
         photos={photos}
         sounds={sounds}
+        timeObservedAt={timeObservedAt}
       />
     </View>
   );

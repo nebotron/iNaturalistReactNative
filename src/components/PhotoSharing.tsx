@@ -7,12 +7,25 @@ import React, {
 } from "react";
 import { Alert } from "react-native";
 import Observation from "realmModels/Observation";
-import { unlinkIfShareExtensionSource } from "sharedHelpers/shareExtensionFiles";
+import { fileExtension, summarizeTypes } from "sharedHelpers/importedFileTypes";
+import { log } from "sharedHelpers/logger";
+import {
+  isSharedAudio,
+  stageSharedSound,
+  unlinkIfShareExtensionSource,
+} from "sharedHelpers/shareExtensionFiles";
 import { useLayoutPrefs } from "sharedHooks";
 import type { SharedData } from "sharedHooks/useShare";
 import useStore from "stores/useStore";
 
 interface SharedPhoto { image: { uri: string }}
+
+const logger = log.extend( "PhotoSharing" );
+
+// The root of the taxonomy, for a shared sound whose organism isn't known yet
+const LIFE = {
+  id: 48460, name: "Life", rank: "stateofmatter", rank_level: 100,
+};
 
 const PhotoSharing = ( ) => {
   const previousItem = useRef<null | SharedData>( null );
@@ -33,25 +46,46 @@ const PhotoSharing = ( ) => {
 
   const resetNavigator = useCallback( (
     screen: "Match" | "ObsEdit" | "Suggestions" | "GroupPhotos",
-  ) => navigation.dispatch(
-    CommonActions.reset( {
-      index: 0,
-      routes: [
-        {
-          name: "NoBottomTabStackNavigator",
-          state: {
-            index: 0,
-            routes: [
-              {
-                name: screen,
-                params: { lastScreen: "PhotoSharing" },
-              },
-            ],
-          },
+  ) => {
+    if ( screen === "GroupPhotos" ) {
+      // Group Photos lives in the tab stack so the import keeps the bottom tab
+      // bar and the user can step away from it and come back. Drop the sharing
+      // stack first, then navigate in: handing the tab navigator a nested
+      // state through the reset itself would lose it, since the reset remounts
+      // the tab navigator and it comes back with its default state.
+      navigation.dispatch( CommonActions.reset( {
+        index: 0,
+        routes: [{ name: "TabNavigator" }],
+      } ) );
+      navigation.navigate( "TabNavigator", {
+        screen: "ObservationsTab",
+        params: {
+          screen,
+          params: { lastScreen: "PhotoSharing" },
         },
-      ],
-    } ),
-  ), [navigation] );
+      } );
+      return;
+    }
+    navigation.dispatch(
+      CommonActions.reset( {
+        index: 0,
+        routes: [
+          {
+            name: "NoBottomTabStackNavigator",
+            state: {
+              index: 0,
+              routes: [
+                {
+                  name: screen,
+                  params: { lastScreen: "PhotoSharing" },
+                },
+              ],
+            },
+          },
+        ],
+      } ),
+    );
+  }, [navigation] );
 
   const createObservationAndNavigate = useCallback( async ( photoUris: SharedPhoto[] ) => {
     try {
@@ -64,13 +98,50 @@ const PhotoSharing = ( ) => {
         ? "Match"
         : screenAfterPhotoEvidence );
     } catch ( e ) {
+      // The alert is gone once dismissed, so this is the only record of which
+      // share failed and how far it got.
+      logger.error( "Failed to create an observation from a shared photo", e );
       Alert.alert(
         "Photo sharing failed: couldn't create new observation:",
-        e,
+        String( e ),
       );
       return null;
     }
   }, [prepareObsEdit, isDefaultMode, resetNavigator, screenAfterPhotoEvidence] );
+
+  // Shared audio, e.g. a Voice Memo. One sound on its own becomes an
+  // observation of Life straight away and opens in ObsEdit (Match needs a
+  // photo). Anything more goes to Group Photos, where sounds are items of
+  // their own that can be combined with photos.
+  const importSharedSounds = useCallback( async (
+    photoUris: SharedPhoto[],
+    sharedSounds: NonNullable<SharedData["data"]>,
+  ) => {
+    try {
+      const soundUris = await Promise.all( sharedSounds.map( stageSharedSound ) );
+      if ( photoUris.length === 0 && soundUris.length === 1 ) {
+        const newObservation = await Observation.createObsWithSoundPath( soundUris[0] );
+        newObservation.taxon = LIFE;
+        prepareObsEdit( newObservation );
+        resetNavigator( "ObsEdit" );
+        return;
+      }
+      setPhotoImporterState( {
+        photoLibraryUris: photoUris.map( x => x.image.uri ),
+        groupedPhotos: [
+          ...photoUris.map( photo => ( { photos: [photo] } ) ),
+          ...soundUris.map( soundUri => ( { soundUri } ) ),
+        ],
+      } );
+      resetNavigator( "GroupPhotos" );
+    } catch ( e ) {
+      logger.error( "Failed to import shared audio", e );
+      Alert.alert(
+        "Sound sharing failed: couldn't create new observation:",
+        String( e ),
+      );
+    }
+  }, [prepareObsEdit, resetNavigator, setPhotoImporterState] );
 
   useEffect( ( ) => {
     const { data } = item;
@@ -83,11 +154,34 @@ const PhotoSharing = ( ) => {
     // navigating through the AddObsBottomSheet
     resetObservationFlowSlice( );
 
-    const photoUris = data
-      .filter( x => x.mimeType && x.mimeType.startsWith( "image/" ) )
-      .map( x => ( { image: { uri: x.data } } ) );
+    const sharedImages = data.filter( x => x.mimeType && x.mimeType.startsWith( "image/" ) );
+    const photoUris = sharedImages.map( x => ( { image: { uri: x.data } } ) );
+    const sharedSounds = data.filter(
+      x => !x.mimeType?.startsWith( "image/" ) && isSharedAudio( x ),
+    );
 
-    if ( photoUris.length === 1 ) {
+    // Anything that is neither an image nor audio is dropped right here,
+    // silently: a shared video, PDF, or an item whose provider declared no
+    // MIME type simply never arrives, and nothing said so. One line per share (a share is one user
+    // action, so this is not chatty) records what came in and what was kept.
+    const dropped = data.length - photoUris.length - sharedSounds.length;
+    const shareSummary = {
+      shared: data.length,
+      images: photoUris.length,
+      sounds: sharedSounds.length,
+      dropped,
+      mimeTypes: summarizeTypes( data.map( x => x.mimeType ) ),
+      extensions: summarizeTypes( data.map( x => fileExtension( x.data ) ) ),
+    };
+    if ( dropped > 0 ) {
+      logger.warnWithExtra( "share_import_dropped_items", shareSummary );
+    } else {
+      logger.infoWithExtra( "share_import", shareSummary );
+    }
+
+    if ( sharedSounds.length > 0 ) {
+      importSharedSounds( photoUris, sharedSounds );
+    } else if ( photoUris.length === 1 ) {
       createObservationAndNavigate( photoUris );
     } else {
       // Go to GroupPhotos screen
@@ -101,6 +195,7 @@ const PhotoSharing = ( ) => {
     }
   }, [
     createObservationAndNavigate,
+    importSharedSounds,
     item,
     navigation,
     resetObservationFlowSlice,

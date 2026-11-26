@@ -8,11 +8,10 @@ import React from "react";
 import { reactQueryRetry } from "sharedHelpers/logging";
 import { predictImage } from "sharedHelpers/mlModel";
 import useCurrentUser from "sharedHooks/useCurrentUser";
-import {
+import useSuggestionsV2, {
   INITIAL_SCORE_IMAGE_TIMEOUT,
   RETRY_SCORE_IMAGE_TIMEOUT,
-} from "sharedHooks/useSuggestions/useOnlineSuggestions";
-import useSuggestionsV2 from "sharedHooks/useSuggestions/useSuggestionsV2";
+} from "sharedHooks/useSuggestions/useSuggestionsV2";
 import factory from "tests/factory";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 

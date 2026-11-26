@@ -1,6 +1,10 @@
 import type { ApiProjectSummary, ApiUser } from "api/types";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
+import xor from "lodash/xor";
 import type {
   ESTABLISHMENT_MEAN,
+  EVIDENCE_TYPE,
   ExploreFilters,
   ExploreLocationState,
   ExploreState,
@@ -42,7 +46,7 @@ export const draftFromV2State = ( v2: ExploreState ): AdvancedSearchDraft => {
       return {
         ...base,
         subject: null,
-        filters: { ...v2.filters, user: subject.user, unobservedByUser: null },
+        filters: { ...v2.filters, user: subject.user },
       };
     case "project":
       return { ...base, subject: null, filters: { ...v2.filters, project: subject.project } };
@@ -50,7 +54,7 @@ export const draftFromV2State = ( v2: ExploreState ): AdvancedSearchDraft => {
       return {
         ...base,
         subject: null,
-        filters: { ...v2.filters, unobservedByUser: subject.user, user: null },
+        filters: { ...v2.filters, unobservedByUser: subject.user },
       };
     default:
       return { ...base, subject: subject ?? null, filters: v2.filters };
@@ -66,15 +70,26 @@ export const defaultAdvancedSearchDraft: AdvancedSearchDraft = {
 
 export type SubjectTaxon = Extract<ExploreSubject, { type: "taxon" }>["taxon"];
 
+// All taxon filters of a search: the subject taxon first, then the extra ones in filters
+export const searchTaxonFilters = (
+  subject: ExploreSubject | null,
+  filters: ExploreFilters,
+): ExploreTaxonFilter[] => [
+  ...( subject?.type === "taxon"
+    ? [{ taxon: toExploreTaxonFilterTaxon( subject.taxon ), exclude: false }]
+    : [] ),
+  ...( filters.taxonFilters || [] ),
+];
+
 export type AdvancedSearchAction =
-  | { type: "SET_TAXON"; taxon: SubjectTaxon | null }
+  | { type: "SET_TAXON_FILTERS"; taxonFilters: ExploreTaxonFilter[] }
   | { type: "FILTER_BY_ICONIC_UNKNOWN" }
   | { type: "SET_LOCATION_PLACE"; place: { id: number; display_name?: string } }
-  | { type: "SET_LOCATION_NEARBY" }
+  | { type: "SET_LOCATION_NEARBY"; radius?: number }
   | { type: "SET_LOCATION_WORLDWIDE" }
-  | { type: "SET_SORT"; sortBy: OBSERVATIONS_SORT }
   | { type: "SET_USER"; user: ApiUser | null }
   | { type: "SET_UNOBSERVED_BY_USER"; user: ApiUser | null }
+  | { type: "SET_EXCLUDE_SPECIES_IN_SAVED_SEARCH"; name: string | null }
   | { type: "SET_PROJECT"; project: ApiProjectSummary | null }
   | { type: "TOGGLE_RESEARCH_GRADE" }
   | { type: "TOGGLE_NEEDS_ID" }
@@ -93,6 +108,8 @@ export type AdvancedSearchAction =
   | { type: "SET_WILD_STATUS"; wildStatus: WILD_STATUS }
   | { type: "SET_REVIEWED"; reviewedFilter: REVIEWED }
   | { type: "SET_PHOTO_LICENSE"; photoLicense: PHOTO_LICENSE }
+  | { type: "TOGGLE_EVIDENCE_TYPE"; evidenceType: EVIDENCE_TYPE }
+  | { type: "TOGGLE_FAVED_BY_ME" }
   | { type: "RESET" };
 
 const withFilters = (
@@ -108,16 +125,27 @@ export const advancedSearchReducer = (
   action: AdvancedSearchAction,
 ): AdvancedSearchDraft => {
   switch ( action.type ) {
-    case "SET_TAXON":
+    case "SET_TAXON_FILTERS": {
+      // The first included taxon is the subject, the rest ride along in filters
+      const first = action.taxonFilters.find( filter => !filter.exclude );
+      const rest = action.taxonFilters.filter( filter => filter !== first );
       return {
-        ...draft,
-        subject: action.taxon
-          ? { type: "taxon", taxon: action.taxon }
+        ...withFilters( draft, {
+          taxonFilters: rest.length > 0
+            ? rest
+            : null,
+        } ),
+        subject: first
+          ? { type: "taxon", taxon: { ...first.taxon, name: first.taxon.name || "" } }
           : null,
       };
+    }
     case "FILTER_BY_ICONIC_UNKNOWN":
       // special case -- not a taxon
-      return { ...draft, subject: { type: "unknown" } };
+      return {
+        ...withFilters( draft, { taxonFilters: null } ),
+        subject: { type: "unknown" },
+      };
     case "SET_LOCATION_PLACE":
       return {
         ...draft,
@@ -126,19 +154,19 @@ export const advancedSearchReducer = (
     case "SET_LOCATION_NEARBY":
       return {
         ...draft,
-        location: { placeMode: EXPLORE_PLACE_MODE.NEARBY },
+        location: { placeMode: EXPLORE_PLACE_MODE.NEARBY, radius: action.radius },
       };
     case "SET_LOCATION_WORLDWIDE":
       return {
         ...draft,
         location: { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE },
       };
-    case "SET_SORT":
-      return { ...draft, sortBy: action.sortBy };
     case "SET_USER":
-      return withFilters( draft, { user: action.user, unobservedByUser: null } );
+      return withFilters( draft, { user: action.user } );
     case "SET_UNOBSERVED_BY_USER":
-      return withFilters( draft, { unobservedByUser: action.user, user: null } );
+      return withFilters( draft, { unobservedByUser: action.user } );
+    case "SET_EXCLUDE_SPECIES_IN_SAVED_SEARCH":
+      return withFilters( draft, { excludeSpeciesInSavedSearch: action.name } );
     case "SET_PROJECT":
       return withFilters( draft, { project: action.project } );
     case "TOGGLE_RESEARCH_GRADE":
@@ -227,6 +255,20 @@ export const advancedSearchReducer = (
       return withFilters( draft, { reviewedFilter: action.reviewedFilter } );
     case "SET_PHOTO_LICENSE":
       return withFilters( draft, { photoLicense: action.photoLicense } );
+    case "TOGGLE_EVIDENCE_TYPE": {
+      const evidenceTypes = xor( draft.filters.evidenceTypes || [], [action.evidenceType] );
+      return withFilters( draft, {
+        evidenceTypes: evidenceTypes.length > 0
+          ? evidenceTypes
+          : null,
+      } );
+    }
+    case "TOGGLE_FAVED_BY_ME":
+      return withFilters( draft, {
+        favedByMe: draft.filters.favedByMe
+          ? null
+          : true,
+      } );
     case "RESET":
       return defaultAdvancedSearchDraft;
     default: {

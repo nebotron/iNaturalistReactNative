@@ -6,6 +6,7 @@ import {
 import { View } from "components/styledComponents";
 import { useMyObservations } from "providers/MyObservationsContext";
 import React from "react";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -15,16 +16,18 @@ import Announcements from "./Announcements";
 
 interface Props {
   isConnected: boolean;
-  obsMissingBasicsExist: boolean;
+  obsMissingLocationOrDateExist: boolean;
   numTotalObservations?: number;
 }
 
 // Minimum uploaded observations count to show the Advanced Mode onboarding banner
-const ADVANCED_MODE_ONBOARDING_MIN_OBSERVATIONS = 100;
+const ADVANCED_MODE_ONBOARDING_MIN_OBSERVATIONS = getTunable(
+  "advancedModeOnboardingObservations",
+);
 
 const SimpleHeader = ( {
   isConnected,
-  obsMissingBasicsExist,
+  obsMissingLocationOrDateExist,
   numTotalObservations,
 }: Props ) => {
   const { t } = useTranslation();
@@ -61,7 +64,7 @@ const SimpleHeader = ( {
           onSwitchToAdvancedMode={( ) => setIsDefaultMode( false )}
         />
       )}
-      { obsMissingBasicsExist && (
+      { obsMissingLocationOrDateExist && (
         <View className="flex-row items-center px-[32px] py-[20px]">
           <CircleDots
             color={colors.darkGray}

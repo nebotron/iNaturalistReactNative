@@ -18,10 +18,9 @@ import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { Pressable, View } from "components/styledComponents";
 import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreSubject } from "providers/ExploreContext";
-import { useExplore } from "providers/ExploreContext";
+import { EXPLORE_ACTION, useExplore } from "providers/ExploreContext";
 import React from "react";
 import { useCurrentUser, useTranslation } from "sharedHooks";
-import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 const TitleHeader = ( {
@@ -82,20 +81,22 @@ const SubjectHeader = ( {
 );
 
 interface Props {
+  exploreViewIcon: string;
+  exploreViewLabel: string;
+  onPressChangeView: ( ) => void;
   showBackButton: boolean;
 }
 
-const ExploreHeader = ( { showBackButton }: Props ) => {
+const ExploreHeader = ( {
+  exploreViewIcon,
+  exploreViewLabel,
+  onPressChangeView,
+  showBackButton,
+}: Props ) => {
   const { t } = useTranslation( );
-  const { state } = useExplore( );
+  const { state, dispatch } = useExplore( );
   const currentUser = useCurrentUser( );
   const navigation = useNavigation<ExploreStackScreenProps<"ExploreResults">["navigation"]>( );
-  const advancedSearchMode = useStore(
-    storeState => storeState.exploreAdvancedSearch.advancedSearchMode,
-  );
-  const searchScreen = advancedSearchMode
-    ? "AdvancedSearch"
-    : "UniversalSearch";
   const filterCount = countFilters( state.filters );
 
   const place = locationLabel( state.location, t );
@@ -115,7 +116,7 @@ const ExploreHeader = ( { showBackButton }: Props ) => {
   } else if ( primary.display === "unobserved" ) {
     headerContent = (
       <TitleHeader
-        title={t( "Unobserved" )}
+        title={t( "Unobserved-by-me" )}
         place={place}
         testID="ExploreHeader.unobserved"
       />
@@ -131,22 +132,30 @@ const ExploreHeader = ( { showBackButton }: Props ) => {
       <Pressable
         accessible={false}
         className="px-4 pt-1 pb-[10px] flex-row items-center"
-        onPress={() => navigation.navigate( searchScreen )}
+        onPress={() => navigation.navigate( "AdvancedSearch" )}
         testID="ExploreHeader.pressable"
       >
-        {showBackButton && <BackButton />}
+        {state.backStack.length > 0
+          ? <BackButton onPress={( ) => dispatch( { type: EXPLORE_ACTION.GO_BACK } )} />
+          : showBackButton && <BackButton />}
         {headerContent}
+        <View className="mr-2">
+          <ContainedSquareButton
+            accessibilityHint={t( "Opens-explore-view-options" )}
+            accessibilityLabel={exploreViewLabel}
+            backgroundColor={colors.darkGray}
+            icon={exploreViewIcon}
+            onPress={onPressChangeView}
+            testID="ExploreHeader.viewButton"
+          />
+        </View>
         <View>
           <ContainedSquareButton
             accessibilityHint={t( "Opens-search-interface" )}
-            accessibilityLabel={advancedSearchMode
-              ? t( "Filters" )
-              : t( "Search" )}
+            accessibilityLabel={t( "Filters" )}
             backgroundColor={colors.inatGreen}
-            icon={advancedSearchMode
-              ? "sliders"
-              : "magnifying-glass"}
-            onPress={() => navigation.navigate( searchScreen )}
+            icon="sliders"
+            onPress={() => navigation.navigate( "AdvancedSearch" )}
             testID="ExploreHeader.searchButton"
           />
           {filterCount > 0 && (

@@ -1,9 +1,12 @@
-import { act, screen, userEvent } from "@testing-library/react-native";
+import {
+  act, screen, userEvent, waitFor,
+} from "@testing-library/react-native";
 import ExploreMapView from "components/Explore/components/ExploreMapView";
 import i18next from "i18next";
 import { EXPLORE_PLACE_MODE } from "providers/ExploreContext";
 import React from "react";
 import { animateToRegion } from "react-native-maps";
+import useStore from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 
 // Map asks for location permission on mount. Without this the real hook
@@ -17,6 +20,12 @@ jest.mock( "sharedHooks/useLocationPermission", ( ) => ( {
     renderPermissionsGate: ( ) => null,
     requestPermissions: jest.fn( ),
   } ),
+} ) );
+
+const mockFetchPlace = jest.fn( );
+jest.mock( "api/places", ( ) => ( {
+  __esModule: true,
+  default: ( ...args ) => mockFetchPlace( ...args ),
 } ) );
 
 const mockQueryParams = {
@@ -96,7 +105,7 @@ describe( "ExploreMapView", ( ) => {
     const { initialRegion } = mapProps( );
     expect( initialRegion.latitude ).toBe( 37.5 );
     expect( initialRegion.longitude ).toBe( -122.1 );
-    expect( initialRegion.latitudeDelta ).toBe( 0.02 );
+    expect( initialRegion.latitudeDelta ).toBe( 0.9 );
   } );
 
   it( "ignores the result bounds when the search is nearby", ( ) => {
@@ -120,6 +129,39 @@ describe( "ExploreMapView", ( ) => {
     expect( initialRegion.longitude ).toBe( 30 );
     expect( initialRegion.latitudeDelta ).toBe( 28 );
     expect( initialRegion.longitudeDelta ).toBe( 28 );
+  } );
+
+  it( "frames a place search on the place's bounding box, not the results", async ( ) => {
+    mockFetchPlace.mockResolvedValue( {
+      id: 1,
+      bounding_box_geojson: {
+        coordinates: [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]],
+      },
+    } );
+    renderMapView( {
+      placeMode: EXPLORE_PLACE_MODE.PLACE,
+      placeId: 1,
+      totalBounds: mockTotalBounds,
+    } );
+
+    await waitFor( ( ) => expect( mapProps( ).initialRegion.latitude ).toBe( 50 ) );
+    expect( mockFetchPlace ).toHaveBeenCalledWith( 1, expect.anything( ) );
+    const { initialRegion } = mapProps( );
+    expect( initialRegion.longitude ).toBe( 0 );
+    expect( initialRegion.latitudeDelta ).toBe( 28 );
+    expect( initialRegion.longitudeDelta ).toBe( 28 );
+  } );
+
+  it( "frames the results when a place has no bounding box", async ( ) => {
+    mockFetchPlace.mockResolvedValue( { id: 2 } );
+    renderMapView( {
+      placeMode: EXPLORE_PLACE_MODE.PLACE,
+      placeId: 2,
+      totalBounds: mockTotalBounds,
+    } );
+
+    await waitFor( ( ) => expect( mockFetchPlace ).toHaveBeenCalled( ) );
+    await waitFor( ( ) => expect( mapProps( ).initialRegion.latitude ).toBe( 20 ) );
   } );
 
   it( "keeps the map up at world scale until a place's bounds load", ( ) => {
@@ -340,8 +382,8 @@ describe( "ExploreMapView", ( ) => {
       expect( animateToRegion ).toHaveBeenCalledWith( {
         latitude: 37.5,
         longitude: -122.1,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
+        latitudeDelta: 0.9,
+        longitudeDelta: 0.9,
       } );
     } );
   } );
@@ -507,6 +549,88 @@ describe( "ExploreMapView", ( ) => {
       }, rerender );
 
       expect( redoSearchButton( ) ).toBeNull( );
+    } );
+  } );
+
+  describe( "returning to the Explore tab", ( ) => {
+    const pannedRegion = {
+      latitude: 46,
+      longitude: -93,
+      latitudeDelta: 6,
+      longitudeDelta: 8,
+    };
+    const placeSearch = {
+      placeMode: EXPLORE_PLACE_MODE.PLACE,
+      totalBounds: mockTotalBounds,
+      restoreView: true,
+    };
+    const redoSearchButton = ( ) => screen.queryByText(
+      i18next.t( "REDO-SEARCH-IN-MAP-AREA" ),
+    );
+
+    // The user pans the map and leaves the tab, which unmounts it
+    const panAndLeave = async ( props = placeSearch ) => {
+      const { unmount } = renderMapView( props );
+      act( ( ) => mapProps( ).onPanDrag( ) );
+      await act( async ( ) => mapProps( ).onRegionChangeComplete( pannedRegion, {} ) );
+      unmount( );
+      animateToRegion.mockClear( );
+    };
+
+    beforeEach( ( ) => {
+      useStore.setState( { exploreMapView: null } );
+    } );
+
+    it( "puts the map back where the user left it", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( placeSearch );
+
+      expect( mapProps( ).initialRegion ).toEqual( pannedRegion );
+      expect( animateToRegion ).not.toHaveBeenCalled( );
+    } );
+
+    it( "shows the redo button again if the user had panned away", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( placeSearch );
+
+      expect( redoSearchButton( ) ).toBeVisible( );
+    } );
+
+    it( "still frames a new search after coming back", async ( ) => {
+      await panAndLeave( );
+      const { rerender } = renderMapView( placeSearch );
+
+      renderMapView( {
+        ...placeSearch,
+        queryParams: { ...mockQueryParams, taxon_id: 7 },
+        totalBounds: {
+          swlat: 43, swlng: -97, nelat: 49, nelng: -89,
+        },
+      }, rerender );
+
+      expect( animateToRegion ).toHaveBeenCalled( );
+      expect( redoSearchButton( ) ).toBeNull( );
+    } );
+
+    it( "frames the search if it changed while the map was away", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( {
+        ...placeSearch,
+        queryParams: { ...mockQueryParams, taxon_id: 7 },
+      } );
+
+      expect( animateToRegion ).toHaveBeenCalled( );
+    } );
+
+    it( "does not restore the map for an Explore opened from elsewhere", async ( ) => {
+      await panAndLeave( );
+
+      renderMapView( { ...placeSearch, restoreView: false } );
+
+      expect( mapProps( ).initialRegion ).not.toEqual( pannedRegion );
     } );
   } );
 } );

@@ -6,7 +6,10 @@ import type { UserPojo } from "realmModels/User";
 import InlineUserBase from "./InlineUserBase";
 
 interface Props {
-  user: UserPojo;
+  user: UserPojo & {
+    created_at?: string;
+    createdAt?: string;
+  };
   isConnected: boolean;
 }
 

@@ -1,0 +1,259 @@
+##
+# Rebuild an iOS TestFlight build's symbols from the commit that built it.
+#
+# TestFlight builds are uploaded without symbols, and each run keeps its own
+# symbol table (symbols-<build>) for only 90 days, so crash and MetricKit stacks
+# from an older build name nothing in the app's own code. This finds the run
+# that produced a build number, checks out that run's commit, replays that
+# commit's own setup steps (.env, models, Pods, with the run's
+# prebuilt_react_native setting read back from its log), and archives it
+# unsigned, without the JS bundle, with the original build number, using the
+# original run's Xcode when its log names it.
+#
+# A rebuild usually reproduces the shipped binary exactly, but not always: one
+# of two rebuilds of 2026.1017.144045 with the same Xcode came out with another
+# UUID. So check every rebuild. When the original run's symbols-<build>
+# artifact still exists, the rebuilt table is compared against it here and the
+# run fails if they differ; otherwise scripts/symbolicate.py checks the binary
+# UUID in a crash log against the rebuild's, and Apple's own frame names where
+# Apple symbolicated any.
+#
+# Artifacts:
+#   rebuilt-symbols-<build>  <build>.txt.gz (the same nm table the TestFlight
+#                            workflow saves), uuid.txt, provenance.json
+#   rebuilt-dsym-<build>     the app's dSYM, for file and line numbers
+#
+# Then, locally:
+#   python3 scripts/symbolicate.py --symbols DIR crash.ips
+#   python3 scripts/symbolicate.py --symbols DIR --log metrickit_crash
+#
+# Trigger with `gh workflow run ios-symbols.yml -f build=2026.1017.144045`.
+##
+name: iOS symbols
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: TestFlight build number, e.g. 2026.1017.144045
+        type: string
+        required: true
+      sha:
+        description: Commit to build instead of the one found for the build number.
+        type: string
+        required: false
+      prebuilt_react_native:
+        description: How the original run linked React Native; auto reads it from the run's log.
+        type: choice
+        options: [auto, "false", "true"]
+        default: auto
+      xcode:
+        description: Xcode app to build with, e.g. /Applications/Xcode_26.0.1.app (default the image's).
+        type: string
+        required: false
+  workflow_call:
+    inputs:
+      build:
+        type: string
+        required: true
+      sha:
+        type: string
+        required: false
+      prebuilt_react_native:
+        type: string
+        default: auto
+      xcode:
+        type: string
+        required: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ inputs.sha || steps.find.outputs.sha }}
+      run_id: ${{ steps.find.outputs.run_id }}
+      prebuilt_react_native: ${{ steps.prebuilt.outputs.value }}
+      runner_image: ${{ steps.find.outputs.runner_image }}
+      xcode: ${{ steps.find.outputs.xcode }}
+      symbols_artifact_id: ${{ steps.find.outputs.symbols_artifact_id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+      - name: Find the run that built ${{ inputs.build }}
+        id: find
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/find_build_run.py "${{ inputs.build }}"
+      - name: Decide how React Native was linked
+        id: prebuilt
+        run: |
+          value="${{ inputs.prebuilt_react_native }}"
+          [ "$value" = "auto" ] && value="${{ steps.find.outputs.prebuilt_react_native }}"
+          if [ "$value" != "true" ] && [ "$value" != "false" ]; then
+            echo "::error::Can't tell how run ${{ steps.find.outputs.run_id }} linked React Native; pass prebuilt_react_native"
+            exit 1
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+  rebuild:
+    needs: resolve
+    # Only the xcode-27 image has Xcode 27, and only macos-26 has Xcode 26
+    runs-on: >-
+      ${{ ( startsWith( inputs.xcode, '/Applications/Xcode_27' )
+      || ( !inputs.xcode && startsWith( needs.resolve.outputs.xcode, '27.' ) ) )
+      && 'xcode-27' || 'macos-26' }}
+    # A full archive without the TestFlight workflow's caches
+    timeout-minutes: 180
+    env:
+      BUILD_NUMBER: ${{ inputs.build }}
+      ARCHIVE_PATH: ${{ github.workspace }}/ios/build/iNaturalistReactNative.xcarchive
+    steps:
+      # At the workspace root, the same path the original built from, since
+      # paths end up in the binary
+      - name: Check out ${{ needs.resolve.outputs.sha }}
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - name: Check out this workflow's scripts
+        uses: actions/checkout@v6
+        with:
+          path: .symbol-tools
+          sparse-checkout: .github/scripts
+
+      # Outside the checkout, which the archive mustn't see
+      - run: echo "OUT=$RUNNER_TEMP/rebuilt-symbols" >> "$GITHUB_ENV"
+
+      # A different Xcode compiles a different binary, so use the original
+      # run's when its log named it and this image still has it
+      - name: Select Xcode
+        env:
+          XCODE_APP: ${{ inputs.xcode }}
+          ORIGINAL_XCODE: ${{ needs.resolve.outputs.xcode }}
+        run: |
+          for app in /Applications/Xcode*.app; do
+            echo "$app: $( DEVELOPER_DIR="$app/Contents/Developer" xcodebuild -version 2>/dev/null | tr '\n' ' ' )"
+          done
+          if [ -z "$XCODE_APP" ] && [ -n "$ORIGINAL_XCODE" ]; then
+            build="${ORIGINAL_XCODE##* }"
+            for app in /Applications/Xcode*.app; do
+              if DEVELOPER_DIR="$app/Contents/Developer" xcodebuild -version 2>/dev/null \
+                | grep -q "Build version $build$"; then
+                XCODE_APP="$app"
+                break
+              fi
+            done
+            [ -n "$XCODE_APP" ] || echo "::warning::This image lacks the original run's Xcode ($ORIGINAL_XCODE); the rebuild may not match"
+          fi
+          [ -z "$XCODE_APP" ] || sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      # As the TestFlight workflow does, for Firebase with Xcode > 26.0.1
+      - run: echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> "$GITHUB_ENV"
+      - run: npm ci
+
+      - name: Replay the commit's own setup steps
+        env:
+          DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
+          GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
+        run: |
+          ruby .symbol-tools/.github/scripts/replay_build_steps.rb \
+            "${{ needs.resolve.outputs.prebuilt_react_native }}" \
+            "Create .env file" \
+            "Create GoogleService-Info.production.plist" \
+            "Download the cv model and taxonomy file into the ios folder" \
+            "Update Pods"
+
+      # Unsigned, since signing adds nothing the symbols depend on, and without
+      # the JS bundle, which isn't in the binary. CURRENT_PROJECT_VERSION goes
+      # into the binary through apple-generic versioning, so it has to match.
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild -version
+          xcodebuild archive \
+            -workspace ios/iNaturalistReactNative.xcworkspace \
+            -scheme iNaturalistReactNative \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            SKIP_BUNDLING=1 \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            > "$RUNNER_TEMP/archive.log" 2>&1 \
+            || { grep -E 'error:' "$RUNNER_TEMP/archive.log" | head -50; tail -100 "$RUNNER_TEMP/archive.log"; exit 1; }
+          tail -3 "$RUNNER_TEMP/archive.log"
+          test -d "$ARCHIVE_PATH/dSYMs/iNaturalistReactNative.app.dSYM"
+
+      # The same table testflight-ios-build.yml saves
+      - name: Write the symbol table
+        run: |
+          set -o pipefail
+          DSYM="$ARCHIVE_PATH/dSYMs/iNaturalistReactNative.app.dSYM"
+          DWARF="$DSYM/Contents/Resources/DWARF/iNaturalistReactNative"
+          mkdir -p "$OUT"
+          xcrun nm -n -U "$DWARF" | c++filt | xcrun swift-demangle --simplified \
+            | gzip -9 > "$OUT/$BUILD_NUMBER.txt.gz"
+          xcrun dwarfdump --uuid "$DWARF" | tee "$OUT/uuid.txt"
+          cat > "$OUT/provenance.json" <<JSON
+          {
+            "build": "$BUILD_NUMBER",
+            "sha": "${{ needs.resolve.outputs.sha }}",
+            "original_run_id": "${{ needs.resolve.outputs.run_id }}",
+            "original_runner_image": "${{ needs.resolve.outputs.runner_image }}",
+            "original_xcode": "${{ needs.resolve.outputs.xcode }}",
+            "prebuilt_react_native": "${{ needs.resolve.outputs.prebuilt_react_native }}",
+            "rebuild_runner_image": "$ImageOS $ImageVersion",
+            "xcode": "$( xcodebuild -version | tr '\n' ' ' | sed 's/ *$//' )",
+            "rebuild_run_id": "${{ github.run_id }}"
+          }
+          JSON
+          cat "$OUT/provenance.json"
+          ditto -c -k --keepParent "$DSYM" "$RUNNER_TEMP/iNaturalistReactNative.app.dSYM.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rebuilt-symbols-${{ inputs.build }}
+          path: ${{ env.OUT }}
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rebuilt-dsym-${{ inputs.build }}
+          path: ${{ runner.temp }}/iNaturalistReactNative.app.dSYM.zip
+          compression-level: 0
+          retention-days: 30
+
+      - name: Fetch the original run's symbol table
+        if: needs.resolve.outputs.symbols_artifact_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: symbols-${{ inputs.build }}
+          run-id: ${{ needs.resolve.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/original
+      - name: Compare with the original symbol table
+        if: needs.resolve.outputs.symbols_artifact_id != ''
+        run: |
+          functions() { gzcat "$1" | awk '$2 == "t" || $2 == "T"' | sort; }
+          functions "$RUNNER_TEMP/original/$BUILD_NUMBER.txt.gz" > "$RUNNER_TEMP/original.txt"
+          functions "$OUT/$BUILD_NUMBER.txt.gz" > "$RUNNER_TEMP/rebuilt.txt"
+          total=$( wc -l < "$RUNNER_TEMP/original.txt" | tr -d ' ' )
+          differing=$( comm -3 "$RUNNER_TEMP/original.txt" "$RUNNER_TEMP/rebuilt.txt" | wc -l | tr -d ' ' )
+          echo "### $BUILD_NUMBER: $differing of $total function entries differ from the original" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$differing" != "0" ]; then
+            comm -3 "$RUNNER_TEMP/original.txt" "$RUNNER_TEMP/rebuilt.txt" | head -40
+            echo "::error::The rebuilt symbols don't match the build's own; don't trust them"
+            exit 1
+          fi

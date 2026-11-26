@@ -1,4 +1,4 @@
-import { SPECIES_TAB } from "appConstants/tabs";
+import { OBSERVATIONS_TAB, SPECIES_TAB } from "appConstants/tabs";
 import {
   defaultExploreFilters,
   EXPLORE_ACTION,
@@ -339,6 +339,42 @@ describe( "exploreReducer", ( ) => {
       };
       const next = exploreReducer( state, { type: EXPLORE_ACTION.RESET } );
       expect( next ).toEqual( initialExploreState );
+    } );
+  } );
+
+  describe( EXPLORE_ACTION.GO_BACK, ( ) => {
+    it( "returns to the subject and tab a species card was tapped from", ( ) => {
+      const genus = { type: "taxon", taxon: { id: 1 } };
+      const species = { type: "taxon", taxon: { id: 2 } };
+      const state = { ...initialExploreState, subject: genus, activeTab: SPECIES_TAB };
+      const searched = exploreReducer( state, {
+        type: EXPLORE_ACTION.SEARCH_SPECIES,
+        subject: species,
+      } );
+      expect( searched.subject ).toBe( species );
+      expect( searched.activeTab ).toBe( OBSERVATIONS_TAB );
+
+      const back = exploreReducer( searched, { type: EXPLORE_ACTION.GO_BACK } );
+      expect( back ).toEqual( state );
+    } );
+
+    it( "replaces the other searched taxa with the species, keeping exclusions", ( ) => {
+      const species = { type: "taxon", taxon: { id: 2 } };
+      const included = { taxon: { id: 3 }, exclude: false };
+      const excluded = { taxon: { id: 4 }, exclude: true };
+      const state = {
+        ...initialExploreState,
+        subject: { type: "taxon", taxon: { id: 1 } },
+        filters: { ...initialExploreState.filters, taxonFilters: [included, excluded] },
+      };
+      const searched = exploreReducer( state, {
+        type: EXPLORE_ACTION.SEARCH_SPECIES,
+        subject: species,
+      } );
+      expect( searched.filters.taxonFilters ).toEqual( [excluded] );
+
+      const back = exploreReducer( searched, { type: EXPLORE_ACTION.GO_BACK } );
+      expect( back ).toEqual( state );
     } );
   } );
 } );

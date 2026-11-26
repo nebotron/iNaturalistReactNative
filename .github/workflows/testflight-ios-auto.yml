@@ -1,0 +1,45 @@
+##
+# Deploy main to TestFlight once it has gone 10 minutes without a push.
+#
+# Every push to main starts a run that waits; a newer push cancels it, so only
+# the last push of a burst dispatches testflight-ios.yml. Dispatching (rather
+# than calling the build as a reusable workflow) keeps a later push from
+# cancelling a build that is already under way. GITHUB_TOKEN may trigger
+# workflow_dispatch, unlike most events.
+##
+name: TestFlight iOS on push
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: testflight-ios-auto
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+
+jobs:
+  debounce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Wait for 10 minutes without a push
+        run: sleep 600
+
+      # Skip a commit that a manual deploy already built or is building.
+      - name: Check this commit isn't already deployed
+        id: check
+        run: |
+          done=$(gh run list --workflow testflight-ios.yml -L 10 \
+            --json headSha,status,conclusion \
+            -q "[.[] | select(.headSha == \"$GITHUB_SHA\"
+                 and (.status != \"completed\" or .conclusion == \"success\"))] | length")
+          echo "deployed=$([ "$done" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch TestFlight build
+        if: steps.check.outputs.deployed != 'true'
+        run: gh workflow run testflight-ios.yml --ref main

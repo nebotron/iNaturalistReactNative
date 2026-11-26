@@ -1,0 +1,121 @@
+##
+# Build the iOS app on a GitHub runner and upload it to TestFlight, so builds
+# can reach a phone without a local Mac. The build itself is
+# testflight-ios-build.yml.
+#
+# Fork-only: signs with Ben's own Apple team and the com.benhannel.inat.dev
+# bundle IDs, so it never touches iNaturalist's App Store Connect records.
+# Trigger from the Actions tab or with `gh workflow run testflight-ios.yml`.
+#
+# Required repository secrets:
+#   ASC_KEY_ID     App Store Connect API key ID
+#   ASC_ISSUER_ID  App Store Connect API issuer ID
+#   ASC_KEY_BASE64 base64 of the AuthKey_<ASC_KEY_ID>.p8 private key
+#   DOTENV_BASE64  base64 of the production .env
+#   GOOGLE_SERVICE_INFO_PRODUCTION_BASE64
+#                  base64 of ios/GoogleService-Info.production.plist
+#
+# Optional, and strongly recommended: reuse signing certificates.
+#   DIST_CERT_P12_BASE64  base64 of a .p12 holding the Apple Distribution
+#                         certificate + key, ideally also an Apple Development
+#                         one (automatic signing archives with Development and
+#                         re-signs with Distribution on export)
+#   DIST_CERT_PASSWORD    that .p12's password
+# xcodebuild creates any certificate it can't find in the keychain, on every
+# run, and the account soon hits Apple's certificate limit ("Choose a
+# certificate to revoke").
+#
+# Runner images: App Store Connect wants apps built with the iOS 27 SDK from
+# April 2027 (ITMS-90725), and only GitHub's xcode-27 image (Arm, macOS 27,
+# a preview as of November 2026) has Xcode 27. macos-26 and macos-26-intel
+# stop at Xcode 26.6 and the iOS 26.5 SDK: uploads from them are accepted
+# until April 2027, with that warning, and the build step warns too.
+#
+# Runner fallback: during US working hours the free macOS pools often have
+# no machine for this repo. A runner either turns up within seconds or not
+# for 5-15 minutes, so when an xcode-27 or macos-26 build hasn't got a runner
+# 30 seconds after it was queued, the `fallback` job dispatches a new run on
+# the next image (xcode-27 -> macos-26 -> macos-26-intel; macos-26-intel is
+# separate, slower hardware with its own caches) and cancels this one.
+# Separately, if the first attempt ends "not acquired by Runner of type
+# hosted" after ~15 minutes queued with no steps run, attempt-2 tries the
+# next image. A build that started and failed is not retried, and cancelling
+# the run stops the chain.
+##
+name: TestFlight iOS
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: macOS runner image to try first; the next is tried if it gets no runner.
+        type: choice
+        options: [xcode-27, macos-26, macos-26-intel]
+        default: xcode-27
+      fallback:
+        description: Move to the next image if this one gets no runner.
+        type: boolean
+        default: true
+
+# One run at a time per starting image, so builds on different images can
+# run side by side. Their timestamp build numbers keep uploads distinct.
+concurrency:
+  group: testflight-ios-${{ inputs.runner || 'xcode-27' }}
+  cancel-in-progress: false
+
+jobs:
+  attempt-1:
+    uses: ./.github/workflows/testflight-ios-build.yml
+    secrets: inherit
+    with:
+      runner: ${{ inputs.runner || 'xcode-27' }}
+
+  # Watches attempt-1 on xcode-27 or macos-26 and moves the build to the next
+  # image if no runner picks it up within 30 seconds of being queued.
+  fallback:
+    if: ${{ inputs.fallback != false && ( inputs.runner || 'xcode-27' ) != 'macos-26-intel' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      FROM: ${{ inputs.runner || 'xcode-27' }}
+      TO: ${{ ( inputs.runner || 'xcode-27' ) == 'xcode-27' && 'macos-26' || 'macos-26-intel' }}
+    steps:
+      - name: Move to the next image if this one has no runner after 30 seconds
+        run: |
+          jobs_url="repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs"
+          while true; do
+            job=$( gh api "$jobs_url" \
+              --jq '[.jobs[] | select(.name | startswith("attempt-1"))][0]' )
+            if [ -z "$job" ] || [ "$job" = "null" ]; then
+              # attempt-1's job is created moments after the run; wait for it
+              sleep 2
+              continue
+            fi
+            status=$( jq -r .status <<< "$job" )
+            if [ "$status" != "queued" ] && [ "$status" != "waiting" ]; then
+              echo "attempt-1 got a runner ($status)."
+              exit 0
+            fi
+            created=$( date -d "$( jq -r .created_at <<< "$job" )" +%s )
+            if [ $(( $( date +%s ) - created )) -ge 30 ]; then
+              break
+            fi
+            sleep 3
+          done
+          echo "No $FROM runner after 30 seconds; moving the build to $TO."
+          gh workflow run testflight-ios.yml --ref "${{ github.ref_name }}" \
+            -f runner="$TO"
+          gh run cancel ${{ github.run_id }}
+
+  attempt-2:
+    needs: attempt-1
+    if: ${{ !cancelled() && inputs.fallback != false && needs.attempt-1.result != 'success' && needs.attempt-1.outputs.started != 'true' }}
+    uses: ./.github/workflows/testflight-ios-build.yml
+    secrets: inherit
+    with:
+      runner: >-
+        ${{ ( inputs.runner || 'xcode-27' ) == 'xcode-27' && 'macos-26'
+        || inputs.runner == 'macos-26' && 'macos-26-intel' || 'xcode-27' }}

@@ -46,6 +46,8 @@ interface Props {
   scrollEnabled?: boolean;
   enablePanDownToClose?: boolean;
   enableContentPanningGesture?: boolean;
+  // Caps the sheet's height; taller content scrolls
+  maxHeight?: number;
 }
 
 type SheetHandle = BottomSheet & Partial<Pick<BottomSheetModal, "dismiss" | "present">>;
@@ -65,6 +67,7 @@ const StandardBottomSheet = ( {
   scrollEnabled = true,
   enablePanDownToClose = true,
   enableContentPanningGesture = true,
+  maxHeight,
 }: Props ) => {
   if ( snapPoints ) {
     throw new Error( "BottomSheet does not accept snapPoints as a prop." );
@@ -185,6 +188,7 @@ const StandardBottomSheet = ( {
       <BottomSheet
         backdropComponent={renderBackdrop}
         enableDynamicSizing
+        maxDynamicContentSize={maxHeight}
         handleComponent={noHandle}
         index={0}
         ref={sheetRef}
@@ -203,6 +207,7 @@ const StandardBottomSheet = ( {
     <BottomSheetModal
       backdropComponent={renderBackdrop}
       enableDynamicSizing
+      maxDynamicContentSize={maxHeight}
       handleComponent={noHandle}
       index={0}
       ref={sheetRef as React.RefObject<BottomSheetModal>}

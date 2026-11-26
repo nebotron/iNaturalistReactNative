@@ -1,12 +1,28 @@
 import { Realm } from "@realm/react";
 import { PHOTO_FIELDS } from "api/fields";
+import deleteRemoteObservationPhoto from "api/observationPhotos";
 import type { ApiObservationPhoto } from "api/types";
-import inatjs, { FileUpload } from "inaturalistjs";
+import { FileUpload } from "inaturalistjs";
+import type { Asset } from "react-native-image-picker";
 import type { RealmObservation, RealmObservationPhoto, RealmPhoto } from "realmModels/types";
+import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
+import {
+  getGalleryAssetDevicePhotoUri,
+  normalizeDevicePhotoUri,
+} from "sharedHelpers/getOriginalDevicePhotoUri";
+import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as uuid from "uuid";
 
 import Photo from "./Photo";
+
+interface DeletableObservationPhoto {
+  _synced_at?: Date | null;
+  id?: number | null;
+  originalPhotoUri?: string | null;
+  photo?: RealmPhoto | null;
+  uuid?: string;
+}
 
 class ObservationPhoto extends Realm.Object {
   _created_at?: Date;
@@ -50,6 +66,10 @@ class ObservationPhoto extends Realm.Object {
     };
   }
 
+  static needsPhotoReupload( photo?: RealmPhoto ) {
+    return Photo.hasLocalEdits( photo );
+  }
+
   static mapPhotoForAttachingToObs(
     observationID: number,
     observationPhoto: RealmObservationPhoto,
@@ -68,12 +88,28 @@ class ObservationPhoto extends Realm.Object {
     observationID: number,
     observationPhoto: RealmObservationPhoto,
   ) {
+    const observationPhotoParams: {
+      observation_id: number;
+      position?: number;
+      photo_id?: number;
+    } = {
+      observation_id: observationID,
+      position: observationPhoto.position,
+    };
+
+    // Always point the observation photo at whatever photo id the record
+    // carries now. Not gated on needsPhotoReupload( photo ): a re-uploaded
+    // photo is already marked synced by this point, so that check would drop
+    // the new id (e.g. a crop). When nothing was re-uploaded this is the id the
+    // server already has.
+    const { photo } = observationPhoto;
+    if ( photo?.id ) {
+      observationPhotoParams.photo_id = photo.id;
+    }
+
     return {
       id: observationPhoto.uuid,
-      observation_photo: {
-        observation_id: observationID,
-        position: observationPhoto.position,
-      },
+      observation_photo: observationPhotoParams,
     };
   }
 
@@ -81,74 +117,129 @@ class ObservationPhoto extends Realm.Object {
   // I think it is only called after certain transformations on the Realm result,
   // but it is not important for my current linear ticket so I'll skip typing it more
   static mapObservationPhotoForMyObsDefaultMode( observationPhoto: {
-    photo?: { url?: string; localFilePath?: string };
+    photo?: {
+      url?: string;
+      localFilePath?: string;
+      _synced_at?: Date;
+      _updated_at?: Date;
+    };
     uuid?: string;
   } ) {
     return {
       photo: {
         url: observationPhoto?.photo?.url,
         localFilePath: observationPhoto?.photo?.localFilePath,
+        // Photo.hasLocalEdits reads these to decide whether the local file is
+        // newer than what was uploaded. Dropping them made every photo here
+        // look unedited, so an uploaded observation whose photo had been
+        // cropped (or otherwise edited) locally showed the remote original
+        // instead of the local file -- the crop looked lost as soon as the
+        // observation was saved and My Observations drew it again.
+        _synced_at: observationPhoto?.photo?._synced_at,
+        _updated_at: observationPhoto?.photo?._updated_at,
       },
       uuid: observationPhoto?.uuid,
     };
   }
 
-  static async new( uri: string, position: number ) {
-    const photo = await Photo.new( uri );
+  static async new(
+    uri: string,
+    position: number,
+    originalDevicePhotoUri?: string | null,
+    cropMetadata?: GroupedPhotoCropMetadata,
+  ) {
+    // Read before resizing, from the uncropped original where there is one, and
+    // kept so the camera settings outlive the original in the photo library.
+    const [photo, cameraInfo] = await Promise.all( [
+      Photo.new( uri, cropMetadata ),
+      readCameraInfo( cropMetadata?.cropOriginalUri || uri ),
+    ] );
     return {
       _created_at: new Date( ),
       _updated_at: new Date( ),
       uuid: uuid.v4( ),
       photo,
       originalPhotoUri: uri,
+      originalDevicePhotoUri: originalDevicePhotoUri ?? undefined,
+      cameraInfo: cameraInfo
+        ? JSON.stringify( cameraInfo )
+        : undefined,
       position,
     };
   }
 
   static createObsPhotosWithPosition = async (
-    photos: string[] | { image: { uri: string } }[],
+    photos: string[] | { image: Asset }[],
     { position, local }: { position: number; local: boolean },
-  ) => {
-    let photoPosition = position;
-    return Promise.all(
-      photos.map( async photo => {
-        const newPhoto = ObservationPhoto.new(
-          local
-            ? photo
-            : photo?.image?.uri,
-          photoPosition,
-        );
-        photoPosition += 1;
-        return newPhoto;
-      } ),
-    );
-  };
+  ) => Promise.all(
+    photos.map( async ( photo, index ) => {
+      const uri = local
+        ? photo as string
+        : ( photo as { image: Asset } )?.image?.uri;
+      const galleryPhoto = photo as {
+        image: Asset & GroupedPhotoCropMetadata;
+        originalDevicePhotoUri?: string | null;
+      };
+      const originalDevicePhotoUri = local
+        ? null
+        : normalizeDevicePhotoUri( galleryPhoto.originalDevicePhotoUri )
+          ?? getGalleryAssetDevicePhotoUri( galleryPhoto.image );
+      // Carry over any crop framed in the Group Photos grid so the observation
+      // photo remembers the crop box, not just the cropped pixels.
+      const cropMetadata = local
+        ? undefined
+        : {
+          cropOriginalUri: galleryPhoto.image?.cropOriginalUri,
+          crop: galleryPhoto.image?.crop,
+        };
+      return ObservationPhoto.new(
+        uri,
+        position + index,
+        originalDevicePhotoUri,
+        cropMetadata,
+      );
+    } ),
+  );
 
-  // TODO: I don't know how what the type for currentObservation is outside of this context here,
-  // in the zustand store slice that is referenced in the two places this function is called
-  // there are no types yet as far as I can see. This function is not important for my current
-  // linear ticket so I'll skip typing it
-  static async deleteRemotePhoto(
-    uri: string,
-    currentObservation?: { observationPhotos?: { photo: { url?: string }; uuid: string }[] },
-  ) {
-    const obsPhotoToDelete = currentObservation?.observationPhotos?.find(
-      p => p.photo?.url === uri,
-    );
+  // Every URI a screen might show an observation photo by: its local file, its
+  // remote URL in any size, its crop source, or the device original.
+  static matchesUri( obsPhoto: DeletableObservationPhoto | undefined, uri: string ): boolean {
+    const photo = obsPhoto?.photo;
+    if ( !photo ) return false;
+    return [
+      Photo.getLocalPhotoUri( photo.localFilePath ),
+      photo.url,
+      Photo.displayLocalOrRemoteSquarePhoto( photo ),
+      Photo.displayLocalOrRemoteMediumPhoto( photo ),
+      Photo.displayLocalOrRemoteLargePhoto( photo ),
+      Photo.displayLocalOrRemoteOriginalPhoto( photo ),
+      Photo.displayCropSourcePhoto( photo ),
+      obsPhoto?.originalPhotoUri,
+    ].some( candidateUri => !!candidateUri && candidateUri === uri );
+  }
 
-    if ( obsPhotoToDelete ) {
-      // Removing this require breaks tests, so I am leaving it here
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getJWT } = require( "components/LoginSignUp/AuthenticationService" );
-      const apiToken = await getJWT( );
-      const options = { api_token: apiToken };
-      await inatjs.observation_photos.delete( { id: obsPhotoToDelete.uuid }, options );
+  // Deletes the observation photo on the server if it ever got there. Throws
+  // when the server still has it, so the caller can keep showing the photo.
+  static async deleteRemotePhoto( obsPhoto: DeletableObservationPhoto ) {
+    const onServer = obsPhoto._synced_at != null || obsPhoto.id != null;
+    if ( !onServer || !obsPhoto.uuid ) return;
+    // Removing this require breaks tests, so I am leaving it here
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getJWT } = require( "components/LoginSignUp/AuthenticationService" );
+    const apiToken = await getJWT( );
+    try {
+      await deleteRemoteObservationPhoto( obsPhoto.uuid, { api_token: apiToken } );
+    } catch ( error ) {
+      const { status, response } = error as { status?: number; response?: { status?: number } };
+      // Already gone from the server, which is what was asked for.
+      if ( ( status ?? response?.status ) === 404 ) return;
+      throw error;
     }
   }
 
   static async deleteLocalPhoto( uri: string, realm?: Realm, obsUUID?: string ) {
     // delete uri on disk
-    Photo.deletePhotoFromDeviceStorage( uri );
+    await Photo.deletePhotoFromDeviceStorage( uri );
     if ( !realm || !obsUUID ) return;
     const realmObs = realm.objectForPrimaryKey<RealmObservation>( "Observation", obsUUID );
     const obsPhotoToDelete = realmObs?.observationPhotos
@@ -160,22 +251,25 @@ class ObservationPhoto extends Realm.Object {
     }
   }
 
-  // TODO: I don't know how what the type for currentObservation is outside of this context here,
-  // in the zustand store slice that is referenced in the two places this function is called
-  // there are no types yet as far as I can see. This function is not important for my current
-  // linear ticket so I'll skip typing it
+  // A photo can be on the server and on the device at once, and screens show
+  // it by either URI, so the URI's form doesn't say where to delete it: delete
+  // it on the server whenever it got there, then its local file and record.
   static async deletePhoto(
     uri: string,
     currentObservation?: {
-      observationPhotos?: { photo: { url?: string }; uuid: string }[];
+      observationPhotos?: DeletableObservationPhoto[];
       uuid?: string;
     },
     realm?: Realm,
   ) {
-    if ( uri.includes( "https://" ) ) {
-      ObservationPhoto.deleteRemotePhoto( uri, currentObservation );
-    } else {
-      ObservationPhoto.deleteLocalPhoto( uri, realm, currentObservation?.uuid );
+    const obsPhoto = currentObservation?.observationPhotos?.find(
+      op => ObservationPhoto.matchesUri( op, uri ),
+    );
+    if ( obsPhoto ) {
+      await ObservationPhoto.deleteRemotePhoto( obsPhoto );
+    }
+    if ( !uri.includes( "https://" ) ) {
+      await ObservationPhoto.deleteLocalPhoto( uri, realm, currentObservation?.uuid );
     }
   }
 
@@ -228,6 +322,9 @@ class ObservationPhoto extends Realm.Object {
       _updated_at: "date?",
       uuid: "string",
       id: "int?",
+      originalDevicePhotoUri: "string?",
+      // Local-only JSON PhotoCameraInfo read from the photo when it was added
+      cameraInfo: "string?",
       photo: "Photo?",
       position: "int?",
       // this creates an inverse relationship so observation photos

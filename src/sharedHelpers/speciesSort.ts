@@ -24,15 +24,21 @@ export enum SPECIES_SORT {
   COUNT_ASC = "COUNT_ASC",
   DATE_OBSERVED_NEWEST = "DATE_OBSERVED_NEWEST",
   DATE_OBSERVED_OLDEST = "DATE_OBSERVED_OLDEST",
+  TAXONOMY = "TAXONOMY",
 }
 
 // Sorts that observations/species_counts supports. Date sorts are MyObs-only, since
-// taxa_observed is scoped to a single user
-export type SpeciesCountsSort = SPECIES_SORT.COUNT_DESC | SPECIES_SORT.COUNT_ASC;
+// taxa_observed is scoped to a single user. The API can't order by taxonomy, so that fetches
+// the most observed species and sorts them on device
+export type SpeciesCountsSort = SPECIES_SORT.COUNT_DESC
+  | SPECIES_SORT.COUNT_ASC
+  | SPECIES_SORT.TAXONOMY;
 type TaxaObservedSort = Exclude<SPECIES_SORT, SpeciesCountsSort>;
 
 export function isSpeciesCountsSort( sort: SPECIES_SORT ): sort is SpeciesCountsSort {
-  return sort === SPECIES_SORT.COUNT_DESC || sort === SPECIES_SORT.COUNT_ASC;
+  return sort === SPECIES_SORT.COUNT_DESC
+    || sort === SPECIES_SORT.COUNT_ASC
+    || sort === SPECIES_SORT.TAXONOMY;
 }
 
 export interface SpeciesSortLabels {
@@ -46,6 +52,7 @@ const SPECIES_SORT_TO_SPECIES_COUNTS_PARAMS: Record<
 > = {
   [SPECIES_SORT.COUNT_DESC]: { order_by: "count", order: "desc" },
   [SPECIES_SORT.COUNT_ASC]: { order_by: "count", order: "asc" },
+  [SPECIES_SORT.TAXONOMY]: { order_by: "count", order: "desc" },
 };
 
 const SPECIES_SORT_TO_TAXA_OBSERVED_PARAMS: Record<
@@ -66,6 +73,7 @@ export const MY_OBSERVATIONS_SPECIES_SORT_OPTIONS: SPECIES_SORT[] = [
 export const EXPLORE_SPECIES_SORT_OPTIONS: SpeciesCountsSort[] = [
   SPECIES_SORT.COUNT_DESC,
   SPECIES_SORT.COUNT_ASC,
+  SPECIES_SORT.TAXONOMY,
 ];
 
 export function useSpeciesSortLabels( ): Record<SPECIES_SORT, SpeciesSortLabels> {
@@ -86,6 +94,10 @@ export function useSpeciesSortLabels( ): Record<SPECIES_SORT, SpeciesSortLabels>
     [SPECIES_SORT.DATE_OBSERVED_OLDEST]: {
       label: t( "Date-Observed-Oldest" ),
       text: t( "Species-first-observed-least-recently-appear-first" ),
+    },
+    [SPECIES_SORT.TAXONOMY]: {
+      label: t( "Taxonomic-order" ),
+      text: t( "Species-are-grouped-by-genus-then-family-and-so-on" ),
     },
   };
 }

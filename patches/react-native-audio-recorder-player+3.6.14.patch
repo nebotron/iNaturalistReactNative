@@ -27,3 +27,18 @@ index 4570fc2..6ad0f94 100644
                  } else {
                      mediaPlayer!!.setDataSource(path)
                  }
+diff --git a/node_modules/react-native-audio-recorder-player/index.ts b/node_modules/react-native-audio-recorder-player/index.ts
+index b7f19a8..9e0ac46 100644
+--- a/node_modules/react-native-audio-recorder-player/index.ts
++++ b/node_modules/react-native-audio-recorder-player/index.ts
+@@ -330,7 +330,9 @@ class AudioRecorderPlayer {
+     }
+ 
+     if (event.isFinished) {
+-      this.stopPlayer();
++      // The native player is shared by every instance, so another instance
++      // may already have stopped it
++      this.stopPlayer().catch(() => undefined);
+     }
+   };
+ 

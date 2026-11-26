@@ -50,6 +50,19 @@ const getActiveTab = ( activeTabName: TabName ): ScreenName => {
   }
 };
 
+// Whether a tab's stack shows only its first screen, including any stack nested in that
+// screen (My Observations pushes its search screen onto one). A tab that has never been
+// opened has no state yet, and opens on its first screen anyway
+const isStackAtRoot = (
+  tabRoute: Partial<NavigationRoute<ParamListBase, string>> | undefined,
+  screenName: ScreenName,
+): boolean => {
+  const stack = tabRoute?.state;
+  if ( !stack ) return true;
+  if ( stack.routes.length !== 1 || stack.routes[0].name !== screenName ) return false;
+  return !stack.routes[0].state?.index;
+};
+
 const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
   const { t } = useTranslation( );
   const currentUser = useCurrentUser( );
@@ -81,8 +94,14 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
       }
     }
 
-    // If pressing the currently active tab, reset its stack
-    if ( targetTabName === activeTabName ) {
+    // If pressing the currently active tab, reset its stack. The Me tab always
+    // opens the observation list; an import left in its stack resumes from +.
+    // A reset mounts a fresh list, which takes a second or two with a full
+    // library, so the Me tab only resets when something sits above its list.
+    const resetTarget = targetTabName === "ObservationsTab"
+      ? !isStackAtRoot( newStacks.find( r => r.name === targetTabName ), targetScreenName )
+      : targetTabName === activeTabName;
+    if ( resetTarget ) {
       const idx = newStacks.findIndex( r => r.name === targetTabName );
       newStacks.splice( idx, 1, {
         name: targetTabName,

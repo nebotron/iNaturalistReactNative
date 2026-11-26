@@ -1,7 +1,9 @@
-import type { LatLng, Region } from "react-native-maps";
+import type { BoundingBox, LatLng, Region } from "react-native-maps";
 import createUTFPosition from "sharedHelpers/createUTFPosition";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import getDataForPixel from "sharedHelpers/fetchUTFGridData";
+import distanceInMeters from "sharedHelpers/geoDistance";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 export interface MapBoundaries {
   swlat: number;
@@ -30,16 +32,23 @@ function getTileUrl( apiUrl: string ) {
 export const TILE_URL = getTileUrl( API_URL );
 const POINT_TILES_ENDPOINT = `${TILE_URL}/points`;
 
-export function calculateZoom( width: number, delta: number ) {
-  return Math.log2( 360 * ( width / 256 / delta ) ) + 1;
+// getMapBoundaries is one of the few MapView methods that round-trips to the
+// native view and returns a promise, so it rejects ("Invalid view returned
+// from registry, expecting RNMapsMapView, got: (null)") when the native view
+// is torn down between the call and the response — e.g. onRegionChangeComplete
+// firing while the screen is being unmounted. Nothing can be done about it and
+// nobody needs boundaries for a map that no longer exists, so resolve to
+// undefined rather than leaving an unhandled promise rejection behind.
+export async function getMapBoundariesSafely(
+  mapView: { getMapBoundaries: ( ) => Promise<BoundingBox> } | null | undefined,
+): Promise<BoundingBox | undefined> {
+  return mapView
+    ?.getMapBoundaries( )
+    .catch( ( ) => undefined );
 }
 
-// Kind of the inverse of calculateZoom. Probably not actually accurate for
-// longitude, but works for our purposes
-export function zoomToDeltas( zoom: number, screenWidth: number, screenHeight: number ) {
-  const longitudeDelta = screenWidth / 256 / ( 2 ** zoom / 360 );
-  const latitudeDelta = screenHeight / 256 / ( 2 ** zoom / 360 );
-  return [latitudeDelta, longitudeDelta];
+export function calculateZoom( width: number, delta: number ) {
+  return Math.log2( 360 * ( width / 256 / delta ) ) + 1;
 }
 
 // Adapted from
@@ -91,6 +100,38 @@ export function latitudeDeltaToMeters(
   return latitudeDelta * metersPerDegreeLatitude( latitude );
 }
 
+function metersPerDegreeLongitude( latitude: number ): number {
+  const phi = ( latitude * Math.PI ) / 180;
+
+  return (
+    111412.84 * Math.cos( phi )
+    - 93.5 * Math.cos( 3 * phi )
+    + 0.118 * Math.cos( 5 * phi )
+  );
+}
+
+// Deltas for a viewport widthMeters wide at the given latitude, with the
+// height following the view's aspect ratio
+export function regionForViewportWidth(
+  latitude: number,
+  widthMeters: number,
+  viewWidth: number,
+  viewHeight: number,
+): { latitudeDelta: number; longitudeDelta: number } {
+  const heightMeters = viewWidth > 0
+    ? widthMeters * ( viewHeight / viewWidth )
+    : widthMeters;
+  // Near the poles a degree of longitude shrinks toward zero
+  const longitudeDelta = Math.min(
+    widthMeters / Math.max( metersPerDegreeLongitude( latitude ), 1 ),
+    360,
+  );
+  return {
+    latitudeDelta: metersToLatitudeDelta( heightMeters, latitude ),
+    longitudeDelta,
+  };
+}
+
 // Width in degrees of a bounding box, measured eastward from swlng to nelng.
 // A box crossing the antimeridian is encoded swlng > nelng
 export function longitudeSpan( swlng: number, nelng: number ): number {
@@ -98,6 +139,144 @@ export function longitudeSpan( swlng: number, nelng: number ): number {
   return span < 0
     ? span + 360
     : span;
+}
+
+interface GeoJsonPolygon {
+  coordinates: number[][][];
+}
+
+export function boundingBoxGeojsonToBounds(
+  bbox?: GeoJsonPolygon | null,
+): MapBoundaries | null {
+  const ring = bbox?.coordinates?.[0];
+  if ( !ring?.length ) {
+    return null;
+  }
+
+  const lngs = ring.map( coordinate => coordinate[0] );
+  const lats = ring.map( coordinate => coordinate[1] );
+
+  return {
+    swlat: Math.min( ...lats ),
+    swlng: Math.min( ...lngs ),
+    nelat: Math.max( ...lats ),
+    nelng: Math.max( ...lngs ),
+  };
+}
+
+export function accuracyToEncompassBounds(
+  centerLat: number,
+  centerLng: number,
+  bounds: MapBoundaries,
+): number {
+  const corners: [number, number][] = [
+    [bounds.swlat, bounds.swlng],
+    [bounds.swlat, bounds.nelng],
+    [bounds.nelat, bounds.swlng],
+    [bounds.nelat, bounds.nelng],
+  ];
+
+  return Math.max(
+    ...corners.map( ( [lat, lng] ) => distanceInMeters(
+      centerLat,
+      centerLng,
+      lat,
+      lng,
+    ) ),
+  );
+}
+
+export const DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS = getTunable(
+  "defaultObsLocationAccuracyM",
+);
+
+export function hasValidMapCoordinates(
+  latitude?: number | null,
+  longitude?: number | null,
+): boolean {
+  if ( latitude == null || longitude == null ) {
+    return false;
+  }
+  if ( Number.isNaN( latitude ) || Number.isNaN( longitude ) ) {
+    return false;
+  }
+  if ( latitude === 0 && longitude === 0 ) {
+    return false;
+  }
+  return latitude >= -90
+    && latitude <= 90
+    && longitude >= -180
+    && longitude <= 180;
+}
+
+interface ObservationWithCoordinates {
+  privateLatitude?: number | null;
+  latitude?: number | null;
+  privateLongitude?: number | null;
+  longitude?: number | null;
+  positional_accuracy?: number | null;
+}
+
+export function getObservationCoordinates(
+  observation?: ObservationWithCoordinates | null,
+): { latitude: number; longitude: number } | null {
+  const latitude = observation?.privateLatitude ?? observation?.latitude;
+  const longitude = observation?.privateLongitude ?? observation?.longitude;
+
+  if ( !hasValidMapCoordinates( latitude, longitude ) ) {
+    return null;
+  }
+
+  return {
+    latitude: latitude as number,
+    longitude: longitude as number,
+  };
+}
+
+export function regionForAccuracy(
+  latitude: number,
+  longitude: number,
+  accuracyMeters: number,
+  radiusToMapHeight: number,
+  mapDimensionsRatio: number,
+): Region {
+  const latitudeDelta = metersToLatitudeDelta(
+    accuracyMeters,
+    latitude,
+  ) / radiusToMapHeight;
+
+  return {
+    latitude,
+    longitude,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta * mapDimensionsRatio,
+  };
+}
+
+export function regionForObservationLocation(
+  observation: ObservationWithCoordinates | null | undefined,
+  radiusToMapHeight: number | undefined,
+  mapDimensionsRatio: number | undefined,
+): Region | null {
+  if ( !radiusToMapHeight || !mapDimensionsRatio ) {
+    return null;
+  }
+
+  const coordinates = getObservationCoordinates( observation );
+  if ( !coordinates ) {
+    return null;
+  }
+
+  const accuracyMeters = observation?.positional_accuracy
+    ?? DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS;
+
+  return regionForAccuracy(
+    coordinates.latitude,
+    coordinates.longitude,
+    accuracyMeters,
+    radiusToMapHeight,
+    mapDimensionsRatio,
+  );
 }
 
 export function regionFromBounds( bounds: MapBoundaries ): Region {

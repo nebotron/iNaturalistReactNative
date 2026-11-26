@@ -13,7 +13,7 @@ describe( "PostListItem", ( ) => {
     renderComponent( <PostListItem item={mockPost} onPress={jest.fn( )} /> );
 
     expect( screen.getByText( mockPost.title ) ).toBeVisible( );
-    expect( screen.getByText( "Mar 15, 2024" ) ).toBeVisible( );
+    expect( screen.getByText( "2024-03-15" ) ).toBeVisible( );
   } );
 
   it( "calls onPress with the post when pressed", ( ) => {

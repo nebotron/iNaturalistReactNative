@@ -11,6 +11,10 @@ import { renderComponent } from "tests/helpers/render";
 jest.mock( "realmModels/Observation" );
 jest.mock( "stores/useStore" );
 jest.mock( "sharedHooks" );
+jest.mock( "sharedHelpers/shareExtensionFiles", ( ) => ( {
+  ...jest.requireActual( "sharedHelpers/shareExtensionFiles" ),
+  stageSharedSound: jest.fn( async item => `file://staged/${item.data.split( "/" ).pop( )}` ),
+} ) );
 
 const JPEG = "image/jpeg";
 
@@ -88,6 +92,23 @@ const expectNavigationReset = ( mockDispatch, screenName, lastScreen = "PhotoSha
   );
 };
 
+// Group Photos lives in the tab stack so the import keeps the bottom tab bar
+const expectGroupPhotosReset = ( mocks, lastScreen = "PhotoSharing" ) => {
+  expect( mocks.dispatch ).toHaveBeenCalledWith(
+    CommonActions.reset( {
+      index: 0,
+      routes: [{ name: "TabNavigator" }],
+    } ),
+  );
+  expect( mocks.navigate ).toHaveBeenCalledWith( "TabNavigator", {
+    screen: "ObservationsTab",
+    params: {
+      screen: "GroupPhotos",
+      params: { lastScreen },
+    },
+  } );
+};
+
 describe( "PhotoSharing", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
@@ -134,9 +155,12 @@ describe( "PhotoSharing", ( ) => {
       renderComponent( <PhotoSharing /> );
 
       await waitFor( ( ) => {
+        // The alert body has to be a string: an Error handed to Alert.alert
+        // crosses the bridge as an empty object, so the user saw a title and
+        // nothing else.
         expect( alertSpy ).toHaveBeenCalledWith(
           "Photo sharing failed: couldn't create new observation:",
-          error,
+          "Error: Creation failed",
         );
       } );
       expect( mocks.dispatch ).not.toHaveBeenCalled( );
@@ -166,7 +190,7 @@ describe( "PhotoSharing", ( ) => {
           ],
         } );
       } );
-      expectNavigationReset( mocks.dispatch, "GroupPhotos" );
+      expectGroupPhotosReset( mocks );
       expect( Observation.createObservationWithPhotos ).not.toHaveBeenCalled( );
     } );
 
@@ -191,6 +215,50 @@ describe( "PhotoSharing", ( ) => {
           } ),
         );
       } );
+    } );
+  } );
+
+  describe( "Share Audio", ( ) => {
+    it( "opens a single voice memo in ObsEdit as an observation of Life", async ( ) => {
+      const mocks = setupMocks( );
+      const soundObs = { uuid: "sound-obs" };
+      Observation.createObsWithSoundPath.mockResolvedValue( soundObs );
+      mockUseRoute.mockReturnValue( createMockRoute( {
+        data: [{ data: "file://AppGroup/memo.m4a", mimeType: "audio/x-m4a" }],
+      } ) );
+
+      renderComponent( <PhotoSharing /> );
+
+      await waitFor( ( ) => {
+        expectNavigationReset( mocks.dispatch, "ObsEdit" );
+      } );
+      expect( Observation.createObsWithSoundPath ).toHaveBeenCalledWith( "file://staged/memo.m4a" );
+      expect( mocks.prepareObsEdit ).toHaveBeenCalledWith( soundObs );
+      expect( soundObs.taxon ).toEqual( expect.objectContaining( { id: 48460, name: "Life" } ) );
+      expect( Observation.createObservationWithPhotos ).not.toHaveBeenCalled( );
+    } );
+
+    it( "sends photos and sounds shared together to GroupPhotos", async ( ) => {
+      const mocks = setupMocks( );
+      mockUseRoute.mockReturnValue( createMockRoute( {
+        data: [
+          { data: "file://photo1.jpg", mimeType: JPEG },
+          { data: "file://memo.m4a", mimeType: "audio/x-m4a" },
+        ],
+      } ) );
+
+      renderComponent( <PhotoSharing /> );
+
+      await waitFor( ( ) => {
+        expect( mocks.setPhotoImporterState ).toHaveBeenCalledWith( {
+          photoLibraryUris: ["file://photo1.jpg"],
+          groupedPhotos: [
+            { photos: [{ image: { uri: "file://photo1.jpg" } }] },
+            { soundUri: "file://staged/memo.m4a" },
+          ],
+        } );
+      } );
+      expectGroupPhotosReset( mocks );
     } );
   } );
 

@@ -12,6 +12,8 @@ import {
   checkMultiple,
   RESULTS,
 } from "react-native-permissions";
+import type { WatchOptions } from "sharedHelpers/androidWatchOptions";
+import { watchCleared, watchStarted } from "sharedHelpers/androidWatchOptions";
 import {
   LOCATION_PERMISSIONS,
   permissionResultFromMultiple,
@@ -28,21 +30,16 @@ export function getCurrentPosition(
 export function watchPosition(
   success: ( position: GeolocationResponse ) => void,
   error?: ( error: GeolocationError ) => void,
-  options?: {
-    interval?: number;
-    fastestInterval?: number;
-    timeout?: number;
-    maximumAge?: number;
-    enableHighAccuracy?: boolean;
-    distanceFilter?: number;
-    useSignificantChanges?: boolean;
-  },
+  options?: WatchOptions,
 ) {
-  return Geolocation.watchPosition( success, error, options );
+  const watchID = Geolocation.watchPosition( success, error, options );
+  watchStarted( watchID, options );
+  return watchID;
 }
 
 export function clearWatch( watchID: number ) {
   Geolocation.clearWatch( watchID );
+  watchCleared( watchID );
 }
 
 // Issue reference for getCurrentPosition bug on Android:

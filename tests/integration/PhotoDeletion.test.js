@@ -3,6 +3,7 @@ import "tests/helpers/mockMortalForIntegration";
 import {
   screen,
   userEvent,
+  waitFor,
   within,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
@@ -106,8 +107,11 @@ describe( "Photo Deletion", ( ) => {
   }
 
   async function expectNoPhotosInStandardCamera() {
-    const noPhotoText = await screen.findByText( "Photos you take will appear here" );
-    expect( noPhotoText ).toBeVisible();
+    // Back on the camera, with no latest-photo thumbnail left
+    expect( await screen.findByTestId( "take-photo-button" ) ).toBeVisible();
+    await waitFor( () => {
+      expect( screen.queryByTestId( "AICamera.latestPhoto" ) ).toBeNull( );
+    } );
   }
 
   async function viewPhotoFromObsEdit() {
@@ -129,9 +133,8 @@ describe( "Photo Deletion", ( ) => {
     renderApp( );
     await navigateToStandardCameraFromMyObs();
     await actor.press( await screen.findByTestId( "take-photo-button" ) );
-    // Tap the photo preview to enter the MediaViewer
-    const carouselPhoto = await screen.findByTestId( /PhotoCarousel\.displayPhoto/ );
-    await actor.press( carouselPhoto );
+    // Tap the latest-photo thumbnail to enter the MediaViewer
+    await actor.press( await screen.findByTestId( "AICamera.latestPhoto" ) );
     await deletePhotoInMediaViewer();
     await expectNoPhotosInStandardCamera();
   } );

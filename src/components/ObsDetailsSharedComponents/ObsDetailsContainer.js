@@ -103,6 +103,7 @@ const ObsDetailsContainer = ( props: Props ): Node => {
         agreeIdentification={agreeIdentification}
         closeAgreeWithIdSheet={closeAgreeWithIdSheet}
         confirmRemoteObsWasDeleted={confirmRemoteObsWasDeleted}
+        currentUser={currentUser}
         handleCommentMutationSuccess={handleCommentMutationSuccess}
         handleIdentificationMutationSuccess={handleIdentificationMutationSuccess}
         hideAddCommentSheet={hideAddCommentSheet}

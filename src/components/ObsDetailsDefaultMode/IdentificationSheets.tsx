@@ -7,7 +7,6 @@ import type {
 import AgreeWithIDSheet from "components/ObsDetailsSharedComponents/Sheets/AgreeWithIDSheet";
 import PotentialDisagreementSheet
   from "components/ObsDetailsSharedComponents/Sheets/PotentialDisagreementSheet";
-import SuggestIDSheet from "components/ObsDetailsSharedComponents/Sheets/SuggestIDSheet";
 import {
   TextInputSheet,
   WarningSheet,
@@ -19,6 +18,7 @@ import React, {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
 } from "react";
 import { Alert, Platform } from "react-native";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
@@ -27,7 +27,6 @@ import getObservationParticipants from "sharedHelpers/getObservationParticipants
 import { MENTION_SUGGESTION_LIMIT } from "sharedHelpers/mentions";
 import {
   useAuthenticatedMutation,
-  useCurrentUser,
   useTranslation,
 } from "sharedHooks";
 
@@ -44,16 +43,22 @@ interface Taxon extends Record<string, unknown> {
   ancestor_ids: number[];
 }
 
+interface ObservationIdentification {
+  current?: boolean;
+  taxon?: { id: number };
+  user?: { id: number };
+}
+
 interface Observation extends Record<string, unknown> {
   uuid?: string;
   taxon?: Taxon;
   community_taxon?: Taxon;
+  identifications?: ObservationIdentification[];
   prefers_community_taxon: boolean | null;
   user?: NonNullable<ObservationWithActivity["user"]> & {
     prefers_community_taxa: boolean;
   };
   comments?: ObservationWithActivity["comments"];
-  identifications?: ObservationWithActivity["identifications"];
 }
 
 interface Identification {
@@ -68,6 +73,7 @@ interface IdentState {
   showPotentialDisagreementSheet: boolean;
   showSuggestIdSheet: boolean;
   identTaxon?: Taxon | null;
+  pendingAutoSubmit: boolean;
 }
 
 type IdentAction =
@@ -87,6 +93,7 @@ const initialIdentState: IdentState = {
   showPotentialDisagreementSheet: false,
   showSuggestIdSheet: false,
   identTaxon: null,
+  pendingAutoSubmit: false,
 };
 
 const CLEAR_SUGGESTED_TAXON = "CLEAR_SUGGESTED_TAXON";
@@ -118,7 +125,7 @@ export const identReducer = ( state: IdentState, action: IdentAction ): IdentSta
         identTaxon: action.taxon,
       };
     case CONFIRM_ID:
-      return { ...state, showSuggestIdSheet: true };
+      return { ...state, pendingAutoSubmit: true };
     case HIDE_POTENTIAL_DISAGREEMENT_SHEET:
       return {
         ...state,
@@ -144,6 +151,7 @@ export const identReducer = ( state: IdentState, action: IdentAction ): IdentSta
         showIdentBodySheet: false,
         newIdentification: null,
         identTaxon: null,
+        pendingAutoSubmit: false,
       };
     case CLEAR_SUGGESTED_TAXON:
       return { ...state, identTaxon: null };
@@ -162,6 +170,7 @@ interface Props {
   agreeIdentification: AgreeIdentification | null;
   closeAgreeWithIdSheet: () => void;
   confirmRemoteObsWasDeleted?: () => void;
+  currentUser?: { id: number } | null;
   handleCommentMutationSuccess: ( data: unknown ) => void;
   handleIdentificationMutationSuccess: ( data: unknown ) => void;
   hideAddCommentSheet: () => void;
@@ -176,6 +185,7 @@ const IdentificationSheets: React.FC<Props> = ( {
   agreeIdentification,
   closeAgreeWithIdSheet,
   confirmRemoteObsWasDeleted,
+  currentUser,
   handleCommentMutationSuccess,
   handleIdentificationMutationSuccess,
   hideAddCommentSheet,
@@ -197,15 +207,13 @@ const IdentificationSheets: React.FC<Props> = ( {
 
   const {
     showIdentBodySheet,
-    identTaxon,
     newIdentification,
     showPotentialDisagreementSheet,
-    showSuggestIdSheet,
+    pendingAutoSubmit,
   } = state;
 
   const realm = useRealm( );
   const { t } = useTranslation( );
-  const currentUser = useCurrentUser( );
 
   const mentionSuggestions = useMemo(
     ( ) => getObservationParticipants( observation, currentUser?.id, MENTION_SUGGESTION_LIMIT ),
@@ -287,6 +295,13 @@ const IdentificationSheets: React.FC<Props> = ( {
         && observationTaxon.ancestor_ids.includes( taxon?.id );
   }, [observation] );
 
+  // Keep a ref so the effect below can read the latest hasPotentialDisagreement
+  // without listing it as a dependency (which would cause double-submission when
+  // the observation updates synchronously inside onSuccess before onSettled clears
+  // the identTaxonId param).
+  const hasPotentialDisagreementRef = useRef( hasPotentialDisagreement );
+  hasPotentialDisagreementRef.current = hasPotentialDisagreement;
+
   // Translates identification-related params to local state and shows appropriate sheet
   useEffect( ( ) => {
     let cancelled = false;
@@ -310,7 +325,9 @@ const IdentificationSheets: React.FC<Props> = ( {
         vision: identTaxonFromVision,
       } );
 
-      const isDisagreement = hasPotentialDisagreement( taxon );
+      if ( cancelled ) return;
+
+      const isDisagreement = hasPotentialDisagreementRef.current( taxon );
 
       if ( isDisagreement ) {
         dispatch( { type: "SHOW_POTENTIAL_DISAGREEMENT_SHEET" } );
@@ -331,7 +348,9 @@ const IdentificationSheets: React.FC<Props> = ( {
     identAt,
     identTaxonId,
     identTaxonFromVision,
-    hasPotentialDisagreement,
+    // hasPotentialDisagreement intentionally omitted: the observation updates
+    // synchronously in onSuccess (before onSettled clears identTaxonId), which
+    // would retrigger this effect and submit a duplicate identification.
     realm,
   ] );
 
@@ -354,10 +373,18 @@ const IdentificationSheets: React.FC<Props> = ( {
     if ( !newIdentification?.taxon ) {
       throw new Error( "Cannot create an identification without a taxon" );
     }
+    const taxonId = newIdentification.taxon.id;
+    const alreadyHasId = currentUser?.id && observation.identifications?.some(
+      id => id.user?.id === currentUser.id
+        && id.taxon?.id === taxonId
+        && id.current !== false,
+    );
+    if ( alreadyHasId ) return;
+
     // New taxon identification added by user
     const idParams = {
       observation_id: uuid,
-      taxon_id: newIdentification.taxon.id,
+      taxon_id: taxonId,
       vision: newIdentification.vision,
       disagreement: potentialDisagree,
       body: newIdentification?.body,
@@ -365,19 +392,21 @@ const IdentificationSheets: React.FC<Props> = ( {
 
     loadActivityItem( );
     createIdentificationMutate( { identification: idParams } );
-  }, [createIdentificationMutate, newIdentification, uuid, loadActivityItem] );
+  }, [
+    createIdentificationMutate,
+    currentUser,
+    newIdentification,
+    observation.identifications,
+    uuid,
+    loadActivityItem,
+  ] );
 
-  const onSuggestId = useCallback( ( ) => {
-    if ( hasPotentialDisagreement( identTaxon ) ) {
-      dispatch( { type: "SHOW_POTENTIAL_DISAGREEMENT_SHEET" } );
-    } else {
+  useEffect( ( ) => {
+    if ( pendingAutoSubmit && newIdentification ) {
+      dispatch( { type: SUBMIT_IDENTIFICATION } );
       doSuggestId();
     }
-  }, [
-    doSuggestId,
-    hasPotentialDisagreement,
-    identTaxon,
-  ] );
+  }, [doSuggestId, newIdentification, pendingAutoSubmit] );
 
   const onPotentialDisagreePressed = useCallback( ( potentialDisagree?: boolean ) => {
     doSuggestId( potentialDisagree );
@@ -413,10 +442,6 @@ const IdentificationSheets: React.FC<Props> = ( {
   const confirmCommentFromCommentSheet = useCallback( ( newComment: string ) => {
     onCommentAdded( newComment );
   }, [onCommentAdded] );
-
-  const hideSuggestedIdSheet = ( ) => {
-    dispatch( { type: HIDE_SUGGESTED_ID_SHEET } );
-  };
 
   const addCommentHeaderText = showAddCommentHeader( );
 
@@ -458,16 +483,6 @@ const IdentificationSheets: React.FC<Props> = ( {
           textInputStyle={textInputStyle}
           initialInput={newIdentification?.body}
           confirm={onChangeIdentBody}
-        />
-      )}
-      {showSuggestIdSheet && (
-        <SuggestIDSheet
-          editIdentBody={editIdentBody}
-          hidden={showIdentBodySheet}
-          loading={isCreateIdPending}
-          onSuggestId={onSuggestId}
-          identification={newIdentification}
-          onPressClose={hideSuggestedIdSheet}
         />
       )}
       {showPotentialDisagreementSheet && newIdentification && (

@@ -36,12 +36,21 @@ const useMyObservationsQuery = ( ): UseMyObservationsQueryResult => {
   const currentUser = useCurrentUser( );
   const isDefaultSort = state.observationsSort === OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST;
   const hasActiveSearch = !!state.searchedTaxon;
-  const sortLocally = !isDefaultSort && !currentUser;
-  const isServerAuthoritative = ( !isDefaultSort || hasActiveSearch ) && !!currentUser;
+  // Subject distance only exists in local photo EXIF, and the API can't order by taxonomy, so
+  // those are always sorted locally
+  const isLocalOnlySort = state.observationsSort === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST
+    || state.observationsSort === OBSERVATIONS_SORT.TAXONOMY;
+  const sortLocally = !isDefaultSort && ( !currentUser || isLocalOnlySort );
+  const isServerAuthoritative = ( !isDefaultSort || hasActiveSearch )
+    && !!currentUser && !isLocalOnlySort;
 
   const localObservationIds = useLocalObservationIds(
     sortLocally
       ? state.observationsSort
+      : undefined,
+    // The server does the searching otherwise
+    isLocalOnlySort
+      ? state.searchedTaxon?.id
       : undefined,
   );
 

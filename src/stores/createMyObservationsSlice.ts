@@ -25,6 +25,9 @@ export interface MyObservationsState {
   observationsSort: MyObservationsSort;
   speciesSort: SPECIES_SORT;
   searchedTaxon: MyObservationsTaxon | null;
+  // Set when a species card opened the current search, so the banner's back
+  // button can restore the search that was active before it
+  previousTaxonSearch: { taxon: MyObservationsTaxon | null } | null;
 }
 
 const NONE_CLOSED: Set<ICONIC_TAXA_GROUP> = new Set( );
@@ -33,7 +36,17 @@ export const initialMyObservationsState: MyObservationsState = {
   observationsSort: OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST,
   speciesSort: SPECIES_SORT.COUNT_DESC,
   searchedTaxon: null,
+  previousTaxonSearch: null,
 };
+
+// Taxonomic order sorts on device, so every observation the current search matches gets
+// downloaded first. filterKey names the search being downloaded; replacing or clearing this stops
+// the download
+interface TaxonomicFetchProgress {
+  filterKey: string;
+  fetched: number;
+  total: number;
+}
 
 export interface MyObservationsSlice {
   // Sort and search
@@ -44,13 +57,21 @@ export interface MyObservationsSlice {
 
   // State that only relevant while its view is the active view. Kept out
   // of myObservations because the map writes on every pan, and everything
-  // reading myObservations would re-render along with it. Cleared when the user
-  // switches views.
+  // reading myObservations would re-render along with it. The closed categories
+  // are cleared when the user switches views; the map region survives view
+  // switches and is cleared only when the searched taxon changes.
   myObservationsMapRegion: Region | null;
   setMyObservationsMapRegion: ( _region: Region | null ) => void;
   myObservationsClosedIconicTaxaCategories: Set<ICONIC_TAXA_GROUP>;
   setMyObservationsClosedIconicTaxaCategories: ( _closed: Set<ICONIC_TAXA_GROUP> ) => void;
   clearMyObservationsViewState: ( ) => void;
+
+  taxonomicFetch: TaxonomicFetchProgress | null;
+  setTaxonomicFetch: ( _progress: TaxonomicFetchProgress | null ) => void;
+  // The search we last checked, and downloaded or were told not to, for taxonomic order, so
+  // returning to the screen doesn't ask again
+  taxonomicFetchCheckedFilterKey: string | null;
+  setTaxonomicFetchCheckedFilterKey: ( _filterKey: string | null ) => void;
 
   // Scroll position so we can put the user back where they were when they
   // return from the NoBottomTabStackNavigator.
@@ -64,6 +85,10 @@ export interface MyObservationsSlice {
   // MMKV in MyObservationsResults, AddObsButton, and SimpleUploadBannerContainer.
   // Kept here as the destination for MOB-1374, which moves that direct MMKV
   // access into the store.
+  // uuids of observations selected to combine; null when not selecting
+  combineSelection: string[] | null;
+  setCombineSelection: ( _uuids: string[] | null ) => void;
+
   numOfUserObservations: number;
   setNumOfUserObservations: ( _newNum: number ) => void;
   numOfUserSpecies: number;
@@ -94,11 +119,21 @@ const createMyObservationsSlice: StateCreator<MyObservationsSlice> = ( set, get 
     myObservationsClosedIconicTaxaCategories: NONE_CLOSED,
   } ),
 
+  taxonomicFetch: null,
+  setTaxonomicFetch: progress => set( { taxonomicFetch: progress } ),
+  taxonomicFetchCheckedFilterKey: null,
+  setTaxonomicFetchCheckedFilterKey: filterKey => set( {
+    taxonomicFetchCheckedFilterKey: filterKey,
+  } ),
+
   myObsOffset: 0,
   setMyObsOffset: newOffset => set( { myObsOffset: newOffset } ),
   myObsOffsetToRestore: 0,
   setMyObsOffsetToRestore: ( ) => set( { myObsOffsetToRestore: get( ).myObsOffset } ),
   resetMyObsOffsetToRestore: ( ) => set( { myObsOffsetToRestore: 0 } ),
+
+  combineSelection: null,
+  setCombineSelection: uuids => set( { combineSelection: uuids } ),
 
   numOfUserObservations: 0,
   setNumOfUserObservations: newNum => set( { numOfUserObservations: newNum } ),

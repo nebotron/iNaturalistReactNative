@@ -6,6 +6,7 @@ import {
   formatObsFieldDate,
   formatObsFieldDatetime,
   formatObsFieldTime,
+  parseDateForPicker,
 } from "sharedHelpers/dateAndTime";
 import { useTranslation } from "sharedHooks";
 
@@ -55,6 +56,7 @@ const DateFieldInput = ( { obsField }: Props ) => {
   return (
     <>
       <DateTimePicker
+        date={parseDateForPicker( value )}
         isDateTimePickerVisible={showPicker}
         onDatePicked={newDate => setValue(
           formatPickedDate( newDate, datatype as DateFieldDatatype ),

@@ -25,13 +25,12 @@ import type {
   OnlineSuggestionsApiResponse,
   OnlineSuggestionsQueryResponse,
 } from "./useOnlineSuggestions";
-import {
-  INITIAL_SCORE_IMAGE_TIMEOUT,
-  RETRY_SCORE_IMAGE_TIMEOUT,
-  shimApiResponseForCommonAncestor,
-} from "./useOnlineSuggestions";
+import { shimApiResponseForCommonAncestor } from "./useOnlineSuggestions";
 
 const logger = log.extend( "useSuggestionsV2" );
+
+export const INITIAL_SCORE_IMAGE_TIMEOUT = 5_000;
+export const RETRY_SCORE_IMAGE_TIMEOUT = 10_000;
 
 const { useRealm } = RealmContext;
 

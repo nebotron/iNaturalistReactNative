@@ -5,9 +5,11 @@
 import "react-native-get-random-values";
 // React Native doesn't have a functional URL as of Feb 2024
 import "react-native-url-polyfill/auto";
+// Before inatjs is imported, so its requests go through the cache
+import "sharedHelpers/installHttpCache";
 
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import { Alert, AppRegistry } from "react-native";
+import { Alert, AppRegistry, Platform } from "react-native";
 import { getCurrentRoute } from "navigation/navigationUtils";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 import {
@@ -22,17 +24,21 @@ import inatjs from "inaturalistjs";
 import OfflineNavigationGuard from "navigation/OfflineNavigationGuard";
 import INatPaperProvider from "providers/INatPaperProvider";
 import RealmProvider from "providers/RealmProvider";
-import React from "react";
+import React, { useMemo } from "react";
 import { setJSExceptionHandler, setNativeExceptionHandler } from "react-native-exception-handler";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import {
   getInstallID,
   store as installDataMMKVStorage,
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
+import { setHttpCacheErrorHandler } from "sharedHelpers/httpCache";
 import { reactQueryRetry } from "sharedHelpers/logging";
+import { persistQueries } from "sharedHelpers/persistedQueries";
 import DeviceInfo from "react-native-device-info";
 import useRozenite, { HaltedLaunch, shouldHaltLaunchForDebug } from "sharedHooks/useRozenite";
 import { createMMKVStorageAdapter } from "@rozenite/storage-plugin";
@@ -42,6 +48,10 @@ import { getUserAgent } from "./src/api/userAgent";
 
 const logger = log.extend( "index.js" );
 
+setHttpCacheErrorHandler( ( message, error ) => {
+  log.extend( "httpCache" ).warn( `HTTP cache ${message} failed`, error );
+} );
+
 this.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
 
 // Log all unhandled promise rejections in release builds. Otherwise they will
@@ -49,16 +59,24 @@ this.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
 // traces
 if (
   !__DEV__
-  && typeof (
-    // $FlowIgnore
-    HermesInternal?.enablePromiseRejectionTracker === "function"
-  )
+  // $FlowIgnore
+  && typeof HermesInternal?.enablePromiseRejectionTracker === "function"
 ) {
   // $FlowIgnore
   HermesInternal.enablePromiseRejectionTracker( {
     allRejections: true,
+    // The stack Hermes gives a release build for these is just the async
+    // trampoline (asyncGeneratorStep, tryCallOne…), not the call site, so the
+    // screen it happened on is the only lead the log carries toward finding it.
     onUnhandled: ( id, error ) => {
-      logger.error( "Unhandled promise rejection: ", error );
+      logger.errorWithExtra( "Unhandled promise rejection: ", error, {
+        errorName: error?.name ?? "unknown",
+        screen: getCurrentRoute()?.name || "unknown",
+        // inaturalistjs rejects HTTP failures with an empty message and the
+        // Response attached, so this is the only clue to which call leaked
+        status: error?.response?.status,
+        url: error?.response?.url,
+      } );
     },
   } );
 }
@@ -82,6 +100,20 @@ const jsErrorHandler = ( e, isFatal ) => {
   // if ( !e.name && !e.message ) return;
   if ( isFatal ) {
     logger.error( "Fatal JS Error: ", e );
+    try {
+      // Store crash data for retrieval on next app launch, same as the
+      // native exception handler below, so the full stack (not just the
+      // one line a user can see/copy from the alert) is captured in logs.
+      const crashData = {
+        error: `${e?.message}\n\n${e?.stack}`,
+        screen: getCurrentRoute()?.name || "",
+        timestamp: new Date().toISOString(),
+        appVersion: DeviceInfo.getVersion(),
+      };
+      installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+    } catch ( storageError ) {
+      logger.error( "Failed to save fatal JS error context", storageError );
+    }
     Alert.alert( "Fatal JS Error", `${e.message}\n\n${e.stack}` );
   } else {
     // This should get logged by ErrorBoundary. For some reason this handler
@@ -97,29 +129,35 @@ setJSExceptionHandler( jsErrorHandler, true );
 // tested this by raising an exception in RNGestureHandler.m
 // https://stackoverflow.com/questions/63270492/how-to-raise-native-error-in-react-native-app
 // https://github.com/a7ul/react-native-exception-handler#react-native-navigation-wix
-setNativeExceptionHandler(
-  async exceptionString => {
-    try {
-      const crashData = {
-        error: exceptionString,
-        screen: getCurrentRoute()?.name || "",
-        memoryUsage: await DeviceInfo.getUsedMemory(),
-        timestamp: new Date().toISOString(),
-        appVersion: await DeviceInfo.getVersion(),
-      };
+// Android only. On iOS the handler catches the crash, holds the app for 5 s
+// and then kills it itself, so iOS's crash report (TestFlight, MetricKit)
+// shows that kill() instead of where the app actually crashed. AppDelegate's
+// MetricKit subscriber records iOS crashes in the app log instead.
+if ( Platform.OS === "android" ) {
+  setNativeExceptionHandler(
+    async exceptionString => {
+      try {
+        const crashData = {
+          error: exceptionString,
+          screen: getCurrentRoute()?.name || "",
+          memoryUsage: await DeviceInfo.getUsedMemory(),
+          timestamp: new Date().toISOString(),
+          appVersion: await DeviceInfo.getVersion(),
+        };
 
-      // Store crash data for retrieval on next app launch
-      installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+        // Store crash data for retrieval on next app launch
+        installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
 
-      logger.error( `Native Error: ${exceptionString}`, JSON.stringify( crashData ) );
-    } catch ( e ) {
-      // Last-ditch attempt to log something
-      logger.error( `Native Error: ${exceptionString} (failed to save context): ${e}` );
-    }
-  },
-  true, // Force quit the app to prevent zombie states
-  true, // Enable on iOS
-);
+        logger.error( `Native Error: ${exceptionString}`, JSON.stringify( crashData ) );
+      } catch ( e ) {
+        // Last-ditch attempt to log something
+        logger.error( `Native Error: ${exceptionString} (failed to save context): ${e}` );
+      }
+    },
+    true, // Force quit the app to prevent zombie states
+    true, // Also run the previously installed handler
+  );
+}
 
 initI18next();
 
@@ -137,9 +175,14 @@ const queryClient = new QueryClient( {
   defaultOptions: {
     queries: {
       retry: reactQueryRetry,
+      // Queries run offline too, so responses in the HTTP cache (see
+      // sharedHelpers/httpCache) can be shown. Only retries wait to be online.
+      networkMode: "offlineFirst",
     },
   },
 } );
+// Explore's results, so they're still there after a restart
+persistQueries( queryClient );
 
 const storageAdapters = [
   createMMKVStorageAdapter( {
@@ -157,22 +200,46 @@ const RozeniteContainer = () => {
   return null;
 };
 
+// The full insets leave dead space: the Dynamic Island ends ~11pt above the
+// top inset (59pt inset, island bottom at 48pt), and the home indicator needs
+// only ~14pt of the 34pt bottom inset. Trim the top by less than that gap so
+// content placed at insets.top still clears the island (and notches).
+const TOP_INSET_TRIM = 6;
+
+const TrimmedSafeAreaInsets = ( { children } ) => {
+  const insets = useSafeAreaInsets( );
+  const trimmed = useMemo( ( ) => ( {
+    ...insets,
+    top: insets.top > 40
+      ? insets.top - TOP_INSET_TRIM
+      : insets.top,
+    bottom: Math.min( insets.bottom, 14 ),
+  } ), [insets] );
+  return (
+    <SafeAreaInsetsContext.Provider value={trimmed}>
+      {children}
+    </SafeAreaInsetsContext.Provider>
+  );
+};
+
 const AppWithProviders = ( ) => (
   <QueryClientProvider client={queryClient}>
     <RealmProvider>
       <SafeAreaProvider>
-        <INatPaperProvider>
-          <GestureHandlerRootView className="flex-1">
-            <BottomSheetModalProvider>
-              <OfflineNavigationGuard>
-                <ErrorBoundary>
-                  <App />
-                  <RozeniteContainer />
-                </ErrorBoundary>
-              </OfflineNavigationGuard>
-            </BottomSheetModalProvider>
-          </GestureHandlerRootView>
-        </INatPaperProvider>
+        <TrimmedSafeAreaInsets>
+          <INatPaperProvider>
+            <GestureHandlerRootView className="flex-1">
+              <BottomSheetModalProvider>
+                <OfflineNavigationGuard>
+                  <ErrorBoundary>
+                    <App />
+                    <RozeniteContainer />
+                  </ErrorBoundary>
+                </OfflineNavigationGuard>
+              </BottomSheetModalProvider>
+            </GestureHandlerRootView>
+          </INatPaperProvider>
+        </TrimmedSafeAreaInsets>
       </SafeAreaProvider>
     </RealmProvider>
   </QueryClientProvider>

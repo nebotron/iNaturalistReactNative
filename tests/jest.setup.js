@@ -129,6 +129,14 @@ inatjs.observations.updates.mockResolvedValue( makeResponse( ) );
 
 // the following two mocks are both needed for react-native-keep-awake
 jest.mock( "@sayem314/react-native-keep-awake" );
+jest.mock( "react-native-background-actions", () => ( {
+  __esModule: true,
+  default: {
+    isRunning: jest.fn( () => false ),
+    start: jest.fn( () => Promise.resolve( ) ),
+    stop: jest.fn( () => Promise.resolve( ) ),
+  },
+} ) );
 jest.mock( "react-native/Libraries/TurboModule/TurboModuleRegistry", () => {
   const turboModuleRegistry = jest
     .requireActual( "react-native/Libraries/TurboModule/TurboModuleRegistry" );
@@ -147,6 +155,10 @@ jest.mock( "react-native/Libraries/TurboModule/TurboModuleRegistry", () => {
 
 jest.mock( "react-native-restart", ( ) => ( {
   restart: jest.fn( ),
+} ) );
+
+jest.mock( "@react-native-firebase/app", () => ( {
+  getApps: jest.fn( ( ) => [{}] ),
 } ) );
 
 jest.mock( "@react-native-firebase/analytics", () => ( {
@@ -220,6 +232,8 @@ jest.mock( "components/SharedComponents/Buttons/Button", () => {
   return jest.fn( props => actualButton( { ...props, debounceTime: 10 } ) );
 } );
 
+jest.mock( "components/ObsEdit/hooks/useMultiObsCreateFlowAutomation", ( ) => jest.fn( ) );
+
 jest.mock( "navigation/FadeInView", () => {
   // jest.requireActual instead of require: nativewind's babel plugin rewrites
   // React.createElement from a plain require("react") to reference a hoisted
@@ -242,7 +256,7 @@ jest.mock( "navigation/BottomTabNavigator/tabScreenOptions", () => ( {
   __esModule: true,
   default: {
     lazy: true,
-    freezeOnBlur: true,
+    freezeOnBlur: false,
     headerShown: false,
     animation: "none",
   },

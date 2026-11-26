@@ -2,7 +2,12 @@ import type { ParamListRoute } from "@react-navigation/native";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import AddObsBottomSheet from "components/AddObsBottomSheet/AddObsBottomSheet";
 import AddObsTooltip from "components/AddObsBottomSheet/AddObsTooltip";
+import useAudioIdSession from "components/AudioId/audioIdSession";
 import GradientButton from "components/SharedComponents/Buttons/GradientButton";
+import {
+  groupCropResumeParams,
+  observationsTabWithCropper,
+} from "components/SharedComponents/ImageCrop/groupCropResume";
 import { navigationRef } from "navigation/navigationUtils";
 import type { RootStackParamList } from "navigation/types";
 import * as React from "react";
@@ -13,6 +18,9 @@ import useStore, { zustandStorage } from "stores/useStore";
 import ADD_OBS_SCREENS from "./types";
 
 const logger = log.extend( "AddObsButton" );
+
+// Last value reported to the metrics log, so remounts don't repeat it.
+let lastLoggedAdvancedUserMode: boolean | null = null;
 
 const AddObsButton = ( ) => {
   const [showBottomSheet, setShowBottomSheet] = React.useState( false );
@@ -26,7 +34,10 @@ const AddObsButton = ( ) => {
   const openBottomSheet = React.useCallback( () => setShowBottomSheet( true ), [] );
   const closeBottomSheet = React.useCallback( () => setShowBottomSheet( false ), [] );
 
-  const { isAllAddObsOptionsMode } = useLayoutPrefs( );
+  const { isAllAddObsOptionsMode, isPhotoLibraryAddObsMode } = useLayoutPrefs( );
+  // While Audio ID is listening, the button is a shortcut back to it; a long
+  // press still shows every option
+  const audioIdListening = useAudioIdSession( state => state.listening );
   const currentUser = useCurrentUser( );
 
   // #region Tooltip logic
@@ -51,7 +62,7 @@ const AddObsButton = ( ) => {
       // Only show the tooltip if the user has the AI camera as the default button option.
       // Only show the tooltip on MyObservations screen.
       const isOnMyObservationsResults = currentRoute?.name === "MyObservationsResults";
-      const onlyAiCamera = !isAllAddObsOptionsMode;
+      const onlyAiCamera = !isAllAddObsOptionsMode && !isPhotoLibraryAddObsMode;
 
       let triggerCondition = isOnMyObservationsResults && onlyAiCamera;
 
@@ -97,6 +108,7 @@ const AddObsButton = ( ) => {
     justFinishedSignup,
     currentUser,
     isAllAddObsOptionsMode,
+    isPhotoLibraryAddObsMode,
     shownOnce,
   ] );
 
@@ -115,18 +127,108 @@ const AddObsButton = ( ) => {
   React.useEffect( ( ) => {
     // don't remove this logger.info statement: it's used for internal
     // metrics. isAdvancedUser name is vestigial, changing it will make it
-    // impossible to compare with older log data
+    // impossible to compare with older log data.
+    // The effect re-runs on every mount of this button — once per return to
+    // the tab bar — which repeated the same value 341 times in five days. The
+    // metric only means anything when it changes, so only log it then.
+    if ( lastLoggedAdvancedUserMode === isAllAddObsOptionsMode ) return;
+    lastLoggedAdvancedUserMode = isAllAddObsOptionsMode;
     logger.info( `isAdvancedUser: ${isAllAddObsOptionsMode}` );
   }, [isAllAddObsOptionsMode] );
 
   const navAndCloseBottomSheet = (
-    screen: ADD_OBS_SCREENS,
+    requestedScreen: ADD_OBS_SCREENS,
     params?: {
       camera?: string;
     },
   ) => {
-    if ( screen !== ADD_OBS_SCREENS.OBS_EDIT ) {
-      resetObservationFlowSlice();
+    // Audio ID lives in the Menu tab and doesn't start an observation, so it
+    // leaves the observation flow alone
+    if ( requestedScreen === ADD_OBS_SCREENS.AUDIO_ID ) {
+      navigation.navigate( "TabNavigator", {
+        screen: "MenuTab",
+        params: { screen: "AudioId" },
+      } );
+      closeBottomSheet( );
+      return;
+    }
+
+    // An import the user stepped away from is worth returning to rather than
+    // silently discarding, so pick it up where they left off
+    const importInProgress = ( useStore.getState( ).groupedPhotos?.length || 0 ) > 0;
+
+    // An import still open in the My Observations tab -- the gallery, Group
+    // Photos, or whatever it has pushed on top -- is resumed by switching back
+    // to that tab with its stack untouched, so every screen, scroll position
+    // and selection is exactly as the user left it
+    if ( requestedScreen === ADD_OBS_SCREENS.PHOTO_LIBRARY ) {
+      const obsTabRoutes = navigationRef.getRootState( )?.routes
+        .find( route => route.name === "TabNavigator" )?.state?.routes
+        ?.find( route => route.name === "ObservationsTab" )?.state?.routes || [];
+      const importerIndex = obsTabRoutes.findIndex(
+        route => route.name === "PhotoLibrary" || route.name === "GroupPhotos",
+      );
+      const onImporter = importerIndex === obsTabRoutes.length - 1;
+      if ( importerIndex >= 0 && ( importInProgress || onImporter ) ) {
+        navigation.navigate( "TabNavigator", { screen: "ObservationsTab" } );
+        closeBottomSheet( );
+        return;
+      }
+    }
+
+    const screen = requestedScreen === ADD_OBS_SCREENS.PHOTO_LIBRARY && importInProgress
+      ? ADD_OBS_SCREENS.GROUP_PHOTOS
+      : requestedScreen;
+
+    // Resuming an import must not wipe the photos it's made of
+    if ( screen !== ADD_OBS_SCREENS.OBS_EDIT && screen !== ADD_OBS_SCREENS.GROUP_PHOTOS ) {
+      resetObservationFlowSlice( );
+    }
+
+    // The importer lives in the tab stack so it keeps the bottom tab bar and
+    // the user can step away to another tab and come back to it. Navigating
+    // (rather than resetting the root) leaves the tab navigator mounted, which
+    // is what lets the import survive the trip.
+    if ( screen === ADD_OBS_SCREENS.PHOTO_LIBRARY || screen === ADD_OBS_SCREENS.GROUP_PHOTOS ) {
+      // A crop left part way reopens the cropper on the photo it was left on,
+      // on top of Group Photos, leaving the other tabs' stacks as they are
+      const { groupCropResume, groupedPhotos } = useStore.getState( );
+      const crop = screen === ADD_OBS_SCREENS.GROUP_PHOTOS
+        && groupCropResumeParams( groupCropResume, groupedPhotos );
+      if ( crop ) {
+        const tabState = navigationRef.getRootState( )?.routes
+          .find( route => route.name === "TabNavigator" )?.state;
+        const observationsTab = observationsTabWithCropper(
+          crop.params,
+          { ...params, previousScreen: currentRoute },
+        );
+        const tabRoutes = tabState?.routes?.length
+          ? tabState.routes.map( route => ( route.name === "ObservationsTab"
+            ? observationsTab
+            : route ) )
+          : [observationsTab];
+        navigation.dispatch( CommonActions.reset( {
+          index: 0,
+          routes: [{
+            name: "TabNavigator",
+            state: {
+              index: tabRoutes.findIndex( route => route.name === "ObservationsTab" ),
+              routes: tabRoutes,
+            },
+          }],
+        } ) );
+        closeBottomSheet( );
+        return;
+      }
+      navigation.navigate( "TabNavigator", {
+        screen: "ObservationsTab",
+        params: {
+          screen,
+          params: { ...params, previousScreen: currentRoute },
+        },
+      } );
+      closeBottomSheet( );
+      return;
     }
 
     // we need to reset the navigation stack whenever a user navigates from the AddObs wheel,
@@ -185,23 +287,29 @@ const AddObsButton = ( ) => {
       <GradientButton
         sizeClassName="w-[69px] h-[69px] mb-[5px]"
         onLongPress={() => {
-          if ( !isAllAddObsOptionsMode ) openBottomSheet();
+          openBottomSheet();
         }}
         onPress={() => {
-          if ( isAllAddObsOptionsMode ) {
+          if ( audioIdListening ) {
+            navAndCloseBottomSheet( ADD_OBS_SCREENS.AUDIO_ID );
+          } else if ( isAllAddObsOptionsMode ) {
             openBottomSheet();
+          } else if ( isPhotoLibraryAddObsMode ) {
+            navAndCloseBottomSheet( ADD_OBS_SCREENS.PHOTO_LIBRARY );
           } else {
             navToARCamera();
           }
         }}
         accessibilityLabel={t( "Add-observations" )}
         accessibilityHint={
-          isAllAddObsOptionsMode
-            ? t( "Shows-observation-creation-options" )
-            : t( "Opens-AI-camera" )
+          ( audioIdListening && t( "Navigates-to-Audio-ID" ) )
+          || ( isAllAddObsOptionsMode && t( "Shows-observation-creation-options" ) )
+          || ( isPhotoLibraryAddObsMode && t( "Navigates-to-photo-importer" ) )
+          || t( "Opens-AI-camera" )
         }
-        iconName={isAllAddObsOptionsMode && "plus"}
-        iconSize={isAllAddObsOptionsMode && 31}
+        iconName={( audioIdListening && "microphone" )
+          || ( ( isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && "plus" )}
+        iconSize={( audioIdListening || isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && 31}
       />
     </>
   );

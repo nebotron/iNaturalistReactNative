@@ -1,11 +1,138 @@
+diff --git a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java
+index a974311..777d33a 100644
+--- a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java
++++ b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapTileProvider.java
+@@ -175,43 +175,11 @@ public class MapTileProvider implements TileProvider {
+ 		}
+ 
+ 		if (image == null && !this.offlineMode && this.tileCachePath != null) {
+-			String fileName = getTileFilename(x, y, zoom);
+-			Constraints constraints = new Constraints.Builder()
+-				.setRequiredNetworkType(NetworkType.CONNECTED)
+-				.build();
+-			OneTimeWorkRequest tileRefreshWorkRequest = new OneTimeWorkRequest.Builder(MapTileWorker.class)
+-				.setConstraints(constraints)
+-				.addTag(fileName)
+-				.setInputData(
+-					new Data.Builder()
+-						.putString("url", getTileUrl(x, y, zoom).toString())
+-						.putString("filename", fileName)
+-						.putInt("maxAge", -1)
+-						.build()
+-					)
+-				.build();
+-			WorkManager workManager = WorkManager.getInstance(this.context.getApplicationContext());
+-			Operation fetchOperation = workManager
+-				.enqueueUniqueWork(fileName, ExistingWorkPolicy.KEEP, tileRefreshWorkRequest);
+-			Future<Operation.State.SUCCESS> operationFuture = fetchOperation.getResult();
+-			try {
+-				operationFuture.get(1L, TimeUnit.SECONDS);
+-				Thread.sleep(500);
+-				Future<List<WorkInfo>> fetchFuture = workManager.getWorkInfosByTag(fileName);
+-				List<WorkInfo> workInfo = fetchFuture.get(1L, TimeUnit.SECONDS);
+-				Log.d("urlTile: ", workInfo.get(0).toString());
+-				if (this.tileCachePath != null) {
+-					image = readTileImage(x, y, zoom);
+-					if (image != null) {
+-						Log.d("urlTile","tile cache fetch HIT for " + zoom +
+-							"/" + x + "/" + y);
+-					} else {
+-							Log.d("urlTile","tile cache fetch MISS for " + zoom +
+-								"/" + x + "/" + y);
+-					}
+-				}
+-			} catch (Exception e) {
+-			  e.printStackTrace();
++			// Fetched here and saved, rather than queued through WorkManager and
++			// polled for, which held every missing tile for at least half a second
++			image = fetchTile(x, y, zoom);
++			if (image != null) {
++				writeTileImage(image, x, y, zoom);
+ 			}
+ 		} else if (image == null && !this.offlineMode) {
+ 			Log.d("urlTile", "Normal fetch");
+@@ -434,7 +402,12 @@ public class MapTileProvider implements TileProvider {
+ 		if (this.tileCachePath == null) {
+ 			return null;
+ 		}
+-		return this.tileCachePath + '/' + zoom +
++		// Each URL template gets its own directory, so tiles cached for one
++		// search are never served for another
++		String templateDir = this.urlTemplate == null
++			? "default"
++			: Integer.toHexString(this.urlTemplate.hashCode());
++		return this.tileCachePath + '/' + templateDir + '/' + zoom +
+ 			"/" + x + "/" + y;
+ 	}
+ 	
+diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
+index fdbc012..f93960e 100644
+--- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
++++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
+@@ -26,6 +26,7 @@
+ 	BOOL _maximumNativeZSet;
+ 	BOOL _cachedOverlayCreated;
+ 	BOOL _opacitySet;
++	NSString *_previousUrlTemplate;
+ }
+ 
+ @property (nonatomic, weak) AIRMap *map;
 diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
-index f77f627..1822bfa 100644
+index f77f627..de616b2 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
 +++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
-@@ -10,6 +10,26 @@
+@@ -9,6 +9,221 @@
+ #import "AIRMapUrlTile.h"
  #import <React/UIView+React.h>
  #import "AIRMapUrlTileCachedOverlay.h"
- 
++#import <stdatomic.h>
++
++// Counts of what the tile layers hold and do, for the app's memory snapshots
++// (ImageCropper memorySnapshot reads AIRMapUrlTileMemoryStats through the
++// Objective-C runtime). Kept here and in AIRMapUrlTileCachedOverlay.m.
++static NSString *const AIRMapUrlTileCountNames[AIRMapUrlTileCountKeys] = {
++    [AIRMapUrlTileCountLiveOverlays] = @"liveOverlays",
++    [AIRMapUrlTileCountOverlaysCreated] = @"overlaysCreated",
++    [AIRMapUrlTileCountLiveRenderers] = @"liveRenderers",
++    [AIRMapUrlTileCountTileLoads] = @"tileLoads",
++    [AIRMapUrlTileCountTileLoadsInFlight] = @"tileLoadsInFlight",
++    [AIRMapUrlTileCountTileLoadKB] = @"tileLoadKB",
++    [AIRMapUrlTileCountFallbackDraws] = @"fallbackDraws",
++    [AIRMapUrlTileCountFallbackDecodedKB] = @"fallbackDecodedKB",
++    [AIRMapUrlTileCountDiskHits] = @"diskHits",
++    [AIRMapUrlTileCountNetworkFetches] = @"networkFetches",
++    [AIRMapUrlTileCountNetworkFetchesInFlight] = @"networkFetchesInFlight",
++    [AIRMapUrlTileCountRefreshes] = @"refreshes",
++    [AIRMapUrlTileCountRefreshesInFlight] = @"refreshesInFlight",
++};
++static _Atomic long AIRMapUrlTileCounts[AIRMapUrlTileCountKeys];
++
++void AIRMapUrlTileCount(AIRMapUrlTileCountKey key, long delta) {
++    atomic_fetch_add(&AIRMapUrlTileCounts[key], delta);
++}
++
++@interface AIRMapUrlTileMemoryStats : NSObject
++@end
++@implementation AIRMapUrlTileMemoryStats
+++ (NSDictionary *)stats {
++    NSMutableDictionary *stats = [NSMutableDictionary new];
++    for (int key = 0; key < AIRMapUrlTileCountKeys; key++) {
++        stats[AIRMapUrlTileCountNames[key]] = @(atomic_load(&AIRMapUrlTileCounts[key]));
++    }
++    return stats;
++}
++@end
++
++// A tile load's start, and its end with the bytes it got
++static void AIRMapUrlTileLoadStarted(void) {
++    AIRMapUrlTileCount(AIRMapUrlTileCountTileLoads, 1);
++    AIRMapUrlTileCount(AIRMapUrlTileCountTileLoadsInFlight, 1);
++}
++static void AIRMapUrlTileLoadEnded(NSData *data) {
++    AIRMapUrlTileCount(AIRMapUrlTileCountTileLoadsInFlight, -1);
++    AIRMapUrlTileCount(AIRMapUrlTileCountTileLoadKB, (long)(data.length / 1024));
++}
++
 +// On iOS, a plain MKTileOverlayRenderer intermittently never paints its tiles, leaving
 +// the tile layer invisible until the user pans or zooms. MapKit invalidates tile overlays
 +// when other overlays are added or removed, which our maps do constantly. Rendering
@@ -14,35 +141,309 @@ index f77f627..1822bfa 100644
 +// makes any difference. Don't "clean this up" without retesting on iOS.
 +// MapKit bug, Apple-confirmed: https://developer.apple.com/forums/thread/125631
 +// Only known workaround, filed as FB9957545: https://github.com/briancoyner/MKOverlayRendererBug
++//
++// The renderer also keeps old tiles on screen until new ones load. MKTileOverlayRenderer
++// blanks any area whose tiles at the current zoom haven't loaded, so pinching or changing
++// the URL template (a new search, or the grid/points switch) cleared the layer. Every
++// loaded tile is kept in a shared cache, and an area the renderer can't draw yet is
++// filled from cached tiles at nearby zooms, or from the previous URL template.
++static NSCache *AIRMapUrlTileFallbackCache(void) {
++    static NSCache *cache;
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{
++        cache = [[NSCache alloc] init];
++        cache.totalCostLimit = 32 * 1024 * 1024;
++    });
++    return cache;
++}
++
++static NSString *AIRMapUrlTileFallbackKey(NSString *urlTemplate, NSInteger z, NSInteger x, NSInteger y) {
++    return [NSString stringWithFormat:@"%ld/%ld/%ld/%@", (long)z, (long)x, (long)y, urlTemplate];
++}
++
++@interface AIRMapUrlTileFallbackOverlay : MKTileOverlay
++@end
++@implementation AIRMapUrlTileFallbackOverlay
++- (instancetype)initWithURLTemplate:(NSString *)URLTemplate {
++    self = [super initWithURLTemplate:URLTemplate];
++    if (self) {
++        AIRMapUrlTileCount(AIRMapUrlTileCountLiveOverlays, 1);
++        AIRMapUrlTileCount(AIRMapUrlTileCountOverlaysCreated, 1);
++    }
++    return self;
++}
++- (void)dealloc {
++    AIRMapUrlTileCount(AIRMapUrlTileCountLiveOverlays, -1);
++}
++- (void)loadTileAtPath:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result {
++    NSString *urlTemplate = self.URLTemplate;
++    AIRMapUrlTileLoadStarted();
++    [super loadTileAtPath:path result:^(NSData *data, NSError *error) {
++        AIRMapUrlTileLoadEnded(data);
++        if (data.length > 0 && urlTemplate) {
++            [AIRMapUrlTileFallbackCache() setObject:data
++                                             forKey:AIRMapUrlTileFallbackKey(urlTemplate, path.z, path.x, path.y)
++                                               cost:data.length];
++        }
++        result(data, error);
++    }];
++}
++@end
++
++// The same, for tiles also cached on disk (tileCachePath)
++@interface AIRMapUrlTileFallbackCachedOverlay : AIRMapUrlTileCachedOverlay
++@end
++@implementation AIRMapUrlTileFallbackCachedOverlay
++- (instancetype)initWithURLTemplate:(NSString *)URLTemplate {
++    self = [super initWithURLTemplate:URLTemplate];
++    if (self) {
++        AIRMapUrlTileCount(AIRMapUrlTileCountLiveOverlays, 1);
++        AIRMapUrlTileCount(AIRMapUrlTileCountOverlaysCreated, 1);
++    }
++    return self;
++}
++- (void)dealloc {
++    AIRMapUrlTileCount(AIRMapUrlTileCountLiveOverlays, -1);
++}
++- (void)loadTileAtPath:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result {
++    NSString *urlTemplate = self.URLTemplate;
++    AIRMapUrlTileLoadStarted();
++    [super loadTileAtPath:path result:^(NSData *data, NSError *error) {
++        AIRMapUrlTileLoadEnded(data);
++        if (data.length > 0 && urlTemplate) {
++            [AIRMapUrlTileFallbackCache() setObject:data
++                                             forKey:AIRMapUrlTileFallbackKey(urlTemplate, path.z, path.x, path.y)
++                                               cost:data.length];
++        }
++        result(data, error);
++    }];
++}
++@end
++
 +@interface AIRMapUrlTileRenderer : MKTileOverlayRenderer
++// Templates to fall back on, current first
++@property (nonatomic, copy) NSArray<NSString *> *fallbackTemplates;
 +@end
 +@implementation AIRMapUrlTileRenderer
-+- (BOOL)canDrawMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale {
-+    return [super canDrawMapRect:mapRect zoomScale:zoomScale];
++- (instancetype)initWithTileOverlay:(MKTileOverlay *)overlay {
++    self = [super initWithTileOverlay:overlay];
++    if (self) AIRMapUrlTileCount(AIRMapUrlTileCountLiveRenderers, 1);
++    return self;
 +}
++- (void)dealloc {
++    AIRMapUrlTileCount(AIRMapUrlTileCountLiveRenderers, -1);
++}
++
++// Cached tiles covering mapRect from the closest zoom level and template that has any,
++// preferring one that covers it completely
++- (NSArray<NSArray *> *)fallbackTilesForMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale {
++    CGFloat tileSize = MAX(((MKTileOverlay *)self.overlay).tileSize.width, 1);
++    NSInteger targetZ = lround(log2(MKMapSizeWorld.width * zoomScale / tileSize));
++    NSInteger offsets[] = {0, -1, 1, -2, 2, -3, -4, -5, -6};
++    NSArray<NSArray *> *best = nil;
++    for (NSString *urlTemplate in self.fallbackTemplates) {
++        for (int i = 0; i < 9; i++) {
++            NSInteger z = targetZ + offsets[i];
++            if (z < 0 || z > 22) continue;
++            double tileMapSize = MKMapSizeWorld.width / pow(2, z);
++            NSInteger minX = floor(MKMapRectGetMinX(mapRect) / tileMapSize);
++            NSInteger maxX = ceil(MKMapRectGetMaxX(mapRect) / tileMapSize) - 1;
++            NSInteger minY = floor(MKMapRectGetMinY(mapRect) / tileMapSize);
++            NSInteger maxY = ceil(MKMapRectGetMaxY(mapRect) / tileMapSize) - 1;
++            NSInteger count = (maxX - minX + 1) * (maxY - minY + 1);
++            if (count <= 0 || count > 16) continue;
++            NSMutableArray<NSArray *> *tiles = [NSMutableArray array];
++            NSInteger tilesAcross = (NSInteger)pow(2, z);
++            for (NSInteger x = minX; x <= maxX; x++) {
++                for (NSInteger y = minY; y <= maxY; y++) {
++                    NSInteger wrappedX = ((x % tilesAcross) + tilesAcross) % tilesAcross;
++                    NSData *data = [AIRMapUrlTileFallbackCache()
++                        objectForKey:AIRMapUrlTileFallbackKey(urlTemplate, z, wrappedX, y)];
++                    if (!data) continue;
++                    MKMapRect tileRect = MKMapRectMake(x * tileMapSize, y * tileMapSize, tileMapSize, tileMapSize);
++                    [tiles addObject:@[data, [NSValue valueWithBytes:&tileRect objCType:@encode(MKMapRect)]]];
++                }
++            }
++            if ((NSInteger)tiles.count == count) return tiles;
++            if (tiles.count > best.count) best = tiles;
++        }
++    }
++    return best;
++}
++
++- (BOOL)canDrawMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale {
++    if ([super canDrawMapRect:mapRect zoomScale:zoomScale]) return YES;
++    return [self fallbackTilesForMapRect:mapRect zoomScale:zoomScale].count > 0;
++}
++
 +- (void)drawMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale inContext:(CGContextRef)context {
-+    [super drawMapRect:mapRect zoomScale:zoomScale inContext:context];
++    if ([super canDrawMapRect:mapRect zoomScale:zoomScale]) {
++        [super drawMapRect:mapRect zoomScale:zoomScale inContext:context];
++        return;
++    }
++    NSArray<NSArray *> *tiles = [self fallbackTilesForMapRect:mapRect zoomScale:zoomScale];
++    if (tiles.count == 0) return;
++    CGContextSaveGState(context);
++    CGContextClipToRect(context, [self rectForMapRect:mapRect]);
++    UIGraphicsPushContext(context);
++    AIRMapUrlTileCount(AIRMapUrlTileCountFallbackDraws, 1);
++    for (NSArray *tile in tiles) {
++        UIImage *image = [UIImage imageWithData:tile[0]];
++        AIRMapUrlTileCount(AIRMapUrlTileCountFallbackDecodedKB,
++            (long)(image.size.width * image.size.height * image.scale * image.scale * 4 / 1024));
++        MKMapRect tileRect;
++        [tile[1] getValue:&tileRect];
++        [image drawInRect:[self rectForMapRect:tileRect]];
++    }
++    UIGraphicsPopContext();
++    CGContextRestoreGState(context);
 +}
 +@end
 +
-+
+ 
  @implementation AIRMapUrlTile 
  
- - (void)setShouldReplaceMapContent:(BOOL)shouldReplaceMapContent
-@@ -145,7 +165,7 @@ - (void)createTileOverlayAndRendererIfPossible
+@@ -63,6 +278,9 @@
+ 
+ - (void)setUrlTemplate:(NSString *)urlTemplate
+ {
++    if (_urlTemplate && ![_urlTemplate isEqualToString:urlTemplate]) {
++        _previousUrlTemplate = _urlTemplate;
++    }
+     _urlTemplate = urlTemplate;
+     _urlTemplateSet = YES;
+     [self createTileOverlayAndRendererIfPossible];
+@@ -122,7 +340,7 @@
+     if (!_urlTemplateSet) return;
+     if (_tileCachePathSet || _maximumNativeZSet) {
+         NSLog(@"tileCache dir %@", _tileCachePath);
+-        self.tileOverlay = [[AIRMapUrlTileCachedOverlay alloc] initWithURLTemplate:self.urlTemplate];
++        self.tileOverlay = [[AIRMapUrlTileFallbackCachedOverlay alloc] initWithURLTemplate:self.urlTemplate];
+         _cachedOverlayCreated = YES;
+         if (_tileCachePathSet) {
+             NSURL *urlPath = [NSURL URLWithString:[self.tileCachePath stringByAppendingString:@"/"]];
+@@ -139,13 +357,17 @@
+         }
+     } else {
+         NSLog(@"tileCache normal overlay");
+-        self.tileOverlay = [[MKTileOverlay alloc] initWithURLTemplate:self.urlTemplate];
++        self.tileOverlay = [[AIRMapUrlTileFallbackOverlay alloc] initWithURLTemplate:self.urlTemplate];
+         _cachedOverlayCreated = NO;
+     }
  
      [self updateProperties];
  
 -    self.renderer = [[MKTileOverlayRenderer alloc] initWithTileOverlay:self.tileOverlay];
-+    self.renderer = [[AIRMapUrlTileRenderer alloc] initWithTileOverlay:self.tileOverlay];
++    AIRMapUrlTileRenderer *renderer = [[AIRMapUrlTileRenderer alloc] initWithTileOverlay:self.tileOverlay];
++    renderer.fallbackTemplates = _previousUrlTemplate
++        ? @[self.urlTemplate, _previousUrlTemplate]
++        : @[self.urlTemplate];
++    self.renderer = renderer;
      if (_opacitySet) {
          self.renderer.alpha = self.opacity;
      }
+diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.h b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.h
+index e450f98..4304cd4 100644
+--- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.h
++++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.h
+@@ -7,6 +7,25 @@
+ 
+ #import <MapKit/MapKit.h>
+ 
++// Counters for the app's memory snapshots (see AIRMapUrlTile.m)
++typedef NS_ENUM(NSInteger, AIRMapUrlTileCountKey) {
++    AIRMapUrlTileCountLiveOverlays,
++    AIRMapUrlTileCountOverlaysCreated,
++    AIRMapUrlTileCountLiveRenderers,
++    AIRMapUrlTileCountTileLoads,
++    AIRMapUrlTileCountTileLoadsInFlight,
++    AIRMapUrlTileCountTileLoadKB,
++    AIRMapUrlTileCountFallbackDraws,
++    AIRMapUrlTileCountFallbackDecodedKB,
++    AIRMapUrlTileCountDiskHits,
++    AIRMapUrlTileCountNetworkFetches,
++    AIRMapUrlTileCountNetworkFetchesInFlight,
++    AIRMapUrlTileCountRefreshes,
++    AIRMapUrlTileCountRefreshesInFlight,
++    AIRMapUrlTileCountKeys
++};
++void AIRMapUrlTileCount(AIRMapUrlTileCountKey key, long delta);
++
+ @interface AIRMapUrlTileCachedOverlay : MKTileOverlay
+ 
+ @property NSInteger maximumNativeZ;
+diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m
+index 63d305c..9a27d5e 100644
+--- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m
++++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTileCachedOverlay.m
+@@ -98,7 +98,15 @@
+ - (void)getTileImage:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result
+ {
+     NSData *image;
+-    NSURL *tileCacheFileDirectory = [NSURL URLWithString:[NSString stringWithFormat:@"%d/%d/", (int)path.z, (int)path.x] relativeToURL:self.tileCachePath];
++    // Each URL template gets its own directory, so tiles cached for one search
++    // are never served for another. FNV-1a, as NSString's hash isn't promised
++    // to stay the same between launches.
++    uint32_t templateHash = 2166136261u;
++    const char *templateBytes = self.URLTemplate ? self.URLTemplate.UTF8String : "";
++    for (const char *c = templateBytes; *c; c++) {
++        templateHash = (templateHash ^ (uint8_t)*c) * 16777619u;
++    }
++    NSURL *tileCacheFileDirectory = [NSURL URLWithString:[NSString stringWithFormat:@"%08x/%d/%d/", templateHash, (int)path.z, (int)path.x] relativeToURL:self.tileCachePath];
+     NSURL *tileCacheFilePath = [NSURL URLWithString:[NSString stringWithFormat:@"%d", (int)path.y] relativeToURL:tileCacheFileDirectory];
+ 
+     if (self.tileCachePath) {
+@@ -137,6 +145,7 @@
+         }
+ 
+         NSData *tile = [NSData dataWithContentsOfFile:[tileCacheFilePath path]];
++        AIRMapUrlTileCount(AIRMapUrlTileCountDiskHits, 1);
+         NSLog(@"tileCache HIT for %d_%d_%d", (int)path.z, (int)path.x, (int)path.y);
+         NSLog(@"tileCache HIT, with max age set at %d", self.tileCacheMaxAge);
+         return tile;
+@@ -150,10 +159,19 @@
+ {
+     if (!_urlSession) [self createURLSession];
+ 
++    AIRMapUrlTileCount(AIRMapUrlTileCountNetworkFetches, 1);
++    AIRMapUrlTileCount(AIRMapUrlTileCountNetworkFetchesInFlight, 1);
+     [[_urlSession dataTaskWithURL:[self URLForTilePath:path]
+         completionHandler:^(NSData *data,
+                             NSURLResponse *response,
+                             NSError *error) {
++            AIRMapUrlTileCount(AIRMapUrlTileCountNetworkFetchesInFlight, -1);
++            // An error page isn't a tile, and mustn't be cached as one
++            if ([response isKindOfClass:[NSHTTPURLResponse class]]
++                && ((NSHTTPURLResponse *)response).statusCode != 200) {
++                result(nil, error);
++                return;
++            }
+             result(data, error);
+         }] resume];
+ }
+@@ -201,11 +219,16 @@
+             if ([self doesFileNeedRefresh:path fromFilePath:tileCacheFilePath withMaxAge:self.tileCacheMaxAge]) {
+                 if (!_urlSession) [self createURLSession];
+ 
++                AIRMapUrlTileCount(AIRMapUrlTileCountRefreshes, 1);
++                AIRMapUrlTileCount(AIRMapUrlTileCountRefreshesInFlight, 1);
+                 [[_urlSession dataTaskWithURL:[self URLForTilePath:path]
+                     completionHandler:^(NSData *data,
+                                         NSURLResponse *response,
+                                         NSError *error) {
+-                    if (!error) {
++                    AIRMapUrlTileCount(AIRMapUrlTileCountRefreshesInFlight, -1);
++                    BOOL isOK = ![response isKindOfClass:[NSHTTPURLResponse class]]
++                        || ((NSHTTPURLResponse *)response).statusCode == 200;
++                    if (!error && isOK && data.length > 0) {
+                         [[NSFileManager defaultManager] createFileAtPath:[tileCacheFilePath path] contents:data attributes:nil];
+                         NSLog(@"tileCache File refreshed at %@", [tileCacheFilePath path]);
+                     }
 diff --git a/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm b/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm
 index 447520d..8043dcb 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm
 +++ b/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm
-@@ -60,7 +60,7 @@ - (void)animateToRegion:(NSString *)regionJSON duration:(NSInteger)duration{
+@@ -60,7 +60,7 @@ using namespace facebook::react;
      NSDictionary* regionDic = [RCTConvert dictonaryFromString:regionJSON];
      MKCoordinateRegion region = [RCTConvert MKCoordinateRegion:regionDic];
      Boolean animated = duration == 0 ? NO :YES;

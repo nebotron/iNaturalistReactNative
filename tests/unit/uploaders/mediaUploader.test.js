@@ -1,8 +1,11 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import { createOrUpdateEvidence } from "api/observations";
 import inatjs from "inaturalistjs";
+import Photo from "realmModels/Photo";
 import prepareMediaForUpload from "uploaders/dataTransformation/prepareMediaForUpload";
 import { attachMediaToObservation, uploadObservationMedia } from "uploaders/mediaUploader";
 import { trackEvidenceUpload } from "uploaders/utils/progressTracker";
+import markRecordUploaded from "uploaders/utils/realmSync";
 
 jest.mock( "api/observations" );
 jest.mock( "inaturalistjs" );
@@ -13,6 +16,7 @@ jest.mock( "uploaders/utils/progressTracker" );
 const mockedCreateOrUpdateEvidence = jest.mocked( createOrUpdateEvidence );
 const mockedPrepareMediaForUpload = jest.mocked( prepareMediaForUpload );
 const mockedTrackEvidenceUpload = jest.mocked( trackEvidenceUpload );
+const mockedMarkRecordUploaded = jest.mocked( markRecordUploaded );
 
 describe( "mediaUploader", () => {
   beforeEach( () => {
@@ -40,7 +44,9 @@ describe( "mediaUploader", () => {
         observationPhotos: [
           {
             wasSynced: () => false,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
           },
         ],
         observationSounds: [
@@ -60,8 +66,49 @@ describe( "mediaUploader", () => {
       expect( result ).toEqual( {
         unsyncedObservationPhotos: observation.observationPhotos,
         modifiedObservationPhotos: [],
+        modifiedPhotosNeedingReupload: [],
         unsyncedObservationSounds: observation.observationSounds,
       } );
+    } );
+
+    it( "drops never-uploaded photos whose file is gone instead of uploading them", async () => {
+      jest.mocked( exists ).mockImplementation( async path => !path.includes( "deleted" ) );
+      const keptObsPhoto = {
+        uuid: "kept",
+        wasSynced: () => false,
+        photo: { uuid: "photo-kept", localFilePath: "photoUploads/kept.jpg" },
+      };
+      const deletedObsPhoto = {
+        uuid: "deleted",
+        wasSynced: () => false,
+        photo: { uuid: "photo-deleted", localFilePath: "photoUploads/deleted.jpg" },
+      };
+      const uploadedObsPhoto = {
+        uuid: "uploaded",
+        wasSynced: () => false,
+        photo: { id: 7, uuid: "photo-uploaded", localFilePath: "photoUploads/deleted-too.jpg" },
+      };
+      const observation = {
+        uuid: "obs-uuid-missing",
+        observationPhotos: [keptObsPhoto, deletedObsPhoto, uploadedObsPhoto],
+      };
+      const realm = {
+        write: jest.fn( cb => cb( ) ),
+        delete: jest.fn( obsPhoto => {
+          observation.observationPhotos = observation.observationPhotos
+            .filter( op => op !== obsPhoto );
+        } ),
+      };
+
+      await uploadObservationMedia( observation, { api_token: "t" }, realm );
+
+      // The already-uploaded photo only needs attaching, which needs no file.
+      expect( realm.delete ).toHaveBeenCalledTimes( 1 );
+      expect( realm.delete ).toHaveBeenCalledWith( deletedObsPhoto );
+      expect( observation.observationPhotos ).toEqual( [keptObsPhoto, uploadedObsPhoto] );
+      const uploadedUuids = mockedPrepareMediaForUpload.mock.calls.map( call => call[0].uuid );
+      expect( uploadedUuids ).not.toContain( "photo-deleted" );
+      expect( uploadedUuids ).toContain( "photo-kept" );
     } );
 
     it( "should handle empty media arrays", async () => {
@@ -79,8 +126,38 @@ describe( "mediaUploader", () => {
       expect( result ).toEqual( {
         unsyncedObservationPhotos: [],
         modifiedObservationPhotos: [],
+        modifiedPhotosNeedingReupload: [],
         unsyncedObservationSounds: [],
       } );
+    } );
+
+    it( "seeds the image cache before marking an uploaded photo synced", async () => {
+      const calls = [];
+      const seedSpy = jest.spyOn( Photo, "seedImageCache" )
+        .mockImplementation( async ( ) => { calls.push( "seed" ); } );
+      mockedMarkRecordUploaded.mockImplementation( ( ) => { calls.push( "mark" ); } );
+      mockedCreateOrUpdateEvidence.mockResolvedValue( {
+        results: [{ id: 7, url: "https://example.org/photos/7/square.jpg" }],
+      } );
+      const observation = {
+        uuid: "obs-uuid-123",
+        observationPhotos: [
+          {
+            wasSynced: () => false,
+            photo: { uuid: "photo-uuid-1", localFilePath: "photoUploads/photo1.jpg" },
+          },
+        ],
+        observationSounds: [],
+      };
+
+      await uploadObservationMedia( observation, { api_token: "test-token" }, {} );
+
+      expect( seedSpy ).toHaveBeenCalledWith(
+        "https://example.org/photos/7/square.jpg",
+        "photoUploads/photo1.jpg",
+      );
+      expect( calls ).toEqual( ["seed", "mark"] );
+      seedSpy.mockRestore( );
     } );
 
     it( "should handle photos that need updates", async () => {
@@ -90,7 +167,13 @@ describe( "mediaUploader", () => {
           {
             wasSynced: () => true,
             needsSync: () => true,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1",
+              url: "photo1.jpg",
+              localFilePath: "file:///tmp/photoUploads/cropped.jpg",
+              _synced_at: new Date( "2024-01-01T12:00:00Z" ),
+              _updated_at: new Date( "2024-01-02T12:00:00Z" ),
+            },
           },
         ],
         observationSounds: [],
@@ -100,8 +183,9 @@ describe( "mediaUploader", () => {
 
       const result = await uploadObservationMedia( observation, options, realm );
 
-      expect( createOrUpdateEvidence ).not.toHaveBeenCalled();
+      expect( createOrUpdateEvidence ).toHaveBeenCalledTimes( 1 );
       expect( result.modifiedObservationPhotos.length ).toBe( 1 );
+      expect( result.modifiedPhotosNeedingReupload.length ).toBe( 1 );
     } );
 
     it( "should handle missing photo objects gracefully", async () => {
@@ -116,7 +200,9 @@ describe( "mediaUploader", () => {
           },
           {
             wasSynced: () => false,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
           },
         ],
         observationSounds: [],
@@ -252,7 +338,12 @@ describe( "mediaUploader", () => {
       const observation = {
         uuid: "obs-uuid-123",
         observationPhotos: [
-          { wasSynced: () => false, photo: { uuid: "photo-uuid-1", url: "photo1.jpg" } },
+          {
+            wasSynced: () => false,
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
+          },
         ],
         observationSounds: [],
       };
@@ -300,7 +391,12 @@ describe( "mediaUploader", () => {
       const observation = {
         uuid: "obs-uuid-123",
         observationPhotos: [
-          { wasSynced: () => false, photo: { uuid: "photo-uuid-1", url: "photo1.jpg" } },
+          {
+            wasSynced: () => false,
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
+          },
         ],
         observationSounds: [],
       };

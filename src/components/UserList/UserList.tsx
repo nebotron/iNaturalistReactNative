@@ -23,6 +23,8 @@ interface Props {
   accessibilityLabel?: string;
   keyboardShouldPersistTaps?: "handled";
   contentContainerStyle?: ViewStyle;
+  // See CustomFlashList
+  scrollRestoreKey?: string;
 }
 
 const UserList = ( {
@@ -35,6 +37,7 @@ const UserList = ( {
   accessibilityLabel,
   keyboardShouldPersistTaps,
   contentContainerStyle,
+  scrollRestoreKey,
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
@@ -79,6 +82,7 @@ const UserList = ( {
       onEndReached={onEndReached}
       refreshing={refreshing}
       renderItem={renderItem}
+      scrollRestoreKey={scrollRestoreKey}
       testID="UserList"
       keyboardShouldPersistTaps={keyboardShouldPersistTaps}
     />

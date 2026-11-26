@@ -1,3 +1,8 @@
+import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import type { ExploreTab } from "providers/ExploreContext";
+import type { GearKind, GearNicknames } from "sharedHelpers/gearNicknames";
+import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
+import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
 import type { StateCreator } from "zustand";
 
 export enum OBS_DETAILS_TAB {
@@ -16,6 +21,68 @@ export enum MAP_TYPES {
   HYBRID = "hybrid",
 }
 
+export interface HotspotSettings {
+  hotspotClusterRadiusKm: number;
+  hotspotMaxDetourCandidates: number;
+  hotspotObsPerPage: number;
+  hotspotParkingMinutes: number;
+  hotspotBboxPaddingKm: number;
+  hotspotRecentAddresses: number;
+}
+
+// Configured only from the gear button on the Wildlife Hotspots map
+export const DEFAULT_HOTSPOT_SETTINGS: HotspotSettings = {
+  hotspotClusterRadiusKm: 1.5,
+  hotspotMaxDetourCandidates: 200,
+  hotspotObsPerPage: 200,
+  hotspotParkingMinutes: 5,
+  hotspotBboxPaddingKm: 80,
+  hotspotRecentAddresses: 10,
+};
+
+export interface ExploreGridOverlays {
+  commonName: boolean;
+  scientificName: boolean;
+  location: boolean;
+  dateTime: boolean;
+  faveButton: boolean;
+  faveCount: boolean;
+  camera?: boolean;
+  lens?: boolean;
+  focalLength?: boolean;
+  aperture?: boolean;
+  shutterSpeed?: boolean;
+  iso?: boolean;
+  focusDistance?: boolean;
+}
+
+// View and sort for Explore opened from a link on the Hotspots view, kept so
+// every hotspot link opens the same way. Sorts are null until changed there,
+// falling back to the Explore search's.
+interface HotspotLinkView {
+  activeTab: ExploreTab;
+  sortBy: OBSERVATIONS_SORT | null;
+  speciesSortBy: SPECIES_SORT | null;
+}
+
+interface AICameraSettings {
+  macroMode: boolean;
+  flash: "on" | "off";
+  cameraPosition: "front" | "back";
+  locationDisabled: boolean;
+}
+
+const MAX_RECENT_TAXA = 10;
+
+// A stop on the Wildlife Hotspots route, as kept across visits to the screen
+export interface HotspotStop {
+  id: string;
+  text: string;
+  point: { latitude: number; longitude: number } | null;
+  // Set when the stop was added from a hotspot card
+  fromHotspot?: boolean;
+}
+
 export interface LayoutSlice {
   isAdvancedUser: boolean;
   obsDetailsTab: OBS_DETAILS_TAB;
@@ -30,6 +97,8 @@ export interface LayoutSlice {
     setScreenAfterPhotoEvidence: ( screenAfterPhotoEvidence: SCREEN_AFTER_PHOTO_EVIDENCE ) => void;
     isAllAddObsOptionsMode: boolean;
     setIsAllAddObsOptionsMode: ( isAllAddObsOptionsMode: boolean ) => void;
+    isPhotoLibraryAddObsMode: boolean;
+    setIsPhotoLibraryAddObsMode: ( ) => void;
     shownOnce: object;
     setShownOnce: ( key: string ) => void;
     resetShownOnce: ( ) => void;
@@ -46,6 +115,32 @@ export interface LayoutSlice {
     toggleDebugMode: ( ) => void;
     mapType: MAP_TYPES;
     setMapType: ( mapType: MAP_TYPES ) => void;
+    usbDeleteAfterImport: boolean;
+    setUsbDeleteAfterImport: ( usbDeleteAfterImport: boolean ) => void;
+    gearNicknames: GearNicknames;
+    setGearNickname: ( kind: GearKind, name: string, nickname: string ) => void;
+    hotspotSettings: HotspotSettings;
+    setHotspotSetting: <K extends keyof HotspotSettings>(
+      key: K,
+      value: HotspotSettings[K],
+    ) => void;
+    exploreGridOverlays: ExploreGridOverlays;
+    setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    hotspotGridOverlays: ExploreGridOverlays | null;
+    setHotspotGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    hotspotLinkView: HotspotLinkView;
+    setHotspotLinkView: ( view: Partial<HotspotLinkView> ) => void;
+    myObsGridOverlays: ExploreGridOverlays;
+    setMyObsGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    aiCameraSettings: AICameraSettings;
+    setAICameraSetting: <K extends keyof AICameraSettings>(
+      key: K,
+      value: AICameraSettings[K]
+    ) => void;
+    recentTaxonIds: number[];
+    hotspotStops: HotspotStop[] | null;
+    setHotspotStops: ( stops: HotspotStop[] ) => void;
+    addRecentTaxonId: ( taxonId: number ) => void;
   };
 }
 
@@ -70,6 +165,7 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
         // reset to AICamera mode if default mode is toggled on
         // and otherwise, advanced mode default is all options
         isAllAddObsOptionsMode: newValue !== true,
+        isPhotoLibraryAddObsMode: false,
         // reset to Match screen if default mode is toggled on
         // and otherwise, advanced mode default is Suggestions
         screenAfterPhotoEvidence: newValue === true
@@ -96,6 +192,16 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         isAllAddObsOptionsMode: newValue,
+        isPhotoLibraryAddObsMode: false,
+      },
+    } ) ),
+    // Green button goes straight to the photo importer
+    isPhotoLibraryAddObsMode: false,
+    setIsPhotoLibraryAddObsMode: ( ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        isAllAddObsOptionsMode: false,
+        isPhotoLibraryAddObsMode: true,
       },
     } ) ),
     // State to control pivot cards and other onboarding material being shown only once
@@ -165,12 +271,182 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
         debugModeEnabled: !state.layout.debugModeEnabled,
       },
     } ) ),
+    // Whether USB import deletes imported photos from the drive
+    usbDeleteAfterImport: false,
+    setUsbDeleteAfterImport: newValue => set( state => ( {
+      layout: {
+        ...state.layout,
+        usbDeleteAfterImport: newValue,
+      },
+    } ) ),
+    // Nicknames for cameras and lenses, keyed by their EXIF names. An empty
+    // nickname removes it.
+    gearNicknames: { camera: {}, lens: {} },
+    setGearNickname: ( kind, name, nickname ) => set( state => {
+      const current = state.layout.gearNicknames;
+      const names = { ...current[kind] };
+      const trimmed = nickname.trim( );
+      if ( trimmed && trimmed !== name ) {
+        names[name] = trimmed;
+      } else {
+        delete names[name];
+      }
+      return {
+        layout: {
+          ...state.layout,
+          gearNicknames: { ...current, [kind]: names },
+        },
+      };
+    } ),
+    // Most recently selected taxa in taxon search, newest first
+    recentTaxonIds: [],
+    addRecentTaxonId: taxonId => set( state => ( {
+      layout: {
+        ...state.layout,
+        recentTaxonIds: [
+          taxonId,
+          ...state.layout.recentTaxonIds.filter( id => id !== taxonId ),
+        ].slice( 0, MAX_RECENT_TAXA ),
+      },
+    } ) ),
     // Last selected map layers type for react-native-maps MapView ("standard" or "hybrid")
     mapType: MAP_TYPES.STANDARD,
     setMapType: newMapType => set( state => ( {
       layout: {
         ...state.layout,
         mapType: newMapType,
+      },
+    } ) ),
+    // Wildlife Hotspots settings, edited from the gear button on its map
+    hotspotSettings: DEFAULT_HOTSPOT_SETTINGS,
+    setHotspotSetting: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotSettings: { ...state.layout.hotspotSettings, [key]: value },
+      },
+    } ) ),
+    // AI camera configuration, kept across closing and reopening the camera
+    aiCameraSettings: {
+      macroMode: false,
+      flash: "off",
+      cameraPosition: "back",
+      locationDisabled: false,
+    },
+    setAICameraSetting: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        aiCameraSettings: { ...state.layout.aiCameraSettings, [key]: value },
+      },
+    } ) ),
+    // Info overlaid on each photo in the Explore observations grid
+    exploreGridOverlays: {
+      commonName: true,
+      scientificName: false,
+      location: false,
+      dateTime: false,
+      faveButton: false,
+      faveCount: false,
+      camera: false,
+      lens: false,
+      focalLength: false,
+      aperture: false,
+      shutterSpeed: false,
+      iso: false,
+      focusDistance: false,
+    },
+    setExploreGridOverlay: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        exploreGridOverlays: { ...state.layout.exploreGridOverlays, [key]: value },
+      },
+    } ) ),
+    // Grid overlays for Explore opened from a hotspot link, kept apart from
+    // the Explore tab's. Null until changed there, following the Explore tab's.
+    hotspotGridOverlays: null,
+    setHotspotGridOverlay: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotGridOverlays: {
+          ...( state.layout.hotspotGridOverlays ?? state.layout.exploreGridOverlays ),
+          [key]: value,
+        },
+      },
+    } ) ),
+    hotspotLinkView: {
+      activeTab: OBSERVATIONS_TAB,
+      sortBy: null,
+      speciesSortBy: null,
+    },
+    setHotspotLinkView: view => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotLinkView: { ...state.layout.hotspotLinkView, ...view },
+      },
+    } ) ),
+    // Info overlaid on each photo in the Me tab observations grid
+    myObsGridOverlays: {
+      commonName: true,
+      scientificName: false,
+      location: false,
+      dateTime: false,
+      faveButton: true,
+      faveCount: false,
+    },
+    setMyObsGridOverlay: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        myObsGridOverlays: { ...state.layout.myObsGridOverlays, [key]: value },
+      },
+    } ) ),
+    // Recently entered addresses in the Wildlife Hotspots address search,
+    // most-recent first. Used to prefill the address dropdown before typing.
+    hotspotAddressHistory: [] as {
+      place_id: number | string;
+      display_name: string;
+      lat: string;
+      lon: string;
+    }[],
+    addHotspotAddress: ( address: {
+      place_id: number | string;
+      display_name: string;
+      lat: string;
+      lon: string;
+    } ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotAddressHistory: [
+          address,
+          ...state.layout.hotspotAddressHistory.filter(
+            a => a.display_name !== address.display_name,
+          ),
+        ].slice( 0, 1000 ),
+      },
+    } ) ),
+    // Stops on the Wildlife Hotspots route, restored when the screen reopens.
+    // Null until the user has seen the screen.
+    hotspotStops: null,
+    setHotspotStops: stops => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotStops: stops,
+      },
+    } ) ),
+    // Last viewport seen by the user in the Explore map
+    lastExploreMapRegion: null as {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } | null,
+    setLastExploreMapRegion: ( region: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        lastExploreMapRegion: region,
       },
     } ) ),
   },

@@ -1,12 +1,12 @@
-import merge from "lodash/merge";
+import mergeWith from "lodash/mergeWith";
+import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
 import { create } from "zustand";
-import type { StateStorage } from "zustand/middleware";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 
-import type { ExploreAdvancedSearchSlice } from "./createExploreAdvancedSearchSlice";
-import createExploreAdvancedSearchSlice from "./createExploreAdvancedSearchSlice";
 import type { ExploreSearchesSlice } from "./createExploreSearchesSlice";
 import createExploreSearchesSlice from "./createExploreSearchesSlice";
+import type { ExploreSessionSlice } from "./createExploreSessionSlice";
+import createExploreSessionSlice from "./createExploreSessionSlice";
 import type { FeatureFlagSlice } from "./createFeatureFlagSlice";
 import createFeatureFlagSlice from "./createFeatureFlagSlice";
 import type { FirebaseTraceSlice } from "./createFirebaseTraceSlice";
@@ -16,15 +16,16 @@ import createLayoutSlice from "./createLayoutSlice";
 import type { MyObservationsSlice } from "./createMyObservationsSlice";
 import createMyObservationsSlice from "./createMyObservationsSlice";
 import type { ObservationFlowSlice } from "./createObservationFlowSlice";
-import createObservationFlowSlice from "./createObservationFlowSlice";
+import createObservationFlowSlice, { dropPendingGroupPhotos } from "./createObservationFlowSlice";
 import type { SyncObservationsSlice } from "./createSyncObservationsSlice";
 import createSyncObservationsSlice from "./createSyncObservationsSlice";
 import type { UploadObservationsSlice } from "./createUploadObservationsSlice";
-import createUploadObservationsSlice from "./createUploadObservationsSlice";
+import createUploadObservationsSlice, { UPLOAD_IN_PROGRESS } from "./createUploadObservationsSlice";
+import createFieldStorage from "./fieldPersistStorage";
 import storage from "./zustandMMKVBackingStorage";
 
 type StoreState =
-  ExploreAdvancedSearchSlice
+  ExploreSessionSlice
   & ExploreSearchesSlice
   & FeatureFlagSlice
   & FirebaseTraceSlice
@@ -46,6 +47,18 @@ export const zustandStorage = {
   removeItem: ( name: string ) => storage.delete( name ),
 };
 
+// Everything in a namespaced slice except its setters, which can't be
+// serialized and are recreated on every launch anyway
+const persistableValues = ( namespace: object ) => Object.entries( namespace ).reduce(
+  ( memo: Record<string, unknown>, [key, value] ) => {
+    if ( typeof value !== "function" ) {
+      memo[key] = value;
+    }
+    return memo;
+  },
+  {},
+);
+
 // Using slices to separate store for Explore and Observation creation flow
 // https://docs.pmnd.rs/zustand/guides/slices-pattern
 const useStore = create<StoreState>()( persist(
@@ -53,7 +66,7 @@ const useStore = create<StoreState>()( persist(
     // Let's make our slices
     const slices = [
       createExploreSearchesSlice( ...args ),
-      createExploreAdvancedSearchSlice( ...args ),
+      createExploreSessionSlice( ...args ),
       createFeatureFlagSlice( ...args ),
       createFirebaseTraceSlice( ...args ),
       createLayoutSlice( ...args ),
@@ -102,36 +115,51 @@ const useStore = create<StoreState>()( persist(
       obsDetailsTab: state.obsDetailsTab,
 
       // Dynamically select all values in the layout slice's namespace
-      layout: ( ( Object.keys( state.layout ) as ( keyof LayoutSlice["layout"] )[] ).reduce(
-        ( memo: Record<string, unknown>, key ) => {
-          if ( typeof ( state.layout[key] ) !== "function" ) {
-            memo[key] = state.layout[key];
-          }
-          return memo;
-        },
-        {},
-      ) ),
-
-      exploreRecentSearches: {
-        subjects: state.exploreRecentSearches.subjects,
-        places: state.exploreRecentSearches.places,
-      },
+      layout: persistableValues( state.layout ),
 
       exploreSavedSearches: {
         searches: state.exploreSavedSearches.searches,
+        defaultsAddedForUserIds: state.exploreSavedSearches.defaultsAddedForUserIds,
       },
+      lastExploreSearch: state.lastExploreSearch,
+
+      // Last location used in the location picker
+      lastLocationPickerState: state.lastLocationPickerState,
+
+      // Group Photos progress, so it survives an app kill. Photos still being
+      // copied out of the library are left out: their copies die with the
+      // process, so restoring them would resume an import stuck on cells that
+      // can never fill in.
+      groupedPhotos: dropPendingGroupPhotos( state.groupedPhotos ),
+      firstObservationDefaults: state.firstObservationDefaults,
+      pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
+      groupCropResume: state.groupCropResume,
     } ),
-    // zustandStorage's getItem actually returns string | number | null instead of zustand's
-    // expected string | null. There are some keys in this store (at least `numOfUserObservations`)
-    // which are now fully managed _outside_ of zustand which used to be a mix of both.
-    // Fixing this situation is tracked in MOB-1372.
-    // Casting this here allows for getting most of the useStore typing benefit w/o fixing that
-    // functional change just yet.
-    storage: createJSONStorage( () => zustandStorage as unknown as StateStorage ),
+    storage: createFieldStorage( storage ),
     // We need to deep merge to persist nested objects, like layout
     // https://zustand.docs.pmnd.rs/middlewares/persist#persisting-a-state-with-nested-objects
-    merge: ( persisted, current ) => merge( current, persisted ),
+    // Arrays must be replaced wholesale rather than merged index-by-index:
+    // lodash's default array merging leaves stale trailing elements behind
+    // when the persisted array (e.g. groupedPhotos cleared after a Group
+    // Photos import) is shorter than what's currently in memory.
+    merge: ( persisted, current ) => mergeWith( current, persisted, ( _objValue, srcValue ) => (
+      Array.isArray( srcValue )
+        ? srcValue
+        : undefined
+    ) ),
   },
 ) );
+
+// Hold the screen awake for exactly as long as an upload is in progress, however
+// the status leaves that state (complete, cancelled, reset, or set directly).
+useStore.subscribe( ( state, prev ) => {
+  if ( state.uploadStatus === prev.uploadStatus ) return;
+  if ( state.uploadStatus === UPLOAD_IN_PROGRESS ) holdKeepAwake( "upload" );
+  else releaseKeepAwake( "upload" );
+} );
+
+// A log of crops that nothing ever read, rewritten in full on every crop and
+// photo upload until it was removed
+storage.delete( "cropFeedbackLog" );
 
 export default useStore;

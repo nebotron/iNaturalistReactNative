@@ -1,9 +1,14 @@
+import type { SoundObservation } from "components/AudioId/audioIdModel";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
+  INatIconButton,
   TransparentCircleButton,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from "react";
+import { StyleSheet } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
   Gesture,
@@ -13,14 +18,30 @@ import {
 import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import {
+  imageZoomTransformToNormalizedCrop,
+  imageZoomTransformToNormalizedRect,
+} from "sharedHelpers/imageZoomTransformToCrop";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
+import {
+  EXPOSURE_STOPS_MAX,
+  EXPOSURE_STOPS_MIN,
+} from "sharedHooks/useIdentifyPhotoBrightness";
+import useIdentifyPhotoControls from "sharedHooks/useIdentifyPhotoControls";
 import useTranslation from "sharedHooks/useTranslation";
+import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
-import CustomImageZoom from "./CustomImageZoom";
+import CustomImageZoom, { SUBJECT_CROP_FRAME_FRACTION } from "./CustomImageZoom";
+import { zoomAroundCentre, ZoomBrightnessSliders } from "./IdentifyPhoto";
+import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 
 interface PhotoItem {
   attribution?: string;
+  id?: number;
   licenseCode?: string;
   localFilePath?: string;
   type: "photo";
@@ -33,43 +54,95 @@ interface SoundItem {
   type: "sound";
 }
 
+const BRIGHTNESS_DEFAULT = 1.0;
+const styles = StyleSheet.create( {
+  gestureHandlerRoot: { flex: 1 },
+} );
+const iconBtnClass = "bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]";
+
 interface Props {
   autoPlaySound?: boolean; // automatically start playing a sound when it is visible
+  // Auto-frame each photo to its detected subject. Off by default so the
+  // viewer never runs subject detection on the user's own images; only
+  // enabled for other people's photos (Explore, taxon media, etc.). Own
+  // images are still detected/cropped in the dedicated crop editor.
+  autoDetectSubject?: boolean;
   editable?: boolean;
   horizontalScroll: React.Ref<ICarouselInstance>;
+  onCropPhoto?: Function;
   onDeletePhoto: ( uri: string ) => void;
   onClose: ( ) => void;
   onDeleteSound: ( uri: string ) => void;
   // Only offered for photos that exist locally and have not been uploaded, for now
-  onCropPhoto?: ( localFilePath: string ) => void;
+  onCropLocalPhoto?: ( localFilePath: string ) => void;
   onRotatePhoto?: ( localFilePath: string ) => void;
+  // crop is the part of the photo visible on screen, when it can be read.
+  onSharePhoto?: ( uri: string, crop?: NormalizedCrop ) => void;
   photos: Omit<PhotoItem, "type">[];
   sounds?: Omit<SoundItem, "type">[];
+  // The observation the sounds are of, for the graph under each
+  soundObservation?: SoundObservation | null;
   selectedMediaIndex: number;
   setSelectedMediaIndex: ( index: number ) => void;
 }
 
 const MainMediaDisplay = ( {
   autoPlaySound,
+  autoDetectSubject = false,
   editable,
   horizontalScroll,
+  onCropPhoto,
   onDeletePhoto,
   onDeleteSound,
   onClose,
-  onCropPhoto,
+  onCropLocalPhoto,
   onRotatePhoto,
+  onSharePhoto,
   photos,
   sounds = [],
+  soundObservation,
   selectedMediaIndex,
   setSelectedMediaIndex,
 }: Props ) => {
   const { t } = useTranslation( );
-  const { screenWidth } = useDeviceOrientation( );
+  const { screenWidth, screenHeight } = useDeviceOrientation( );
   const [zooming, setZooming] = useState( false );
+  // Keyed by uri: every photo the carousel has rendered reports its size, so a
+  // single slot would hold whichever neighbour loaded last.
+  const imageDimensionsRef = useRef<Map<string, { width: number; height: number }>>( new Map( ) );
+  const currentZoomRefRef = useRef<SharedZoomableImageRef | null>( null );
   const items = useMemo( ( ) => ( [
     ...photos.map( photo => ( { ...photo, type: "photo" as const } ) ),
     ...sounds.map( sound => ( { ...sound, type: "sound" as const } ) ),
   ] ), [photos, sounds] );
+
+  const selectedPhoto = photos[selectedMediaIndex];
+
+  // The same zoom + exposure sliders as the crop editor: brightness drives the
+  // preview live and is recorded to the brightness log on release.
+  const {
+    brightness,
+    brightnessStops,
+    handleBrightnessChange,
+    handleBrightnessComplete,
+    handleScaleChange,
+    handleZoomChange,
+    zoomScale,
+  } = useIdentifyPhotoControls( {
+    brightnessKey: selectedPhoto?.url,
+    applyZoom: scale => {
+      const img = currentZoomRefRef.current;
+      if ( img ) zoomAroundCentre( img, scale, screenWidth / 2, screenHeight / 2 );
+    },
+    // Each photo keeps its own framing, so sync the slider to it on paging
+    // instead of resetting.
+    skipZoomReset: true,
+  } );
+
+  useEffect( ( ) => {
+    const img = currentZoomRefRef.current;
+    if ( img ) handleScaleChange( img.readTransform( ).scale );
+  }, [handleScaleChange, selectedMediaIndex] );
 
   // On the render right after a photo is removed, selectedMediaIndex can still
   // point at the deleted index
@@ -80,22 +153,96 @@ const MainMediaDisplay = ( {
 
   const deletePhotoLabel = t( "Delete-photo" );
   const deleteSoundLabel = t( "Delete-sound" );
+  const cropPhotoLabel = t( "Crop-editor" );
 
-  const renderPhoto = ( photo: PhotoItem ) => {
-    const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
+  const handleInteractionEnd = useCallback( ( ) => {
+    const currentIndex = selectedMediaIndex;
+    if ( currentIndex >= photos.length ) return;
+
+    const photo = photos[currentIndex];
+    const photoUrl = Photo.displayLocalOrRemoteOriginalPhoto( photo );
+    const zoomRef = currentZoomRefRef.current;
+    const imageDims = imageDimensionsRef.current.get( photoUrl );
+
+    if ( !zoomRef || !imageDims ) return;
+
+    try {
+      const transform = zoomRef.readTransform( );
+      // Convert zoom transform to normalized crop (0-1 range)
+      const crop = imageZoomTransformToNormalizedCrop(
+        imageDims.width,
+        imageDims.height,
+        screenWidth,
+        screenHeight,
+        // Must match the framing fraction so a framed subject round-trips.
+        Math.min( screenWidth, screenHeight ) * SUBJECT_CROP_FRAME_FRACTION,
+        transform,
+      );
+      saveAnimalCrop( photoUrl, crop );
+    } catch {
+      // Silently fail if we can't read the transform or save the crop
+    }
+  }, [photos, selectedMediaIndex, screenWidth, screenHeight] );
+
+  // Share exactly what is on screen: the part of the photo inside the zoom
+  // viewport at its current pan and zoom.
+  const handleSharePress = useCallback( ( uri: string ) => {
+    if ( !onSharePhoto ) return;
+    const zoomRef = currentZoomRefRef.current;
+    const imageDims = imageDimensionsRef.current.get( uri );
+    const viewSize = zoomRef?.readViewSize( );
+    if ( !zoomRef || !imageDims || !viewSize ) {
+      onSharePhoto( uri );
+      return;
+    }
+    const crop = imageZoomTransformToNormalizedRect(
+      imageDims.width,
+      imageDims.height,
+      viewSize.width,
+      viewSize.height,
+      viewSize.width,
+      viewSize.height,
+      zoomRef.readTransform( ),
+    );
+    onSharePhoto( uri, crop );
+  }, [onSharePhoto] );
+
+  const renderPhoto = ( photo: PhotoItem, photoIndex: number ) => {
+    const uri = Photo.displayLocalOrRemoteOriginalPhoto( photo );
     const hasAttribution = photo?.attribution;
     const { localFilePath } = photo;
     // Editing is offered wherever the screen handles it, separately from
     // deleting for now, and only for photos that haven't been uploaded
-    const canEditPhoto = ( !!onRotatePhoto || !!onCropPhoto )
+    const canEditPhoto = ( !!onRotatePhoto || !!onCropLocalPhoto )
       && !photo.url
       && !!localFilePath;
+    const isSelected = photoIndex === selectedMediaIndex;
     return (
       <View className="flex-1">
         <CustomImageZoom
           uri={uri}
+          resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
+          autoDetectSubject={autoDetectSubject}
+          // Pinching here logs the framing, so reopening or paging back to this
+          // photo shows it framed the way the user left it.
+          restoreFramedCrop
+          detectUri={uri}
+          brightness={isSelected
+            ? brightness
+            : BRIGHTNESS_DEFAULT}
+          zoomRef={( ref: SharedZoomableImageRef | null ) => {
+            if ( photoIndex === selectedMediaIndex ) {
+              currentZoomRefRef.current = ref;
+            }
+          }}
+          onSwipeToClose={onClose}
+          onImageDimensionsChange={dims => imageDimensionsRef.current.set( uri, dims )}
+          onInteractionEnd={handleInteractionEnd}
+          onScaleChange={isSelected
+            ? handleScaleChange
+            : undefined}
         />
         {canEditPhoto && (
           <View className="absolute bottom-4 left-4 gap-[15px]">
@@ -106,9 +253,9 @@ const MainMediaDisplay = ( {
                 accessibilityLabel={t( "Rotate-photo" )}
               />
             )}
-            {onCropPhoto && (
+            {onCropLocalPhoto && (
               <TransparentCircleButton
-                onPress={( ) => onCropPhoto( localFilePath )}
+                onPress={( ) => onCropLocalPhoto( localFilePath )}
                 icon="crop"
                 accessibilityLabel={t( "Crop-photo" )}
               />
@@ -118,76 +265,78 @@ const MainMediaDisplay = ( {
         {
           editable
             ? (
-              <View className="absolute bottom-4 right-4">
+              <View className="absolute bottom-4 right-4 flex-row items-center">
+                { onCropPhoto && (
+                  <TransparentCircleButton
+                    onPress={( ) => onCropPhoto( photo )}
+                    icon="crop"
+                    color={colors.white}
+                    accessibilityLabel={cropPhotoLabel}
+                    testID="EvidenceList.editSquareCrop"
+                    optionalClasses="mr-2"
+                  />
+                ) }
                 <TransparentCircleButton
                   onPress={( ) => onDeletePhoto(
                     Photo.getLocalPhotoUri( photo.localFilePath )
                     || photo.url,
                   )}
                   icon="trash-outline"
+                  color={colors.white}
                   accessibilityLabel={deletePhotoLabel}
                 />
               </View>
             )
             : (
-              hasAttribution
-              && (
-                <AttributionButton
-                  licenseCode={photo.licenseCode}
-                  attribution={photo.attribution}
-                  optionalClasses="absolute top-4 right-4"
-                />
-              )
+              <View className="absolute top-4 right-4 flex-row items-center">
+                { hasAttribution && (
+                  <AttributionButton
+                    licenseCode={photo.licenseCode}
+                    attribution={photo.attribution}
+                    optionalClasses="mr-2"
+                  />
+                ) }
+                { photo.id && (
+                  <TransparentCircleButton
+                    onPress={( ) => openExternalWebBrowser(
+                      `https://www.inaturalist.org/photos/${photo.id}`,
+                    )}
+                    icon="open-in-new"
+                    color={colors.white}
+                    accessibilityLabel={t( "View-in-browser" )}
+                    optionalClasses="mr-2"
+                  />
+                ) }
+                { onSharePhoto && (
+                  <TransparentCircleButton
+                    onPress={( ) => handleSharePress( uri )}
+                    icon="share"
+                    accessibilityLabel={t( "Share" )}
+                    testID="MediaViewer.shareButton"
+                  />
+                ) }
+              </View>
             )
         }
+        { editable && onSharePhoto && (
+          <View className="absolute bottom-4 left-4">
+            <INatIconButton
+              onPress={( ) => handleSharePress( uri )}
+              icon="share"
+              color={colors.white}
+              className={iconBtnClass}
+              accessibilityLabel={t( "Share" )}
+              testID="MediaViewer.shareButton"
+              size={20}
+            />
+          </View>
+        ) }
       </View>
     );
   };
 
-  const renderSound = ( sound: SoundItem ) => (
-    <View
-      className="flex-1 justify-center items-center"
-    >
-      <SoundContainer
-        autoPlay={autoPlaySound}
-        sizeClass="h-72 w-screen"
-        sound={sound}
-        isVisible={items.indexOf( sound ) === selectedMediaIndex}
-      />
-      {
-        editable && (
-          <View className="absolute bottom-4 right-4">
-            <TransparentCircleButton
-              onPress={( ) => onDeleteSound( sound.file_url )}
-              icon="trash-outline"
-              accessibilityLabel={deleteSoundLabel}
-            />
-          </View>
-        )
-      }
-    </View>
-  );
-
-  const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item } ) => (
-    item.type === "photo"
-      ? renderPhoto( item )
-      : renderSound( item )
-  );
-
-  // Must be stable: onConfigurePanGesture is a useMemo dependency inside the Carousel
-  const onConfigurePanGesture = useCallback( ( panGesture: PanGesture ) => {
-    panGesture
-      // Page only on clearly horizontal drags; leave vertical intent as swipe-to-close
-      .activeOffsetX( [-10, 10] )
-      .failOffsetY( [-15, 15] )
-      // A second finger means pinch-to-zoom do not pan
-      .maxPointers( 1 );
-  }, [] );
-
-  const swipeToCloseGesture = Gesture.Pan()
+  const soundSwipeToCloseGesture = Gesture.Pan()
     .runOnJS( true )
-    // While zoomed, a downward drag should pan the image, not close the viewer
-    .enabled( !zooming )
     .maxPointers( 1 )
     // Activate only on a mostly-vertical downward drag
     .activeOffsetY( 15 )
@@ -199,30 +348,93 @@ const MainMediaDisplay = ( {
       }
     } );
 
+  const renderSound = ( sound: SoundItem ) => (
+    <GestureDetector gesture={soundSwipeToCloseGesture}>
+      <View
+        collapsable={false}
+        className="flex-1 justify-center items-center"
+      >
+        <SoundContainer
+          autoPlay={autoPlaySound}
+          sizeClass="h-72 w-screen"
+          sound={sound}
+          observation={soundObservation}
+          isVisible={items.indexOf( sound ) === selectedMediaIndex}
+        />
+        {
+          editable && (
+            <View className="absolute bottom-4 right-4">
+              <TransparentCircleButton
+                onPress={( ) => onDeleteSound( sound.file_url )}
+                icon="trash-outline"
+                accessibilityLabel={deleteSoundLabel}
+              />
+            </View>
+          )
+        }
+      </View>
+    </GestureDetector>
+  );
+
+  const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item } ) => {
+    if ( item.type === "photo" ) {
+      // `item` is drawn from `items` (a freshly-mapped array), never from
+      // `photos` itself, so `photos.indexOf(item)` can never match by
+      // reference and always returns -1. `items` lists photos before
+      // sounds in the same order as `photos`, so its index lines up.
+      const photoIndex = items.indexOf( item );
+      return renderPhoto( item as PhotoItem, photoIndex );
+    }
+    return renderSound( item as SoundItem );
+  };
+
+  // Must be stable: onConfigurePanGesture is a useMemo dependency inside the Carousel
+  const onConfigurePanGesture = useCallback( ( panGesture: PanGesture ) => {
+    panGesture
+      // Page only on clearly horizontal drags; leave vertical intent as swipe-to-close
+      .activeOffsetX( [-10, 10] )
+      .failOffsetY( [-15, 15] )
+      // A second finger means pinch-to-zoom do not pan
+      .maxPointers( 1 );
+  }, [] );
+
   return (
     <View className="flex-1">
-      <GestureHandlerRootView>
-        <GestureDetector gesture={swipeToCloseGesture}>
-          <View collapsable={false}>
-            <Carousel
-              // Include the item count in the key so the carousel fully
-              // remounts when media is added or removed.
-              key={`MediaViewerCarousel-${screenWidth}-${items.length}`}
-              testID="MediaViewer.carousel"
-              ref={horizontalScroll}
-              data={items}
-              renderItem={renderItem}
-              defaultIndex={safeDefaultIndex}
-              loop={false}
-              width={screenWidth}
-              // Disable scrolling when image is zooming
-              enabled={!zooming}
-              onSnapToItem={setSelectedMediaIndex}
-              onConfigurePanGesture={onConfigurePanGesture}
-            />
-          </View>
-        </GestureDetector>
+      <GestureHandlerRootView style={styles.gestureHandlerRoot}>
+        <Carousel
+          // Include the item count in the key so the carousel fully
+          // remounts when media is added or removed.
+          key={`MediaViewerCarousel-${screenWidth}-${items.length}`}
+          testID="MediaViewer.carousel"
+          ref={horizontalScroll}
+          data={items}
+          renderItem={renderItem}
+          defaultIndex={safeDefaultIndex}
+          loop={false}
+          width={screenWidth}
+          // Disable scrolling when image is zooming
+          enabled={!zooming}
+          onSnapToItem={setSelectedMediaIndex}
+          onConfigurePanGesture={onConfigurePanGesture}
+        />
       </GestureHandlerRootView>
+      {/* Zoom + brightness sliders below the photo, matching the crop editor */}
+      <View className="py-1">
+        <ZoomBrightnessSliders
+          disabled={!selectedPhoto}
+          zoomScale={zoomScale}
+          brightnessStops={brightnessStops}
+          exposureStopsMin={EXPOSURE_STOPS_MIN}
+          exposureStopsMax={EXPOSURE_STOPS_MAX}
+          onZoomChange={handleZoomChange}
+          onZoomComplete={handleInteractionEnd}
+          onBrightnessChange={handleBrightnessChange}
+          onBrightnessComplete={handleBrightnessComplete}
+          zoomAccessibilityLabel={t( "Adjust-zoom" )}
+          brightnessAccessibilityLabel={t( "Adjust-brightness" )}
+          iconColor={colors.white}
+        />
+      </View>
     </View>
   );
 };

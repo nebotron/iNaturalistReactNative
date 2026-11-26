@@ -1,11 +1,17 @@
 import { useNavigation } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
+import { markObservationUpdatesViewed } from "api/observations";
 import classnames from "classnames";
 import ObsNotification from "components/Notifications/ObsNotification";
 import { Pressable, View } from "components/styledComponents";
-import React from "react";
-import { useLayoutPrefs } from "sharedHooks";
+import React, { useEffect, useState } from "react";
+import { useAuthenticatedMutation, useLayoutPrefs } from "sharedHooks";
 import type { Notification } from "sharedHooks/useInfiniteNotificationsScroll";
+import {
+  markObservationNotificationsViewedLocally,
+} from "sharedHooks/useUnviewedNotificationsCount";
 import { OBS_DETAILS_TAB } from "stores/createLayoutSlice";
+import useStore from "stores/useStore";
 
 interface Props {
   notification: Notification;
@@ -14,7 +20,28 @@ interface Props {
 const NotificationsListItem = ( { notification }: Props ) => {
   const { setObsDetailsTab } = useLayoutPrefs( );
   const navigation = useNavigation( );
-  const viewedStatus = notification.viewed;
+  const queryClient = useQueryClient( );
+  const [localViewed, setLocalViewed] = useState( notification.viewed );
+
+  useEffect( ( ) => {
+    if ( notification.viewed ) {
+      setLocalViewed( true );
+    }
+  }, [notification.viewed] );
+
+  const viewedStatus = localViewed;
+  const setObservationMarkedAsViewedAt = useStore(
+    state => state.setObservationMarkedAsViewedAt,
+  );
+
+  const { mutate: markViewed } = useAuthenticatedMutation(
+    ( params, optsWithAuth ) => markObservationUpdatesViewed( params, optsWithAuth ),
+    {
+      onSuccess: ( ) => {
+        setObservationMarkedAsViewedAt( new Date( ) );
+      },
+    },
+  );
 
   return (
     <Pressable
@@ -28,10 +55,17 @@ const NotificationsListItem = ( { notification }: Props ) => {
         },
       )}
       onPress={( ) => {
+        setLocalViewed( true );
+        markObservationNotificationsViewedLocally( queryClient, notification.resource_uuid );
+        if ( !notification.viewed ) {
+          markViewed( { id: notification.resource_uuid } );
+        }
         setObsDetailsTab( OBS_DETAILS_TAB.ACTIVITY );
         navigation.push( "ObsDetails", {
           uuid: notification.resource_uuid,
           targetActivityItemID: notification.identification_id || notification.comment_id,
+          // Fetched with every field ObsDetails needs, so it opens straight away
+          preloadedObservation: notification.resource,
         } );
       }}
     >

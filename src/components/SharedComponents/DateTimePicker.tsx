@@ -16,6 +16,15 @@ interface Props {
 
 const EmptyHeader = ( ) => null;
 
+// react-native-modal-datetime-picker presents a native modal on top of whatever
+// modal opened it, and takes 300ms to animate out before it actually goes away.
+// Asking iOS to present it again while the previous presentation is still being
+// dismissed silently drops the new presentation and leaves an invisible
+// full-screen view behind that swallows every touch, which looks like the app
+// freezing. So after a dismissal we refuse to present again until the old
+// presentation has had time to finish leaving.
+const DISMISS_MS = 400;
+
 const DatePicker = ( {
   date,
   isDateTimePickerVisible,
@@ -24,13 +33,30 @@ const DatePicker = ( {
   toggleDateTimePicker,
 }: Props ) => {
   const [isTimeVisible, setisTimeVisible] = React.useState( false );
+  // In the two-step iOS datetime flow, the day chosen in the first step, so
+  // the time step opens on (and returns) that day instead of today
+  const [pickedDay, setPickedDay] = React.useState<Date | null>( null );
+  const [isDismissing, setIsDismissing] = React.useState( false );
+  const dismissTimer = React.useRef<ReturnType<typeof setTimeout> | null>( null );
   const maxDateForTimePicker = new Date( );
   maxDateForTimePicker.setHours( 24, 0, 0, 0 );
 
+  React.useEffect( ( ) => ( ) => {
+    if ( dismissTimer.current ) clearTimeout( dismissTimer.current );
+  }, [] );
+
+  // Every way out of the picker (confirm, cancel, backdrop) runs through here,
+  // so this is where the quiet period starts.
   const _toggleDateTimePicker = ( ) => {
     setisTimeVisible( false );
+    setPickedDay( null );
+    setIsDismissing( true );
+    if ( dismissTimer.current ) clearTimeout( dismissTimer.current );
+    dismissTimer.current = setTimeout( ( ) => setIsDismissing( false ), DISMISS_MS );
     toggleDateTimePicker( );
   };
+
+  const isVisible = isDateTimePickerVisible && !isDismissing;
 
   if ( Platform.OS === "android" && mode === "datetime" ) {
     return (
@@ -38,13 +64,13 @@ const DatePicker = ( {
         display="spinner"
         isDarkModeEnabled={false}
         themeVariant="light"
-        isVisible={isDateTimePickerVisible}
+        isVisible={isVisible}
         maximumDate={new Date( )}
         mode="datetime"
-        onCancel={toggleDateTimePicker}
+        onCancel={_toggleDateTimePicker}
         onConfirm={selectedDate => {
           onDatePicked( selectedDate );
-          toggleDateTimePicker( );
+          _toggleDateTimePicker( );
         }}
         date={date || new Date( )}
       />
@@ -58,7 +84,7 @@ const DatePicker = ( {
         customHeaderIOS={EmptyHeader}
         isDarkModeEnabled={false}
         themeVariant="light"
-        isVisible={isDateTimePickerVisible}
+        isVisible={isVisible}
         maximumDate={new Date( )}
         mode="time"
         onCancel={_toggleDateTimePicker}
@@ -66,6 +92,7 @@ const DatePicker = ( {
           onDatePicked( selectedDate );
           _toggleDateTimePicker( );
         }}
+        date={pickedDay || date || new Date( )}
       />
     );
   }
@@ -77,7 +104,7 @@ const DatePicker = ( {
         customHeaderIOS={EmptyHeader}
         isDarkModeEnabled={false}
         themeVariant="light"
-        isVisible={isDateTimePickerVisible}
+        isVisible={isVisible}
         mode="time"
         onCancel={_toggleDateTimePicker}
         onConfirm={selectedDate => {
@@ -85,6 +112,7 @@ const DatePicker = ( {
           _toggleDateTimePicker( );
         }}
         maximumDate={maxDateForTimePicker}
+        date={date || new Date( )}
       />
     );
   }
@@ -96,12 +124,13 @@ const DatePicker = ( {
       customHeaderIOS={EmptyHeader}
       isDarkModeEnabled={false}
       themeVariant="light"
-      isVisible={isDateTimePickerVisible}
+      isVisible={isVisible}
       maximumDate={new Date( )}
       mode="date"
       onCancel={_toggleDateTimePicker}
       onConfirm={selectedDate => {
         if ( mode === "datetime" ) {
+          setPickedDay( selectedDate );
           setisTimeVisible( true );
         } else {
           onDatePicked( selectedDate );

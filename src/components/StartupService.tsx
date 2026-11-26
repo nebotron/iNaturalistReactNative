@@ -8,8 +8,10 @@ import { useEffect } from "react";
 import DeviceInfo from "react-native-device-info";
 import Orientation from "react-native-orientation-locker";
 import Realm from "realm";
+import { startCloudBackup } from "sharedHelpers/cloudBackup";
 import { EnvConfig } from "sharedHelpers/envConfig";
-import { IS_FRESH_INSTALL, store } from "sharedHelpers/installData";
+import { getInstallID, IS_FRESH_INSTALL, store } from "sharedHelpers/installData";
+import { resumeLocationHistoryTrackingIfEnabled } from "sharedHelpers/locationHistoryTracker";
 import { log } from "sharedHelpers/logger";
 import { addARCameraFiles } from "sharedHelpers/mlModel";
 
@@ -44,7 +46,11 @@ const StartupService = ( ) => {
         // check to see if this is a fresh install of the app
         // if it is, delete realm file when we sign the user out of the app
         // this handles the case where a user deletes the app, then reinstalls
-        // and expects to be signed out with no previously saved data
+        // and expects to be signed out with no previously saved data.
+        // getInstallID is what marks an install fresh; until now that waited
+        // for the first API request, so a launch that got here first left
+        // the sign-out to the next launch, after it had saved things.
+        getInstallID( );
         const isFreshInstall = store.getBoolean( IS_FRESH_INSTALL );
         if ( isFreshInstall ) {
           store.set( IS_FRESH_INSTALL, false );
@@ -53,14 +59,19 @@ const StartupService = ( ) => {
           }
         }
       };
-      // don't remove this logger.info statement: it's used for internal metrics
-      logger.info( "pickup" );
-      logger.info(
-        `App version: ${DeviceInfo.getVersion()}, build: ${DeviceInfo.getBuildNumber()}`,
-      );
+      // don't remove this "pickup" message: it's used for internal metrics.
+      // The version rode along as a second line, i.e. a second remote write per
+      // launch, to say something every log entry's commit hash already pins
+      // down. Same message, same metric, one POST.
+      logger.infoWithExtra( "pickup", {
+        appVersion: DeviceInfo.getVersion( ),
+        build: DeviceInfo.getBuildNumber( ),
+      } );
 
       try {
         await checkForSignedInUser( );
+        // After that sign-out, which clears what this would restore
+        startCloudBackup( realm ).catch( error => logger.error( "iCloud backup:", error ) );
         // TODO: this sounds like something we should move to DeferredStartupService,
         // but we do need these files for the CV camera to work. So, for the subset of user that
         // open the app straight to camera we need to test that doing this deferred does not impact
@@ -79,6 +90,8 @@ const StartupService = ( ) => {
         // skipping location permissions here since we're manually showing
         // permission gates and don't want to pop up the native notification
         Geolocation.setRNConfiguration( geolocationConfig );
+
+        await resumeLocationHistoryTrackingIfEnabled( );
 
         if ( !isTablet ) {
           Orientation.lockToPortrait( );

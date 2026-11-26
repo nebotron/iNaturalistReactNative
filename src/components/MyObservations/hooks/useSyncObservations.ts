@@ -6,6 +6,7 @@ import { deleteRemoteObservation } from "api/observations";
 import { RealmContext } from "providers/contexts";
 import { useCallback, useEffect, useState } from "react";
 import Observation from "realmModels/Observation";
+import { log } from "sharedHelpers/logger";
 import { useAuthenticatedMutation } from "sharedHooks";
 import {
   AUTOMATIC_SYNC_IN_PROGRESS,
@@ -17,6 +18,8 @@ import useStore from "stores/useStore";
 
 import syncRemoteDeletedObservations from "../helpers/syncRemoteDeletedObservations";
 import syncRemoteObservations from "../helpers/syncRemoteObservations";
+
+const logger = log.extend( "useSyncObservations" );
 
 const { useRealm } = RealmContext;
 
@@ -111,14 +114,14 @@ const useSyncObservations = (
     } catch ( syncRemoteError ) {
       // For some reason this seems to run even when signed out, in which
       // case we end up sending no JWT or the anon JWT, wich fails auth. If
-      // that happens, we can just return and call it a day.
-      if (
-        syncRemoteError instanceof INatApiError
-          && syncRemoteError?.status === 401
-      ) {
-        return false;
+      // that happens, we can just return and call it a day. Other API errors
+      // (e.g. a 503) were already logged by handleError and must not abort the
+      // rest of the sync; the check retries next sync since lastDeletedSyncTime
+      // only advances on success.
+      if ( !( syncRemoteError instanceof INatApiError ) ) {
+        logger.error( "Failed to sync remote deletions", syncRemoteError );
       }
-      throw syncRemoteError;
+      return false;
     }
   }, [
     realm,

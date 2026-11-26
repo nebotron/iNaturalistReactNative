@@ -29,7 +29,7 @@ Each observation follows this strict sequence:
 
 3. **Media Attachment** (`attachMediaToObservation()`) — Attaches uploaded media to the observation via `inatjs.observation_photos.create()` and `inatjs.observation_sounds.create()`. Handles updates to previously synced media.
 
-4. **Realm Sync** (`markRecordUploaded()`) — Updates local Observation with server-assigned `id`, sets `_synced_at` timestamp, clears `needs_sync` flag. Handles Realm invalidation errors with retry.
+4. **Realm Sync** (`markRecordUploaded()`) — Updates local Observation with server-assigned `id`, sets `_synced_at` timestamp, clears `needs_sync` flag. Handles Realm invalidation errors with retry. For an uploaded photo, `Photo.seedImageCache` runs first so the remote URL is already cached when screens switch to it (see `media-filesystem-lifecycle.md`).
 
 ## Queue & State Management
 

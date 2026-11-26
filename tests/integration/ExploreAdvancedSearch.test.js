@@ -2,7 +2,6 @@ import {
   screen,
   userEvent,
   waitFor,
-  within,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import i18next from "i18next";
@@ -11,8 +10,8 @@ import factory, { makeResponse } from "tests/factory";
 import {
   lastObservationsSearchParams,
   navigateToExplore,
-  openUniversalSearch,
-  submitUniversalSearch,
+  openAdvancedSearch,
+  submitAdvancedSearch,
 } from "tests/helpers/explore";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
@@ -104,17 +103,6 @@ afterEach( async ( ) => {
 
 global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
 
-const openAdvancedSearch = async ( ) => {
-  await openUniversalSearch( );
-  await actor.press( screen.getByText( t( "Advanced-Search" ) ) );
-  await screen.findByTestId( "AdvancedSearch" );
-};
-
-const submitAdvancedSearch = async ( ) => {
-  await actor.press( screen.getByTestId( "AdvancedSearch.searchButton" ) );
-  await screen.findByTestId( "ExploreResults" );
-};
-
 describe( "advanced search", ( ) => {
   it( "filters the results query by the filters the user chose", async ( ) => {
     renderApp( );
@@ -136,33 +124,18 @@ describe( "advanced search", ( ) => {
   } );
 
   it(
-    "offers observers and identifiers, with the filters in effect, only in advanced search",
+    "shows observers with the filters in effect from the view picker",
     async ( ) => {
       renderApp( );
       await navigateToExplore( );
-
-      const tabs = await screen.findByTestId( "ExploreTabs" );
-      expect( within( tabs ).queryByTestId( "ExploreTabs.observers" ) ).toBeNull( );
-      expect( within( tabs ).queryByTestId( "ExploreTabs.identifiers" ) ).toBeNull( );
       expect( inatjs.observations.observers ).not.toHaveBeenCalled( );
 
       await openAdvancedSearch( );
       await actor.press( screen.getByText( t( "Sounds" ) ) );
       await submitAdvancedSearch( );
 
-      // Each tab shows the count from its own endpoint
-      const observersTab = await screen.findByTestId( "ExploreTabs.observers" );
-      const identifiersTab = await screen.findByTestId( "ExploreTabs.identifiers" );
-      await waitFor( ( ) => {
-        expect(
-          within( observersTab ).getByText( String( mockObserverCounts.length ) ),
-        ).toBeVisible( );
-        expect(
-          within( identifiersTab ).getByText( String( mockIdentifierCounts.length ) ),
-        ).toBeVisible( );
-      } );
-
-      await actor.press( observersTab );
+      await actor.press( await screen.findByTestId( "ExploreHeader.viewButton" ) );
+      await actor.press( await screen.findByText( t( "Observers" ) ) );
 
       expect( await screen.findByText( mockObserver.login ) ).toBeVisible( );
       const observerQueries = inatjs.observations.observers.mock.calls
@@ -173,32 +146,4 @@ describe( "advanced search", ( ) => {
       } );
     },
   );
-
-  it( "returns to standard search, dropping the filters", async ( ) => {
-    renderApp( );
-    await navigateToExplore( );
-    await openAdvancedSearch( );
-    await actor.press( screen.getByText( t( "Sounds" ) ) );
-    await submitAdvancedSearch( );
-
-    const filterBadge = ( ) => screen.queryByTestId(
-      "ExploreHeader.filterCount",
-      { includeHiddenElements: true },
-    );
-    expect( filterBadge( ) ).toBeOnTheScreen( );
-
-    // In advanced mode the header goes straight to Advanced Search
-    await actor.press( screen.getByTestId( "ExploreHeader.searchButton" ) );
-    await screen.findByTestId( "AdvancedSearch" );
-    await actor.press( screen.getByTestId( "AdvancedSearch.returnToStandardSearch" ) );
-    await screen.findByTestId( "UniversalSearch" );
-    await submitUniversalSearch( );
-
-    await waitFor( ( ) => {
-      expect( lastObservationsSearchParams( ) ).not.toHaveProperty( "sounds" );
-    } );
-    expect( filterBadge( ) ).not.toBeOnTheScreen( );
-    expect( screen.getByTestId( "ExploreHeader.searchButton" ) )
-      .toHaveAccessibleName( t( "Search" ) );
-  } );
 } );

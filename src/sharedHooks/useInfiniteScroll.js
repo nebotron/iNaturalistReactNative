@@ -1,5 +1,6 @@
 // @flow
 
+import { useMemo } from "react";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 const useInfiniteScroll = (
@@ -7,7 +8,9 @@ const useInfiniteScroll = (
   apiCall: Function,
   newInputParams: Object,
   options?: {
-    enabled: boolean
+    enabled: boolean,
+    // Keep the results on disk, as Explore does; see useAuthenticatedInfiniteQuery
+    persist?: boolean
   },
 ): Object => {
   const baseParams = {
@@ -22,7 +25,9 @@ const useInfiniteScroll = (
     isFetching,
     isFetchingNextPage,
     fetchNextPage,
+    hasNextPage,
     refetch,
+    refreshFirstPage,
     status,
   } = useAuthenticatedInfiniteQuery(
     [queryKey, baseParams],
@@ -50,12 +55,18 @@ const useInfiniteScroll = (
       },
 
       enabled: options?.enabled,
+      persist: options?.persist,
     },
     /* eslint-enable consistent-return */
   );
 
   const pages = data?.pages || [];
-  const allResults = pages?.map( page => page?.results ).flat( Infinity ).filter( Boolean );
+  // Memoized so lists sorted on device (e.g. Explore species in taxonomic order) only re-sort
+  // when a page arrives
+  const allResults = useMemo(
+    ( ) => ( data?.pages || [] ).map( page => page?.results ).flat( Infinity ).filter( Boolean ),
+    [data?.pages],
+  );
 
   return {
     data: allResults,
@@ -63,7 +74,11 @@ const useInfiniteScroll = (
     isFetching,
     isFetchingNextPage,
     fetchNextPage,
+    hasNextPage,
     refetch,
+    // Goes to the network and keeps the results shown until it works; see
+    // useAuthenticatedInfiniteQuery
+    refreshFirstPage,
     status,
     totalResults: pages?.[0]
       ? pages?.[0].total_results

@@ -5,6 +5,7 @@ import { resultToSubject }
   from "components/Explore/helpers/universalSearchSubject";
 import type { TabStackScreenProps } from "navigation/types";
 import type {
+  ExploreFilters,
   ExploreLocationState,
   ExploreSubject,
   ExploreTab,
@@ -12,6 +13,7 @@ import type {
 } from "providers/ExploreContext";
 import { EXPLORE_PLACE_MODE } from "providers/ExploreContext";
 import { useCallback } from "react";
+import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import useStoredLayout, { EXPLORE_LAYOUT_STORAGE_KEY } from "sharedHooks/useStoredLayout";
 
 interface NavigateToExploreOptions {
@@ -21,6 +23,9 @@ interface NavigateToExploreOptions {
   place?: Partial<Place> | null;
   tab?: ExploreTab;
   layout?: "map" | "grid" | "list";
+  // ExploreV2 only
+  filters?: Partial<ExploreFilters>;
+  sortBy?: OBSERVATIONS_SORT;
 }
 
 const placeLocation = ( place?: Partial<Place> | null ): ExploreLocationState => {
@@ -61,6 +66,8 @@ const useNavigateToExplore = ( ) => {
     place,
     tab = OBSERVATIONS_TAB,
     layout,
+    filters,
+    sortBy,
   }: NavigateToExploreOptions ) => {
     if ( layout ) {
       writeLayout( layout );
@@ -74,6 +81,8 @@ const useNavigateToExplore = ( ) => {
         : {} ),
       location: placeLocation( place ),
       activeTab: tab,
+      filters,
+      sortBy,
     } );
   }, [navigation, writeLayout] );
 };

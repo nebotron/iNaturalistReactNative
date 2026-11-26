@@ -1,23 +1,35 @@
 import { act } from "@testing-library/react-native";
 import useApplySavedSearch from "components/Explore/hooks/useApplySavedSearch";
-import { defaultExploreFilters, EXPLORE_ACTION } from "providers/ExploreContext";
-import useStore from "stores/useStore";
+import { EXPLORE_ACTION } from "providers/ExploreContext";
 import { renderHookInApp } from "tests/helpers/render";
 import { savedSearch as buildSavedSearch } from "tests/helpers/savedSearch";
 
 const mockPopTo = jest.fn( );
+const mockTabDispatch = jest.fn( );
+const mockTabGoBack = jest.fn( );
+const mockTabStack = {
+  dispatch: mockTabDispatch,
+  goBack: mockTabGoBack,
+  getState: ( ) => ( {
+    index: 1,
+    routes: [
+      { key: "root-explore", name: "RootExplore" },
+      { key: "hotspot-explore", name: "Explore" },
+    ],
+  } ),
+};
 jest.mock( "@react-navigation/native", ( ) => ( {
   ...jest.requireActual( "@react-navigation/native" ),
-  useNavigation: ( ) => ( { popTo: mockPopTo } ),
+  useNavigation: ( ) => ( { popTo: mockPopTo, getParent: ( ) => mockTabStack } ),
 } ) );
 
 const mockDispatch = jest.fn( );
+let mockFromHotspot = false;
 jest.mock( "providers/ExploreContext", ( ) => ( {
   ...jest.requireActual( "providers/ExploreContext" ),
   useExplore: ( ) => ( { dispatch: mockDispatch, state: {} } ),
+  useExploreFromHotspot: ( ) => mockFromHotspot,
 } ) );
-
-const advancedSearchMode = ( ) => useStore.getState( ).exploreAdvancedSearch.advancedSearchMode;
 
 const applySearch = search => {
   const { result } = renderHookInApp( ( ) => useApplySavedSearch( ) );
@@ -27,7 +39,9 @@ const applySearch = search => {
 beforeEach( ( ) => {
   mockDispatch.mockClear( );
   mockPopTo.mockClear( );
-  useStore.getState( ).exploreAdvancedSearch.setAdvancedSearchMode( false );
+  mockTabDispatch.mockClear( );
+  mockTabGoBack.mockClear( );
+  mockFromHotspot = false;
 } );
 
 describe( "useApplySavedSearch", ( ) => {
@@ -43,17 +57,20 @@ describe( "useApplySavedSearch", ( ) => {
     expect( mockPopTo ).toHaveBeenCalledWith( "ExploreResults" );
   } );
 
-  it( "switches to advanced search mode for a search with filters", ( ) => {
-    applySearch( buildSavedSearch( {
-      filters: { ...defaultExploreFilters, casual: true },
+  it( "replaces an Explore opened from a hotspot with the Explore it came from", ( ) => {
+    mockFromHotspot = true;
+    const search = buildSavedSearch( );
+
+    applySearch( search );
+
+    expect( mockDispatch ).not.toHaveBeenCalled( );
+    expect( mockPopTo ).not.toHaveBeenCalled( );
+    expect( mockTabDispatch ).toHaveBeenCalledWith( expect.objectContaining( {
+      source: "root-explore",
+      payload: {
+        params: { loadSavedSearch: search },
+      },
     } ) );
-
-    expect( advancedSearchMode( ) ).toBe( true );
-  } );
-
-  it( "leaves advanced search mode alone for a search without filters", ( ) => {
-    applySearch( buildSavedSearch( ) );
-
-    expect( advancedSearchMode( ) ).toBe( false );
+    expect( mockTabGoBack ).toHaveBeenCalled( );
   } );
 } );

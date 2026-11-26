@@ -12,7 +12,7 @@ const actor = userEvent.setup( );
 
 export const ADD_OBS_OPTIONS = {
   aiCamera: "aicamera-button",
-  standardCamera: "camera-button",
+  audioId: "audio-id-button",
   photoImporter: "import-media-button",
   soundRecorder: "record-sound-button",
   noEvidence: "observe-without-evidence-button",
@@ -37,11 +37,18 @@ export async function advancePhotoLibraryTimers() {
   } );
 }
 
-/** Opens the add-observation bottom sheet from the tab bar. */
-export async function pressAddObservationsButton() {
+async function findAddObservationsButton() {
   const tabBar = await screen.findByTestId( "CustomTabBar" );
-  const addObsButton = await within( tabBar ).findByLabelText( "Add observations" );
-  await actor.press( addObsButton );
+  return within( tabBar ).findByLabelText( "Add observations" );
+}
+
+/**
+ * Opens the add-observation bottom sheet from the tab bar. A regular press
+ * navigates straight to the photo importer or the AI camera, so the wheel with
+ * all the options only opens on a long press.
+ */
+export async function pressAddObservationsButton() {
+  await actor.longPress( await findAddObservationsButton( ) );
 }
 
 /** Presses an option in the open add-observation bottom sheet. */
@@ -53,22 +60,6 @@ export async function pressAddObsOption( testID ) {
       expect( useStore.getState( ).currentObservation ).toBeTruthy( );
     } );
   }
-}
-
-/** Waits for the standard camera screen after a stack reset from the add-obs flow. */
-export async function waitForStandardCameraScreen() {
-  await waitFor( ( ) => {
-    expect( screen.getByTestId( "CameraNavButtons" ) ).toBeVisible( );
-  }, { timeout: 10_000 } );
-}
-
-export async function navigateToStandardCameraFromMyObs() {
-  await waitFor( ( ) => {
-    expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
-  } );
-  await pressAddObservationsButton( );
-  await pressAddObsOption( ADD_OBS_OPTIONS.standardCamera );
-  await waitForStandardCameraScreen( );
 }
 
 export async function waitForMyObservationsScreen() {
@@ -85,6 +76,19 @@ export async function navigateToPhotoImporterFromMyObs() {
   await pressAddObservationsButton( );
   await pressAddObsOption( ADD_OBS_OPTIONS.photoImporter );
   await advancePhotoLibraryTimers( );
+  await waitFor( ( ) => {
+    expect( screen.getByTestId( "PhotoLibrary" ) ).toBeTruthy( );
+  }, { timeout: 10_000 } );
+}
+
+/**
+ * Presses Done in the photo picker. That goes straight on into the cropper for
+ * the batch just picked, with Group Photos underneath, so this backs out of
+ * the cropper to land on Group Photos.
+ */
+export async function pressPhotoGalleryDone() {
+  await actor.press( screen.getByTestId( "PhotoGallery.done" ) );
+  await actor.press( await screen.findByTestId( "BackButton", {}, { timeout: 10_000 } ) );
 }
 
 export async function waitForSoundRecorderScreen() {
@@ -113,8 +117,17 @@ export async function navigateToAICameraFromMyObs() {
   }, { timeout: 10_000 } );
 }
 
-export async function takeAICameraPhotoAndOpenSuggestions() {
+// The AI camera is the only camera now, and takes several photos before its
+// checkmark moves on
+export const navigateToStandardCameraFromMyObs = navigateToAICameraFromMyObs;
+
+export async function takeStandardCameraPhotoAndConfirm() {
   await actor.press( await screen.findByTestId( "take-photo-button" ) );
+  await actor.press( await screen.findByLabelText( "View suggestions" ) );
+}
+
+export async function takeAICameraPhotoAndOpenSuggestions() {
+  await takeStandardCameraPhotoAndConfirm( );
   await waitFor( ( ) => {
     expect( screen.getByText( /ADD AN ID/ ) ).toBeVisible( );
   }, { timeout: 10_000 } );
@@ -124,11 +137,6 @@ export async function takeAICameraPhotoAndOpenSuggestions() {
 export async function navigateToSuggestionsViaAICameraFromMyObs() {
   await navigateToAICameraFromMyObs( );
   await takeAICameraPhotoAndOpenSuggestions( );
-}
-
-export async function takeStandardCameraPhotoAndConfirm() {
-  await actor.press( await screen.findByTestId( "take-photo-button" ) );
-  await actor.press( await screen.findByLabelText( "View suggestions" ) );
 }
 
 async function pressObsEditSaveButton() {

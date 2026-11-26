@@ -258,7 +258,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 - Arrow functions for React components: `const MyComponent = () => { };`
 - i18next string literal checking enforced - use `t()` for all user-facing text
 - Prefer TypeScript for new files (partial adoption, not required)
-- Husky pre-commit hook (`.husky/pre-commit`) runs `lint-staged` (eslint `--fix` on staged files), regenerates i18n translations, and runs a GitGuardian (`ggshield`) secrets scan
+- Husky pre-push hook (`.husky/pre-push`) runs only when pushing to `main` and checks only files changed in commits not yet on `main`: eslint `--fix`, `flow status`, rubocop, and i18n regeneration when `.ftl` files changed. If anything gets rewritten, the push fails so you can commit the changes.
 
 **Details:** TypeScript conventions (interface-vs-type, Flow coexistence) in `agent-docs/conventions/typescript.md`.
 
@@ -274,6 +274,54 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 
 - Custom logger: `react-native-logs.config.ts`
 - Sentry-style error tracking with Grafana integration
+- **The shipped app's log is readable from a checkout, with no `.env` and no
+  credentials.** Every logger line from a non-dev build is POSTed to a Firebase
+  Realtime Database that allows unauthenticated reads, and
+  `scripts/app_log.py` defaults to it. Read it before theorising about a
+  field bug — it is the only record of what the app actually did:
+  ```bash
+  python3 scripts/app_log.py                   # grouped summary of recent entries
+  python3 scripts/app_log.py --level error     # errors only
+  python3 scripts/app_log.py --grep slow_ui    # entries matching a regex
+  python3 scripts/app_log.py --detail 3        # full entries behind summary group 3
+  python3 scripts/app_log.py --dump log.json   # everything, for analysis
+  ```
+  Never run `--clear`. Entries carry the `commit` they came from, so check
+  whether a crash predates the fix before chasing it.
+- **TestFlight crash reports** (tester comments, build, device, and the crash
+  log when the device uploaded one) come from App Store Connect:
+  `python3 scripts/testflight_crashes.py` (`--log N` prints one report's log).
+  Needs the App Store Connect API key variables in the environment or `.env`.
+- **Naming the app's own frames** in those crash logs, in `.ips` files from a
+  device, and in the app log's MetricKit stacks: TestFlight builds go up
+  without symbols, so those frames are bare offsets. Each TestFlight run saves
+  a `symbols-<build>` artifact (90 days); for any build, the `iOS symbols`
+  workflow (`.github/workflows/ios-symbols.yml`, input `build`) rebuilds the
+  symbol table and dSYM from the commit that built it. Unzip the artifacts into
+  `scripts/.symbols`, then `python3 scripts/symbolicate.py crash.ips` or
+  `python3 scripts/symbolicate.py --log`.
+- **Battery use** comes from iOS MetricKit, once a day per device:
+  `python3 scripts/power_report.py` tabulates `metrickit_daily` (CPU, GPU,
+  location, network, disk writes), `metrickit_signpost` (the same split by
+  screen and by activity such as Audio ID listening, marked through
+  `ios/iNaturalistReactNative/PowerProfile.h`), and the CPU and disk-write
+  exception reports with their stacks. Those stacks are summarized from
+  every sample (top self and inclusive functions, heaviest whole stacks), but
+  their JavaScript is all Hermes interpreter frames. For that, Hermes's
+  sampling profiler runs continuously at 5 Hz while the app is in front
+  (`ios/iNaturalistReactNative/CpuProfiler.mm`): `js_cpu_summary` every 15
+  minutes in front and on backgrounding, and a faster `cpu_profile` burst
+  when the app uses over ~60% of a core for half a minute. Both name the hot
+  JS functions and stacks, with per-thread CPU and `main.jsbundle`
+  line:column positions (`python3 scripts/app_log.py --grep 'js_cpu|cpu_prof'`).
+  The `symbols-<build>` artifact also holds that build's Metro source map
+  (`<build>.jsbundle.map.gz`), and `python3 scripts/symbolicate.py --js`
+  rewrites those positions as source files and lines.
+- **UI responsiveness markers**, written by `sharedHelpers/uiDelayTracker.ts`
+  and searchable in that log: `slow_screen_transition` (tap to rendered
+  screen) and `slow_ui_work`. `button_stuck_processing` and
+  `button_stuck_loading` cover a responsive thread and a control that has
+  latched.
 - **Sentinel files** (`sharedHelpers/sentinelFiles.ts`) - Debug difficult hardware issues:
   - Created at flow start, deleted on success
   - Log stages during flow (e.g., camera permissions, save photo, location fetch)
@@ -297,7 +345,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 - Branch naming: `mob-{number}-{short-description}` (e.g., `mob-123-fix-upload-crash`)
 - Commit messages: Imperative mood, describe user impact
 - Include `Closes MOB-123` in the commit body to auto-close issues
-- Husky pre-commit hook runs linters automatically
+- Husky pre-push hook runs linters automatically
 - Main branch: `main`
 
 ## Accessibility
@@ -311,7 +359,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 
 In-depth architecture and convention docs for both humans and AI agents. Read the relevant doc before exploring or modifying a subsystem — it captures patterns that aren't obvious from the code alone.
 
-- `architecture/` — `upload-system.md`, `navigation-patterns.md`, `api-layer.md`, `realm-and-zustand.md` (includes working with Realm objects in the React layer)
+- `architecture/` — `upload-system.md`, `navigation-patterns.md`, `api-layer.md`, `realm-and-zustand.md` (includes working with Realm objects in the React layer), `video-stabilization.md` (the Video Stabilizer tool: native/JS split, camera-path model, approaches weighed)
 - `conventions/` — `component-conventions.md`, `i18n-conventions.md`, `import-aliases.md`, `typescript.md`, `nativewind-v4.md` (className resolution gotchas from the NativeWind 2→4 migration)
 - `testing/` — `test-core.md`, `test-components.md`, `integration-test-analysis.md`, `e2e.md` (Detox + Maestro + iOS verification), `scroll-benchmarking.md` (measuring list scroll performance on Android)
 

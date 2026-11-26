@@ -1,0 +1,75 @@
+# Builds Audio ID's bundled, offline model and species table:
+#  - BirdNET v3.0 (full, fp16, from a pinned revision of
+#    tphakala/BirdNET-v3.0-Models) with its per-class tensors sliced to the
+#    species iNaturalist has research-grade sound observations of, matched by
+#    scientific name. Weights go in ios/iNaturalistReactNative/audio_id.data<N>
+#    files under 95 MB each (GitHub's limit is 100 MB) next to audio_id.onnx;
+#    the Xcode project bundles audio_id.data0-1, so update it if the count changes.
+#    The per-species head weights (~76M of the model's 105M) are stored as
+#    int8 per class, which ORT turns back into fp16 at load (onnx_weights.py):
+#    no detection changed on 400 recordings or 327 labeled field clips.
+#    Its spectrogram Conv is replaced by an FFT (fft_frontend.py).
+#  - src/components/AudioId/audioIdSpecies.json: [scientific name, common name,
+#    taxon ID, geomodel index or -1, 1 if a bird] per model output. The app's
+#    geomodel cutoff is 0.03 for birds; at that cutoff it dropped the true
+#    species for 17% of insect and 3% of frog recordings, so other taxa use
+#    0.0003 (eval_regions.py).
+#  - ios/iNaturalistReactNative/audio_geo.onnx: the BirdNET geomodel, its
+#    weights stored as int8 (no Audio ID detection changed on 400 recordings).
+# Usage (from this directory): python3 build_model.py <repo root>
+import json, os, sys, time, urllib.request
+import numpy as np, onnx
+from onnx import numpy_helper
+from huggingface_hub import hf_hub_download
+repo = sys.argv[1]; ios = f"{repo}/ios/iNaturalistReactNative"
+sys.path.insert(0, f"{repo}/scripts"); sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from onnx_weights import store_int8
+from fft_frontend import fft_frontend
+from model_files import save_weights
+HF, REV = "tphakala/BirdNET-v3.0-Models", "71e1ffb06c0323a3428536ac02f4ecc59742c4d6"
+GEO, GEO_FILE = "sammlapp/BirdNET_GeoModel", "BirdNET+_Geomodel_V3.0.3_Global_12K"
+
+if not os.path.exists("inat_sound_species.json"):  # ~25 requests
+    out = []
+    for p in range(1, 30):
+        r = json.loads(urllib.request.urlopen(
+            "https://api.inaturalist.org/v1/observations/species_counts?sounds=true&quality_grade=research"
+            f"&per_page=500&page={p}&locale=en", timeout=120).read())["results"]
+        if not r: break
+        out += [dict(id=x["taxon"]["id"], name=x["taxon"]["name"], common=x["taxon"].get("preferred_common_name"),
+                     iconic=x["taxon"].get("iconic_taxon_name")) for x in r]
+        time.sleep(1.5)
+    json.dump(out, open("inat_sound_species.json", "w"))
+inat = {s["name"]: s for s in json.load(open("inat_sound_species.json"))}
+labels = [l.strip().split("_", 1) for l in open(hf_hub_download(HF, "full/birdnet-v3.0-preview3.1-labels-b1.txt", revision=REV))]
+geo = {l.split("\t")[1]: i for i, l in enumerate(open(hf_hub_download(GEO, f"{GEO_FILE}_Labels.txt")))}
+geo_model = onnx.load(hf_hub_download(GEO, f"{GEO_FILE}_FP16.onnx"))
+store_int8(geo_model); onnx.save(geo_model, f"{ios}/audio_geo.onnx")
+
+idx, species = [], []
+for i, (name, common) in enumerate(labels):
+    s = inat.get(name)
+    if not s: continue
+    idx.append(i)
+    species.append([name, s["common"] or common, s["id"], geo.get(name, -1), int(s["iconic"] == "Aves")])
+json.dump(species, open(f"{repo}/src/components/AudioId/audioIdSpecies.json", "w"), separators=(",", ":"))
+
+m = onnx.load(hf_hub_download(HF, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx", revision=REV)); g = m.graph
+N = g.output[0].type.tensor_type.shape.dim[1].dim_value; idx = np.array(idx)
+for i, t in enumerate(g.initializer):  # per-class tensors: attention/classification convs, linear head
+    a = numpy_helper.to_array(t)
+    if a.ndim and a.shape[0] == N and t.name.startswith(("att_block", "head.")):
+        g.initializer[i].CopyFrom(numpy_helper.from_array(a[idx], t.name))
+del g.value_info[:]
+g.output[0].type.tensor_type.shape.dim[1].dim_value = len(idx)
+for o in list(g.output[1:]): g.output.remove(o)
+# Per-frame logits of the second attention block, [batch, species, 15] per 5 s
+# window, for finding when in a clip the species calls (AudioBirdId timeline).
+g.node.append(onnx.helper.make_node("Cast", ["/cla_1/Conv_output_0"], ["frames"], to=onnx.TensorProto.FLOAT))
+frames = onnx.helper.make_tensor_value_info("frames", onnx.TensorProto.FLOAT, [None, len(idx), None])
+frames.type.tensor_type.shape.dim[0].CopyFrom(g.output[0].type.tensor_type.shape.dim[0])
+g.output.append(frames)
+fft_frontend(m)
+store_int8(m, ["att_block.", "att_block2.", "head."])
+n = save_weights(m, ios)
+print(len(species), "species,", n, "weight files")

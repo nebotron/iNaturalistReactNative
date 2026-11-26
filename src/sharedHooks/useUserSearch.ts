@@ -2,7 +2,13 @@ import { fetchSearchResults } from "api/search";
 import type { ApiOpts, ApiUser } from "api/types";
 import { useAuthenticatedQuery } from "sharedHooks";
 
-const USER_SEARCH_FIELDS = "user.id,user.login,user.icon_url,user.observations_count";
+const USER_SEARCH_FIELDS = [
+  "user.id",
+  "user.login",
+  "user.icon_url",
+  "user.observations_count",
+  "user.created_at",
+].join( "," );
 
 const useUserSearch = ( query: string ) => {
   const trimmedQuery = query.trim( );

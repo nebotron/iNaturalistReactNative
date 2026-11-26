@@ -1,0 +1,74 @@
+import { CommonActions } from "@react-navigation/native";
+import {
+  groupCropResumeParams,
+  observationsTabWithCropper,
+} from "components/SharedComponents/ImageCrop/groupCropResume";
+import { startKeepingCropPreloads } from "components/SharedComponents/ImageCrop/keepCropPreloads";
+import { navigationRef } from "navigation/navigationUtils";
+import { useEffect, useRef } from "react";
+import { useOnboardingShown } from "sharedHelpers/installData";
+import useStore from "stores/useStore";
+
+// On a cold start, if the user has in-progress Group Photos work saved in the
+// persisted store, take them straight back to the Group Photos screen so they
+// pick up exactly where they left off, rather than landing on the default tab.
+const useResumeGroupPhotos = ( ) => {
+  const [onboardingShown] = useOnboardingShown( );
+  const resumedRef = useRef( false );
+
+  // The current bulk crop's next photos and Group Photos' first ones stay
+  // prepared for cropping, so resuming either doesn't wait on a prepare. The
+  // keeper follows the store, so it picks up the saved progress once that has
+  // been read back, and the preloads themselves are kept across restarts.
+  useEffect( ( ) => startKeepingCropPreloads( ), [] );
+
+  useEffect( ( ) => {
+    // Don't jump into a deep screen before the user has finished onboarding.
+    if ( !onboardingShown ) { return ( ) => undefined; }
+
+    const resume = ( ) => {
+      if ( resumedRef.current ) { return; }
+      // Guard against firing before the navigator has mounted, e.g. right
+      // as the app cold-starts on the Login/Onboarding screen.
+      if ( !navigationRef.isReady( ) ) { return; }
+      const { groupedPhotos, groupCropResume } = useStore.getState( );
+      if ( groupedPhotos && groupedPhotos.length > 0 ) {
+        resumedRef.current = true;
+        // A crop left part way reopens the cropper on the photo it was left
+        // on, on top of Group Photos, as the add-observation button does
+        const crop = groupCropResumeParams( groupCropResume, groupedPhotos );
+        if ( crop ) {
+          navigationRef.dispatch( CommonActions.reset( {
+            index: 0,
+            routes: [{
+              name: "TabNavigator",
+              state: {
+                index: 0,
+                routes: [observationsTabWithCropper( crop.params )],
+              },
+            }],
+          } ) );
+          return;
+        }
+        // Resume inside the My Observations tab so the import keeps the bottom
+        // tab bar and the user can step away from it and come back
+        navigationRef.navigate( "TabNavigator", {
+          screen: "ObservationsTab",
+          params: { screen: "GroupPhotos" },
+        } );
+      }
+    };
+
+    // The persisted store rehydrates asynchronously; wait for it so we don't
+    // read an empty default before the saved progress is loaded.
+    let unsubscribe = ( ) => undefined;
+    if ( useStore.persist.hasHydrated( ) ) {
+      resume( );
+    } else {
+      unsubscribe = useStore.persist.onFinishHydration( resume );
+    }
+    return ( ) => unsubscribe( );
+  }, [onboardingShown] );
+};
+
+export default useResumeGroupPhotos;

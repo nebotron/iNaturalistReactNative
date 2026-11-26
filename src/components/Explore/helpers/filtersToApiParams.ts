@@ -1,3 +1,5 @@
+import type { EvidenceTypeApiParams } from "components/Explore/helpers/evidenceTypes";
+import { evidenceTypesToApiParams } from "components/Explore/helpers/evidenceTypes";
 import type { ExploreFilters } from "providers/ExploreContext";
 import {
   ESTABLISHMENT_MEAN,
@@ -8,7 +10,7 @@ import {
 } from "providers/ExploreContext";
 
 // Maps the typed AdvancedSearch filters to iNat API query params.
-export interface FilterApiParams {
+export interface FilterApiParams extends EvidenceTypeApiParams {
   quality_grade?: string[];
   hrank?: string;
   lrank?: string;
@@ -31,6 +33,11 @@ export interface FilterApiParams {
   user_id?: number;
   unobserved_by_user_id?: number;
   project_id?: number;
+  popular?: boolean;
+  // Not an API param: the API has no filter for who faved an observation and
+  // ignores it. Explore's observation search narrows to popular (faved by
+  // anyone) and keeps only this user's faves on device.
+  faved_by?: number;
 }
 
 const PHOTO_LICENSE_PARAMS: Partial<Record<PHOTO_LICENSE, string>> = {
@@ -101,6 +108,13 @@ const filtersToApiParams = (
   if ( filters.photoLicense !== PHOTO_LICENSE.ALL ) {
     const license = PHOTO_LICENSE_PARAMS[filters.photoLicense];
     if ( license ) { params.photo_license = license; }
+  }
+
+  Object.assign( params, evidenceTypesToApiParams( filters.evidenceTypes ) );
+
+  if ( filters.favedByMe && viewerId ) {
+    params.popular = true;
+    params.faved_by = viewerId;
   }
 
   if ( filters.user?.id ) { params.user_id = filters.user.id; }

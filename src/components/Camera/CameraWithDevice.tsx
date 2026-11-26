@@ -82,12 +82,16 @@ const CameraWithDevice = ( {
         : (
           <AICamera
             camera={camera}
+            confirmPhotosInProgress={confirmPhotosInProgress}
             device={device}
             flipCamera={flipCamera}
+            handleCheckmarkPress={handleCheckmarkPress}
             hasLocationPermissions={hasLocationPermissions}
             isLandscapeMode={isLandscapeMode}
+            newPhotoUris={newPhotoUris}
             photoOutput={photoOutput}
             requestLocationPermissions={requestLocationPermissions}
+            setNewPhotoUris={setNewPhotoUris}
             takePhotoAndStoreUri={takePhotoAndStoreUri}
             takePhotoOptions={takePhotoOptions}
             takingPhoto={takingPhoto}

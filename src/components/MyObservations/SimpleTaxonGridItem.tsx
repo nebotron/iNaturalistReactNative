@@ -1,10 +1,13 @@
 import classNames from "classnames";
 import { Body4, DisplayTaxonName, IconicTaxonIcon } from "components/SharedComponents";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
+import CachedImage from "components/SharedComponents/CachedImage";
 import {
-  Image, LinearGradient, Pressable, View,
+  LinearGradient, Pressable, View,
 } from "components/styledComponents";
 import React from "react";
+import type { ViewStyle } from "react-native";
+import { PixelRatio } from "react-native";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 import type { SpeciesCount } from "types/sorting";
@@ -26,7 +29,7 @@ interface Props {
   source: {
     uri: string;
   };
-  style?: object;
+  style?: ViewStyle;
   speciesCount: SpeciesCount;
 }
 
@@ -41,6 +44,10 @@ const SimpleTaxonGridItem = ( {
 }: Props ) => {
   const { t } = useTranslation();
   const { count } = speciesCount;
+  // Decode no more pixels than the tile shows
+  const tilePx = typeof style?.width === "number"
+    ? Math.ceil( style.width * PixelRatio.get( ) )
+    : undefined;
 
   return (
     <Pressable
@@ -62,12 +69,13 @@ const SimpleTaxonGridItem = ( {
         />
       </View>
       { source?.uri && (
-        <Image
+        // CachedImage rather than <Image>, whose HTTP cache revalidates these
+        // URLs (the CDN sends no Cache-Control) and misses offline
+        <CachedImage
           source={source}
           className="grow aspect-square"
           testID="TaxonGridItem.photo"
-          accessibilityIgnoresInvertColors
-          fadeDuration={0}
+          maxPixelSize={tilePx}
         />
       ) }
       <LinearGradient

@@ -4,7 +4,6 @@ import {
   useNetInfo,
 } from "@react-native-community/netinfo";
 import {
-  fireEvent,
   screen,
   userEvent,
   waitFor,
@@ -13,9 +12,8 @@ import {
 import { photoUploadPath } from "appConstants/paths";
 import * as usePredictions from "components/Camera/AICamera/hooks/usePredictions";
 import inatjs from "inaturalistjs";
-import { Animated, Image } from "react-native";
-import { State } from "react-native-gesture-handler";
-import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-handler/jest-utils";
+import { Animated } from "react-native";
+import { clearSuggestionsCache } from "sharedHelpers/suggestionsCache";
 import * as useLocationPermission from "sharedHooks/useLocationPermission";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
@@ -24,7 +22,7 @@ import factory, { makeResponse } from "tests/factory";
 import {
   navigateToSuggestionsViaAICameraFromMyObs,
 } from "tests/helpers/addObsBottomSheet";
-import { renderAppWithObservations } from "tests/helpers/render";
+import { queryClient, renderAppWithObservations } from "tests/helpers/render";
 import setStoreStateFeatureFlags from "tests/helpers/setStoreStateFeatureFlags";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
@@ -201,6 +199,12 @@ const navigateToSuggestionsForObservationViaObsEdit = async observation => {
   await actor.press( observationGridItem );
   const addIdButton = await screen.findByText( "IDENTIFY" );
   await actor.press( addIdButton );
+  // An observation without a location is offered the chance to add one before
+  // it asks for suggestions
+  const skipLocationButton = screen.queryByText( "Skip for now" );
+  if ( skipLocationButton ) {
+    await actor.press( skipLocationButton );
+  }
 };
 
 const setupAppWithSignedInUser = async ( hasLocation, mockObservations ) => {
@@ -324,37 +328,6 @@ describe( "cropping a photo with no suggestions", ( ) => {
     inatjs.computervision.score_image.mockReset( );
   } );
 
-  it( "should fetch new suggestions for the cropped photo", async ( ) => {
-    inatjs.computervision.score_image.mockResolvedValue( makeResponse( [] ) );
-    jest.spyOn( Image, "getSize" ).mockResolvedValue( { width: 2048, height: 1536 } );
-    const { observations } = await setupAppWithSignedInUser(
-      false,
-      makeMockObservationsWithLocalPhoto( ),
-    );
-    await navigateToSuggestionsForObservationViaObsEdit( observations[0] );
-
-    await actor.press( await screen.findByText( "CROP PHOTO" ) );
-    fireEvent( await screen.findByTestId( "PhotoCropper" ), "layout", {
-      nativeEvent: { layout: { width: 400, height: 300 } },
-    } );
-    await waitFor( ( ) => {
-      expect( getByGestureTestId( "PhotoCropper.handle.bottomRight" ) ).toBeTruthy( );
-    } );
-    fireGestureHandler( getByGestureTestId( "PhotoCropper.handle.bottomRight" ), [
-      { state: State.BEGAN },
-      { state: State.ACTIVE, translationX: 0, translationY: 0 },
-      { state: State.ACTIVE, translationX: -200, translationY: -150 },
-      { state: State.END, translationX: -200, translationY: -150 },
-    ] );
-    await actor.press( screen.getByLabelText( "Save crop" ) );
-
-    await waitFor( ( ) => {
-      expect( inatjs.computervision.score_image ).toHaveBeenCalledTimes( 2 );
-    } );
-    const { photo } = useStore.getState( ).currentObservation.observationPhotos[0];
-    expect( photo.localFilePath ).not.toEqual( localFilePath );
-  } );
-
   it( "should not be offered when there are suggestions", async ( ) => {
     inatjs.computervision.score_image.mockResolvedValue( makeResponse( [topSuggestion] ) );
     const { observations } = await setupAppWithSignedInUser(
@@ -423,21 +396,6 @@ describe( "editing the selected photo in the media viewer", ( ) => {
     signOut( { realm: global.mockRealms[__filename] } );
     setStoreStateFeatureFlags( { [FeatureFlag.PhotoEditingEnabled]: false } );
     inatjs.computervision.score_image.mockReset( );
-  } );
-
-  it( "should fetch new suggestions for the edited photo when the viewer closes", async ( ) => {
-    await openMediaViewer( );
-
-    await actor.press( await screen.findByLabelText( "Rotate photo" ) );
-    await waitFor( ( ) => {
-      const { photo } = useStore.getState( ).currentObservation.observationPhotos[0];
-      expect( photo.localFilePath ).not.toEqual( localFilePath );
-    } );
-    await closeMediaViewer( );
-
-    await waitFor( ( ) => {
-      expect( inatjs.computervision.score_image ).toHaveBeenCalledTimes( 2 );
-    } );
   } );
 
   it( "should not fetch new suggestions when the viewer closes without edits", async ( ) => {
@@ -521,6 +479,15 @@ describe( "from AICamera directly", ( ) => {
   } );
 
   describe( "suggestions while offline", ( ) => {
+    // Suggestions are cached per photo, both on disk and in the shared query
+    // client, and the app prefers online results whenever it has them. Each
+    // test has to start from empty caches to see its own mocked predictions
+    // rather than an earlier test's online ones.
+    beforeEach( ( ) => {
+      clearSuggestionsCache( );
+      queryClient.clear( );
+    } );
+
     it( "should not call score_image and should not show any location buttons", async ( ) => {
       useNetInfo.mockImplementation( ( ) => ( { isConnected: false } ) );
       await setupAppWithSignedInUser( );

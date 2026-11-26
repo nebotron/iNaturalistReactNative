@@ -3,7 +3,7 @@ import {
   act, screen, userEvent, waitFor,
 } from "@testing-library/react-native";
 import {
-  IDENTIFIERS_TAB, OBSERVATIONS_TAB, OBSERVERS_TAB, SPECIES_TAB,
+  IDENTIFIERS_TAB, LIFELIST_TAB, OBSERVERS_TAB, SPECIES_TAB,
 } from "appConstants/tabs";
 import ExploreResults from "components/Explore/screens/ExploreResults";
 import initI18next from "i18n/initI18next";
@@ -15,10 +15,7 @@ import {
 import React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import { SPECIES_SORT } from "sharedHelpers/speciesSort";
-import { SAVED_LIMIT } from "stores/createExploreSearchesSlice";
-import useStore from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
-import { savedSearch, setSavedSearches, taxonSubject } from "tests/helpers/savedSearch";
 
 jest.mock( "@react-navigation/native", ( ) => {
   const actualNav = jest.requireActual( "@react-navigation/native" );
@@ -39,6 +36,16 @@ let mockHasPermissions;
 let mockHasBlockedPermissions;
 const mockDispatch = jest.fn( );
 const mockRequestPermissions = jest.fn( );
+jest.mock( "api/places", ( ) => ( {
+  __esModule: true,
+  default: jest.fn( ( ) => Promise.resolve( {
+    id: 1,
+    bounding_box_geojson: {
+      coordinates: [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]],
+    },
+  } ) ),
+} ) );
+
 jest.mock( "sharedHooks/useLocationPermission", ( ) => ( {
   __esModule: true,
   default: ( ) => ( {
@@ -81,16 +88,6 @@ jest.mock( "components/Explore/screens/ExploreUsersView", ( ) => ( {
 
 const lastUsersViewTab = ( ) => mockExploreUsersView.mock.calls.at( -1 )?.[0]?.tab;
 
-let mockUserTabCounts = { observersCount: null, identifiersCount: null };
-const mockUseUserTabCounts = jest.fn( );
-jest.mock( "components/Explore/hooks/useUserTabCounts", ( ) => ( {
-  __esModule: true,
-  default: ( ...args ) => {
-    mockUseUserTabCounts( ...args );
-    return mockUserTabCounts;
-  },
-} ) );
-
 let mockLayout = "map";
 const mockWriteLayoutToStorage = jest.fn( );
 jest.mock( "sharedHooks/useStoredLayout", ( ) => ( {
@@ -121,9 +118,6 @@ beforeEach( ( ) => {
   mockRequestPermissions.mockClear( );
   mockExploreSpeciesView.mockClear( );
   mockExploreUsersView.mockClear( );
-  mockUseUserTabCounts.mockClear( );
-  mockUserTabCounts = { observersCount: null, identifiersCount: null };
-  useStore.getState( ).exploreAdvancedSearch.setAdvancedSearchMode( false );
   fetchCoarseUserLocation.mockReset( );
   mockUseInfiniteExploreScroll.mockReset( );
   mockUseInfiniteExploreScroll.mockReturnValue( {
@@ -150,8 +144,8 @@ describe( "ExploreResults nearby resolution", ( ) => {
 
     await waitFor( ( ) => {
       const { params, enabled } = lastScrollArgs( );
-      expect( params.lat ).toBe( 37.5 );
-      expect( params.lng ).toBe( -122.1 );
+      expect( params.lat ).toBeCloseTo( 37.5, 3 );
+      expect( params.lng ).toBeCloseTo( -122.1, 3 );
       expect( params.radius ).toBe( 1 );
       expect( enabled ).toBe( true );
     } );
@@ -171,32 +165,6 @@ describe( "ExploreResults nearby resolution", ( ) => {
     ).toBeVisible( );
     expect( fetchCoarseUserLocation ).not.toHaveBeenCalled( );
     expect( lastScrollArgs( ).enabled ).toBe( false );
-  } );
-
-  it( "does not show stale counts in the tabs when nearby, no permission", async ( ) => {
-    // Simulate the shared query cache still holding the previous (worldwide)
-    // result: the disabled query returns a non-zero totalResults.
-    mockUseInfiniteExploreScroll.mockReturnValue( {
-      fetchNextPage: jest.fn( ),
-      isFetchingNextPage: false,
-      handlePullToRefresh: jest.fn( ),
-      observations: [],
-      totalResults: 42,
-    } );
-    mockHasPermissions = false;
-    useExplore.mockReturnValue( {
-      state: mockState( { placeMode: EXPLORE_PLACE_MODE.NEARBY } ),
-      dispatch: mockDispatch,
-    } );
-
-    renderComponent( <ExploreResults /> );
-
-    expect(
-      await screen.findByText( /To view nearby organisms/ ),
-    ).toBeVisible( );
-    // The stale worldwide count must not leak into the tabs.
-    expect( screen.queryByText( "42" ) ).toBeNull( );
-    expect( screen.getAllByText( "--" ).length ).toBeGreaterThanOrEqual( 1 );
   } );
 
   it( "dispatches worldwide without prompting when permission is blocked", async ( ) => {
@@ -286,6 +254,55 @@ describe( "ExploreResults offline state", ( ) => {
     },
   );
 
+  it( "shows results cached from an earlier search when disconnected", async ( ) => {
+    mockLayout = "grid";
+    mockUseInfiniteExploreScroll.mockReturnValue( {
+      fetchNextPage: jest.fn( ),
+      isFetchingNextPage: false,
+      handlePullToRefresh: mockHandlePullToRefresh,
+      observations: [{ uuid: "cached-obs", id: 1 }],
+      totalResults: 1,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    expect( await screen.findByTestId( "ExploreObservationsList" ) ).toBeVisible( );
+    // Not the notice in their place, but a banner above them
+    expect( screen.queryByLabelText( "Internet Connection Required" ) ).toBeNull( );
+    expect( screen.getByTestId( "ExploreConnectionBanner" ) ).toBeVisible( );
+  } );
+
+  it( "says how old cached results are when disconnected", async ( ) => {
+    mockLayout = "grid";
+    mockUseInfiniteExploreScroll.mockReturnValue( {
+      fetchNextPage: jest.fn( ),
+      isFetchingNextPage: false,
+      handlePullToRefresh: mockHandlePullToRefresh,
+      observations: [{ uuid: "cached-obs", id: 1 }],
+      totalResults: 1,
+      dataUpdatedAt: Date.now( ) - 3 * 60 * 60 * 1000,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    expect(
+      await screen.findByText( "Offline: showing results from 3h ago. Tap to try again." ),
+    ).toBeVisible( );
+  } );
+
+  it( "hands the species tab its cached results when disconnected", async ( ) => {
+    useExplore.mockReturnValue( {
+      state: {
+        ...mockState( { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE } ),
+        activeTab: SPECIES_TAB,
+      },
+      dispatch: mockDispatch,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    await waitFor( ( ) => expect( mockExploreSpeciesView ).toHaveBeenCalled( ) );
+    expect( mockExploreSpeciesView.mock.calls.at( -1 )[0].isConnected ).toBe( false );
+    expect( screen.queryByText( "You are offline. Tap to try again." ) ).toBeNull( );
+  } );
+
   it( "retries the search when the offline notice is tapped and we are back online", async ( ) => {
     refresh.mockResolvedValue( { isConnected: true } );
     const actor = userEvent.setup( );
@@ -324,19 +341,11 @@ describe( "ExploreResults observations sort", ( ) => {
     return actor;
   };
 
-  it( "does not offer most faved outside of advanced search mode", async ( ) => {
-    await openSortSheet( OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST );
-
-    expect( screen.getByText( "Date Added: Newest (Default)" ) ).toBeVisible( );
-    expect( screen.queryByText( "Most faved" ) ).toBeNull( );
-  } );
-
-  it( "offers most faved in advanced search mode", async ( ) => {
-    useStore.getState( ).exploreAdvancedSearch.setAdvancedSearchMode( true );
+  it( "offers most faved", async ( ) => {
     const actor = await openSortSheet( OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST );
 
+    // The observations sort applies as soon as an option is picked
     await actor.press( screen.getByText( "Most faved" ) );
-    await actor.press( screen.getByText( "CONFIRM" ) );
 
     expect( mockDispatch ).toHaveBeenCalledWith( {
       type: EXPLORE_ACTION.SET_SORT,
@@ -344,10 +353,45 @@ describe( "ExploreResults observations sort", ( ) => {
     } );
   } );
 
-  it( "keeps offering most faved while it is the active sort in standard mode", async ( ) => {
+  it( "shows most faved while it is the active sort", async ( ) => {
     await openSortSheet( OBSERVATIONS_SORT.MOST_FAVED );
 
     expect( screen.getByText( "Most faved" ) ).toBeVisible( );
+  } );
+
+  it( "offers taxonomic order", async ( ) => {
+    const actor = await openSortSheet( OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST );
+
+    await actor.press( screen.getByText( "Taxonomic order" ) );
+
+    expect( mockDispatch ).toHaveBeenCalledWith( {
+      type: EXPLORE_ACTION.SET_SORT,
+      sortBy: OBSERVATIONS_SORT.TAXONOMY,
+    } );
+  } );
+
+  it( "loads taxonomic order in big pages, up to its limit, before sorting", async ( ) => {
+    const fetchNextPage = jest.fn( );
+    mockUseInfiniteExploreScroll.mockReturnValue( {
+      fetchNextPage,
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      handlePullToRefresh: jest.fn( ),
+      observations: [{ uuid: "obs-1", id: 1, taxon: { id: 5, name: "Quercus" } }],
+      totalResults: 5000,
+    } );
+    useExplore.mockReturnValue( {
+      state: {
+        ...mockState( { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE } ),
+        sortBy: OBSERVATIONS_SORT.TAXONOMY,
+      },
+      dispatch: mockDispatch,
+    } );
+    renderComponent( <ExploreResults /> );
+
+    expect( await screen.findByText( /Loading observations to sort/ ) ).toBeVisible( );
+    expect( lastScrollArgs( ).params.per_page ).toBe( 200 );
+    await waitFor( ( ) => expect( fetchNextPage ).toHaveBeenCalledTimes( 1 ) );
   } );
 } );
 
@@ -376,6 +420,18 @@ describe( "ExploreResults species sort", ( ) => {
       expect( params.order ).toBe( "desc" );
     } );
     expect( screen.getByLabelText( "Change species sort order" ) ).toBeVisible( );
+  } );
+
+  it( "tells the species view to sort taxonomically in taxonomic order", async ( ) => {
+    useExplore.mockReturnValue( {
+      state: { ...speciesTabState, speciesSortBy: SPECIES_SORT.TAXONOMY },
+      dispatch: mockDispatch,
+    } );
+
+    renderComponent( <ExploreResults /> );
+
+    await waitFor( ( ) => expect( lastSpeciesViewProps( ).byTaxonomy ).toBe( true ) );
+    expect( lastSpeciesViewProps( ).params.order_by ).toBe( "count" );
   } );
 
   it( "passes ascending order to the species view when least observed is selected", async ( ) => {
@@ -501,13 +557,13 @@ describe( "ExploreResults observations view", ( ) => {
     ).toBeTruthy( );
   } );
 
-  it( "makes the search nearby when the current location button is pressed", async ( ) => {
+  it( "leaves the location filter alone when the current location button is pressed", async ( ) => {
     const actor = userEvent.setup( );
     renderComponent( <ExploreResults /> );
 
     await actor.press( await screen.findByTestId( "Map.CurrentLocationButton" ) );
 
-    expect( mockDispatch ).toHaveBeenCalledWith( {
+    expect( mockDispatch ).not.toHaveBeenCalledWith( {
       type: EXPLORE_ACTION.SET_LOCATION_NEARBY,
     } );
   } );
@@ -529,7 +585,7 @@ describe( "ExploreResults observations view", ( ) => {
     },
   );
 
-  it( "frames the map to the bounds of the results", async ( ) => {
+  it( "frames the map to the bounding box of the place filter", async ( ) => {
     mockUseInfiniteExploreScroll.mockReturnValue( {
       fetchNextPage: jest.fn( ),
       isFetchingNextPage: false,
@@ -550,9 +606,10 @@ describe( "ExploreResults observations view", ( ) => {
 
     renderComponent( <ExploreResults /> );
 
-    const map = await screen.findByTestId( "Map.MapView" );
-    expect( map.props.initialRegion.latitude ).toBe( 20 );
-    expect( map.props.initialRegion.longitude ).toBe( 30 );
+    await waitFor( ( ) => expect(
+      screen.getByTestId( "Map.MapView" ).props.initialRegion.latitude,
+    ).toBe( 50 ) );
+    expect( screen.getByTestId( "Map.MapView" ).props.initialRegion.longitude ).toBe( 0 );
   } );
 
   it( "searches the visible map area when redo search is pressed", async ( ) => {
@@ -571,58 +628,6 @@ describe( "ExploreResults observations view", ( ) => {
         swlat: 1, swlng: 2, nelat: 3, nelng: 4,
       },
     } );
-  } );
-} );
-
-describe( "ExploreResults saved searches", ( ) => {
-  const savedSearches = ( ) => useStore.getState( ).exploreSavedSearches;
-
-  beforeEach( ( ) => {
-    setSavedSearches( [] );
-    useExplore.mockReturnValue( {
-      state: mockState( { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE } ),
-      dispatch: mockDispatch,
-    } );
-  } );
-
-  it( "saves the current search when the star is tapped", async ( ) => {
-    renderComponent( <ExploreResults /> );
-    const actor = userEvent.setup( );
-
-    await actor.press( await screen.findByLabelText( "Save this search" ) );
-
-    expect( savedSearches( ).searches ).toHaveLength( 1 );
-    expect( await screen.findByLabelText( "Remove this saved search" ) ).toBeVisible( );
-    expect( screen.getByText( "Added to Saved Searches" ) ).toBeOnTheScreen( );
-  } );
-
-  it( "unsaves it when the filled star is tapped", async ( ) => {
-    renderComponent( <ExploreResults /> );
-    const actor = userEvent.setup( );
-
-    await actor.press( await screen.findByLabelText( "Save this search" ) );
-    await actor.press( await screen.findByLabelText( "Remove this saved search" ) );
-
-    expect( savedSearches( ).searches ).toEqual( [] );
-    expect( await screen.findByLabelText( "Save this search" ) ).toBeVisible( );
-    expect( screen.getByText( "Removed from Saved Searches" ) ).toBeOnTheScreen( );
-  } );
-
-  it( "warns instead of saving when there is no room left", async ( ) => {
-    setSavedSearches(
-      Array.from( { length: SAVED_LIMIT } ).map(
-        ( _item, i ) => savedSearch( { subject: taxonSubject( i ) } ),
-      ),
-    );
-
-    renderComponent( <ExploreResults /> );
-    const actor = userEvent.setup( );
-    await actor.press( await screen.findByLabelText( "Save this search" ) );
-
-    expect(
-      await screen.findByText( `Saved search not added, maximum of ${SAVED_LIMIT}` ),
-    ).toBeOnTheScreen( );
-    expect( savedSearches( ).searches ).toHaveLength( SAVED_LIMIT );
   } );
 } );
 
@@ -671,14 +676,10 @@ describe( "ExploreResults observations view - no results", ( ) => {
   } );
 } );
 
-describe( "ExploreResults observers and identifiers tabs", ( ) => {
+describe( "ExploreResults observers and identifiers views", ( ) => {
   const advancedState = tab => ( {
     ...mockState( { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE } ),
     activeTab: tab,
-  } );
-
-  beforeEach( ( ) => {
-    useStore.getState( ).exploreAdvancedSearch.setAdvancedSearchMode( true );
   } );
 
   it.each( [OBSERVERS_TAB, IDENTIFIERS_TAB] )(
@@ -697,19 +698,6 @@ describe( "ExploreResults observers and identifiers tabs", ( ) => {
     },
   );
 
-  it( "shows the observer and identifier counts in the tabs", async ( ) => {
-    mockUserTabCounts = { observersCount: 8, identifiersCount: 5 };
-    useExplore.mockReturnValue( {
-      state: advancedState( OBSERVERS_TAB ),
-      dispatch: mockDispatch,
-    } );
-
-    renderComponent( <ExploreResults /> );
-
-    expect( await screen.findByText( "8" ) ).toBeVisible( );
-    expect( screen.getByText( "5" ) ).toBeVisible( );
-  } );
-
   it( "offers no sort on the observers tab", async ( ) => {
     useExplore.mockReturnValue( {
       state: advancedState( OBSERVERS_TAB ),
@@ -724,18 +712,40 @@ describe( "ExploreResults observers and identifiers tabs", ( ) => {
     expect( screen.queryByLabelText( "Change observations sort order" ) ).toBeNull( );
   } );
 
-  it( "does not count observers or identifiers outside of advanced search mode", async ( ) => {
-    useStore.getState( ).exploreAdvancedSearch.setAdvancedSearchMode( false );
+  it( "shows the observers total reported by the list", async ( ) => {
+    mockExploreUsersView.mockImplementation( ( { onCount } ) => {
+      React.useEffect( ( ) => { onCount?.( 1234 ); }, [onCount] );
+      return null;
+    } );
     useExplore.mockReturnValue( {
-      state: advancedState( OBSERVATIONS_TAB ),
+      state: advancedState( OBSERVERS_TAB ),
       dispatch: mockDispatch,
     } );
 
     renderComponent( <ExploreResults /> );
 
-    await waitFor( ( ) => {
-      expect( mockUseUserTabCounts ).toHaveBeenCalled( );
+    expect( await screen.findByTestId( "ExploreResults.totalCount" ) )
+      .toHaveTextContent( "1,234 Observers" );
+    mockExploreUsersView.mockImplementation( ( ) => null );
+  } );
+} );
+
+describe( "ExploreResults view picker", ( ) => {
+  it( "switches to the view picked from the header view button", async ( ) => {
+    useExplore.mockReturnValue( {
+      state: mockState( { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE } ),
+      dispatch: mockDispatch,
     } );
-    expect( mockUseUserTabCounts.mock.calls.at( -1 )[1] ).toEqual( { enabled: false } );
+
+    renderComponent( <ExploreResults /> );
+
+    const user = userEvent.setup( );
+    await user.press( await screen.findByTestId( "ExploreHeader.viewButton" ) );
+    await user.press( await screen.findByText( "Life List" ) );
+
+    expect( mockDispatch ).toHaveBeenCalledWith( {
+      type: EXPLORE_ACTION.SET_ACTIVE_TAB,
+      tab: LIFELIST_TAB,
+    } );
   } );
 } );

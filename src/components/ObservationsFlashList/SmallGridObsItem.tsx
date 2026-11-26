@@ -7,7 +7,7 @@ import type { UserPojo } from "realmModels/User";
 
 import ObsImagePreview from "./ObsImagePreview";
 import ObsUploadStatus from "./ObsUploadStatus";
-import { photoFromObservation } from "./util";
+import { photoFromObservation, soundUriFromObservation } from "./util";
 
 interface Props {
   currentUser: UserPojo | null;
@@ -38,11 +38,13 @@ const SmallGridObsItem = ( {
     <ObsImagePreview
       iconicTaxonName={taxon?.iconic_taxon_name}
       className="rounded-none"
+      fitImage
       source={photoUri
         ? { uri: photoUri }
         : undefined}
       // eslint-disable-next-line react-native/no-inline-styles
       style={{ width, height }}
+      soundUri={soundUriFromObservation( observation )}
       useShortGradient
       white
     >

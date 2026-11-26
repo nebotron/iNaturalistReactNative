@@ -132,4 +132,18 @@ describe( "useObservationsUpdates", ( ) => {
     expect( observation.comments_viewed ).toBe( false );
     expect( observation.identifications_viewed ).toBe( false );
   } );
+
+  it( "leaves unviewed state alone when there is no response to reconcile against", ( ) => {
+    const uuid = faker.string.uuid( );
+    writeObs( { uuid, comments_viewed: false, identifications_viewed: false } );
+    // No response yet (or the request was skipped for want of a token). An
+    // empty result is not the same as the server saying nothing is unviewed.
+    mockCurrentData = null;
+
+    renderHook( ( ) => useObservationsUpdates( mockUser ) );
+
+    const observation = findObs( uuid );
+    expect( observation.comments_viewed ).toBe( false );
+    expect( observation.identifications_viewed ).toBe( false );
+  } );
 } );

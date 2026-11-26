@@ -1,9 +1,11 @@
+import { useNavigation } from "@react-navigation/native";
 import deleteRemoteObservationSound from "api/observationSounds";
 import classnames from "classnames";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import { ActivityIndicator, INatIcon, INatIconButton } from "components/SharedComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
 import {
-  DraggableFlatList, Image, Pressable, View,
+  DraggableFlatList, Pressable, View,
 } from "components/styledComponents";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
@@ -20,6 +22,7 @@ import Photo from "realmModels/Photo";
 import { log } from "sharedHelpers/logger";
 import { useAuthenticatedMutation } from "sharedHooks";
 import useFeatureFlag from "sharedHooks/useFeatureFlag";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useTranslation from "sharedHooks/useTranslation";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import useStore from "stores/useStore";
@@ -46,6 +49,7 @@ const EvidenceList = ( {
   handleAddEvidence,
   observationSounds = [],
 }: Props ) => {
+  const navigation = useNavigation( );
   const currentObservation = useStore( state => state.currentObservation );
 
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
@@ -56,6 +60,7 @@ const EvidenceList = ( {
   const savingPhoto = useStore( state => state.savingPhoto );
   const realm = useRealm( );
   const { t } = useTranslation( );
+  const { trackImageDeleted } = useInputImageTracking( );
   const [selectedMediaUri, setSelectedMediaUri] = useState<string | null>( null );
   const [deleting, setDeleting] = useState( false );
   const imageClass = "h-16 w-16 justify-center mx-1.5 rounded-lg";
@@ -65,9 +70,13 @@ const EvidenceList = ( {
     [currentObservation?.observationPhotos],
   );
 
-  const photoUris = observationPhotos?.map(
-    obsPhoto => Photo.displayLocalOrRemoteSquarePhoto( obsPhoto.photo ),
+  const photoUris = useMemo(
+    ( ) => observationPhotos
+      .map( obsPhoto => Photo.displayLocalOrRemoteSquarePhoto( obsPhoto.photo ) )
+      .filter( Boolean ),
+    [observationPhotos],
   );
+
   const mediaUris = useMemo( ( ) => ( [
     ...photoUris,
     ...observationSounds.map( obsSound => obsSound.sound.file_url ),
@@ -103,14 +112,11 @@ const EvidenceList = ( {
           className={classnames( imageClass )}
           testID={`EvidenceList.${obsPhotoUri}`}
         >
-          <View className="rounded-lg overflow-hidden">
-            <Image
-              source={{ uri: obsPhotoUri }}
-              testID="ObsEdit.photo"
-              className="w-fit h-full flex items-center justify-center"
-              accessibilityIgnoresInvertColors
-            />
-          </View>
+          <CachedImage
+            source={{ uri: obsPhotoUri }}
+            testID="ObsEdit.photo"
+            className="w-full h-full rounded-lg"
+          />
         </Pressable>
       </ScaleDecorator>
     ),
@@ -168,24 +174,81 @@ const EvidenceList = ( {
     // If there was was only one item and it was deleted, close the modal by
     // nullifying the selected media URI. Otherwise, choose the last
     // remaining item.
-    const remainingMediaUris = mediaUris.filter( uri => uri !== deletedUri );
+    //
+    // A synced photo with a local file copy is identified by its local file
+    // URI (what the delete button passes), but mediaUris stores the remote URL
+    // for such photos. Normalize to the display URI before filtering.
+    const matchedObsPhoto = observationPhotos.find( op => {
+      const localUri = Photo.getLocalPhotoUri( op.photo?.localFilePath );
+      return localUri === deletedUri || op.photo?.url === deletedUri;
+    } );
+    const effectiveDeletedUri = matchedObsPhoto
+      ? Photo.displayLocalOrRemoteSquarePhoto( matchedObsPhoto.photo )
+      : deletedUri;
+    const remainingMediaUris = mediaUris.filter( uri => uri !== effectiveDeletedUri );
     if ( remainingMediaUris.length === 0 ) {
       setSelectedMediaUri( null );
     } else {
       setSelectedMediaUri( remainingMediaUris[remainingMediaUris.length - 1] );
     }
     setDeleting( false );
-  }, [mediaUris, setSelectedMediaUri] );
+  }, [mediaUris, observationPhotos, setSelectedMediaUri] );
 
   const { mutate: deleteObservationSoundMutate } = useAuthenticatedMutation(
     ( params, optsWithAuth ) => deleteRemoteObservationSound( params, optsWithAuth ),
   );
 
   const onDeletePhoto = useCallback( async ( uriToDelete: string ) => {
-    await ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
+    try {
+      await ObservationPhoto.deletePhoto( uriToDelete, currentObservation, realm );
+    } catch ( deletePhotoError ) {
+      // Still on the server: keep it here too, so the observation matches.
+      logger.error( "[EvidenceList] failed to delete photo: ", deletePhotoError );
+      Alert.alert(
+        t( "Failed-to-delete-photo" ),
+        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
+      );
+      return;
+    }
     deletePhotoFromObservation( uriToDelete );
+    trackImageDeleted( uriToDelete );
     afterMediaDeleted( uriToDelete );
-  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation, realm] );
+  }, [
+    afterMediaDeleted,
+    currentObservation,
+    deletePhotoFromObservation,
+    realm,
+    t,
+    trackImageDeleted,
+  ] );
+
+  const onCropPhoto = useCallback( photo => {
+    const cropUri = Photo.displayCropSourcePhoto( photo );
+    if ( !cropUri ) {
+      return;
+    }
+
+    const obsPhoto = observationPhotos.find( candidate => {
+      const candidateUri = Photo.displayCropSourcePhoto( candidate.photo );
+      const candidateLargeUri = Photo.displayLocalOrRemoteLargePhoto( candidate.photo );
+      const candidateSquareUri = Photo.displayLocalOrRemoteSquarePhoto( candidate.photo );
+      return candidateUri === cropUri
+        || candidateLargeUri === Photo.displayLocalOrRemoteLargePhoto( photo )
+        || candidateSquareUri === Photo.displayLocalOrRemoteSquarePhoto( photo );
+    } );
+
+    if ( !obsPhoto ) {
+      return;
+    }
+
+    setSelectedMediaUri( null );
+    navigation.navigate( "ImageCropEditor", {
+      imageUri: cropUri,
+      context: "observationEdit",
+      observationPhotoUuid: obsPhoto.uuid,
+      onCropSaved: () => setSelectedMediaUri( null ),
+    } );
+  }, [navigation, observationPhotos, setSelectedMediaUri] );
 
   const onDeleteSound = useCallback( async ( uriToDelete: string ) => {
     const obsSound = observationSounds.find( os => os.sound.file_url === uriToDelete );
@@ -257,14 +320,17 @@ const EvidenceList = ( {
         editable
         deleting={deleting}
         onClose={( ) => setSelectedMediaUri( null )}
+        onCropPhoto={onCropPhoto}
         onDeletePhoto={onDeletePhoto}
         onDeleteSound={onDeleteSound}
         onEditPhoto={photoEditingEnabled
           ? replacePhotoInObservation
           : undefined}
+        onReorderPhotos={handleDragAndDrop}
         photos={observationPhotos.map( obsPhoto => obsPhoto.photo )}
         showModal={!!selectedMediaUri || deleting}
         sounds={observationSounds.map( obsSound => obsSound.sound )}
+        soundObservation={currentObservation}
         uri={selectedMediaUri}
       />
     </>

@@ -194,6 +194,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - onnxruntime-c (1.26.0)
   - PromisesObjC (2.4.0)
   - PromisesSwift (2.4.0):
     - PromisesObjC (= 2.4.0)
@@ -1513,6 +1514,8 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
+  - react-native-background-actions (4.1.0):
+    - React-Core
   - react-native-cameraroll (7.10.2):
     - hermes-engine
     - RCTRequired
@@ -2892,6 +2895,7 @@ DEPENDENCIES:
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - NitroImage (from `../node_modules/react-native-nitro-image`)
   - NitroModules (from `../node_modules/react-native-nitro-modules`)
+  - onnxruntime-c
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
   - RCTSwiftUI (from `../node_modules/react-native/ReactApple/RCTSwiftUI`)
@@ -2928,6 +2932,7 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
+  - react-native-background-actions (from `../node_modules/react-native-background-actions`)
   - "react-native-cameraroll (from `../node_modules/@react-native-camera-roll/camera-roll`)"
   - react-native-config (from `../node_modules/react-native-config`)
   - react-native-geocoder-reborn (from `../node_modules/react-native-geocoder-reborn`)
@@ -3034,6 +3039,7 @@ SPEC REPOS:
     - LicensePlist
     - Mute
     - nanopb
+    - onnxruntime-c
     - PromisesObjC
     - PromisesSwift
 
@@ -3123,6 +3129,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
+  react-native-background-actions:
+    :path: "../node_modules/react-native-background-actions"
   react-native-cameraroll:
     :path: "../node_modules/@react-native-camera-roll/camera-roll"
   react-native-config:
@@ -3316,6 +3324,7 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   NitroImage: afc6a15020f24305e6a7a2723fddba88e4765d42
   NitroModules: 10a14722b43e33a9ac233a48cdbdbbb1519ef73c
+  onnxruntime-c: e6e9272f5996fed3ea3ca3c9bc843478b2ecbc73
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   PromisesSwift: 9d77319bbe72ebf6d872900551f7eeba9bce2851
   RCTDeprecation: 7489702d717ceea80e271eeacb3fbca39fa3c056
@@ -3353,6 +3362,7 @@ SPEC CHECKSUMS:
   React-logger: db24f470fd04e25062bba89d0f845f0bb06743f0
   React-Mapbuffer: 89665c9ad30549e2317c893f1e8cfff64f965de6
   React-microtasksnativemodule: 3da114dcb32a85c76f305b053687644cce36cfed
+  react-native-background-actions: 35a1e298faed0957d36469eb21d634f0b6243bcb
   react-native-cameraroll: bd41dfd7020ad77fc1a8b6e61c6a9fa277227456
   react-native-config: 325041b048b990b5308a15560c6d757fc250bf1c
   react-native-geocoder-reborn: a3c3d8460910309e750609c373b6887ec6f67a8f
@@ -3435,6 +3445,6 @@ SPEC CHECKSUMS:
   VisionCameraWorklets: 3f752da1b21dde282f11ad19b67be5c56f51e264
   Yoga: 9e495ad6f457c4ff504a8328981496b5cf41dd7f
 
-PODFILE CHECKSUM: a56cdbc335283992c3213efa5b4cea136cf52edc
+PODFILE CHECKSUM: b0886bbe605e0f22adde899c7f997cc1af288451
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.16.2

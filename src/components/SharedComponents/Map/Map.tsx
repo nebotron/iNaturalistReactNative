@@ -1,4 +1,5 @@
-import { useNavigation } from "@react-navigation/native";
+import { useNetInfo } from "@react-native-community/netinfo";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
 import { Body1 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -20,6 +21,11 @@ import MapView, { UrlTile } from "react-native-maps";
 import type Observation from "realmModels/Observation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import mapTracker from "sharedHelpers/mapPerformanceTracker";
+import {
+  OBSERVATION_TILE_CACHE_PATH,
+  OBSERVATION_TILE_MAX_AGE_S,
+  pruneObservationTileCache,
+} from "sharedHelpers/observationTileCache";
 import { useDebugMode, useDeviceOrientation } from "sharedHooks";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import type { MAP_TYPES } from "stores/createLayoutSlice";
@@ -30,14 +36,16 @@ import CurrentLocationButton from "./CurrentLocationButton";
 import {
   calculateZoom,
   fetchObservationUUID,
+  getMapBoundariesSafely,
   metersToLatitudeDelta,
   OBSCURATION_CELL_SIZE,
   obscurationCellForLatLng,
+  regionForViewportWidth,
   TILE_URL,
-  zoomToDeltas,
 } from "./helpers/mapHelpers";
 import LocationIndicator from "./LocationIndicator";
 import ObscuredLocationIndicator from "./ObscuredLocationIndicator";
+import ScaleBar from "./ScaleBar";
 import SwitchMapTypeButton from "./SwitchMapTypeButton";
 
 // className support: third-party components need explicit registration with
@@ -45,9 +53,38 @@ import SwitchMapTypeButton from "./SwitchMapTypeButton";
 cssInterop( MapView, { className: "style" } );
 
 const NEARBY_DIM_M = 50_000;
-const CURRENT_LOCATION_ZOOM_LEVEL = 20; // target zoom level when user hits current location btn
+// width of the viewport when the user hits the current location button
+const CURRENT_LOCATION_VIEWPORT_WIDTH_M = 3_000;
 const MIN_ZOOM_LEVEL = 0; // default in react-native-maps, for Google Maps only
 const MIN_CENTER_COORDINATE_DISTANCE = 5;
+
+// Params that never change which observations a tile shows: paging, sorting,
+// and what the list asks for. The bounds of a map area search go too: tiles
+// cover the whole map, so pins stay put and new ones fill in as the map pans,
+// and the tile URL, with the tiles cached under it, stays the same for every
+// area searched.
+const NON_TILE_PARAMS = new Set( [
+  "fields",
+  "id_above",
+  "id_below",
+  "nelat",
+  "nelng",
+  "order",
+  "order_by",
+  "page",
+  "per_page",
+  "return_bounds",
+  "swlat",
+  "swlng",
+  "ttl",
+] );
+
+// Android's tile layer blanks as soon as its URL changes, so the last search's
+// tiles stay underneath while the new ones load. There's no event for when they
+// have, so they go after this long online, and stay while offline. iOS keeps them
+// natively (see patches/react-native-maps).
+const PREVIOUS_TILES_MS = 8000;
+const KEEPS_PREVIOUS_TILES = Platform.OS === "android";
 
 const getDefaultRegion = ( initialLatitude?: number, initialLongitude?: number ) => ( {
   latitude: initialLatitude || 25, // Default to something US centric
@@ -61,7 +98,11 @@ const getDefaultRegion = ( initialLatitude?: number, initialLongitude?: number )
 } );
 
 interface Props {
+  // Bottom offset for the current-location and map-type buttons, e.g. to
+  // keep them clear of the home indicator on a map that fills the screen
+  buttonBottomOffset?: number;
   children?: React.ReactNode;
+  mapChildren?: React.ReactNode;
   className?: string;
   currentLocationButtonClassName?: string;
   initialRegion?: Region;
@@ -95,7 +136,9 @@ interface Props {
 // TODO: fallback to another map library
 // for people who don't use GMaps (i.e. users in China)
 const Map = ( {
+  buttonBottomOffset,
   children,
+  mapChildren,
   className = "flex-1",
   currentLocationButtonClassName,
   initialRegion,
@@ -140,6 +183,12 @@ const Map = ( {
       ? calculateZoom( screenWidth, initialRegion.longitudeDelta )
       : 0
   );
+  const [scaleRegion, setScaleRegion] = useState<Region | null>( null );
+  const setLiveScaleRegion = useRef<( r: Region ) => void>( null );
+  const handleRegionChange = useCallback(
+    ( r: Region ) => setLiveScaleRegion.current?.( r ),
+    [],
+  );
   const navigation = useNavigation( );
   const { hasPermissions, renderPermissionsGate, requestPermissions } = useLocationPermission( );
   const [userLocation, setUserLocation] = useState<{
@@ -150,6 +199,9 @@ const Map = ( {
   const mapViewRef = useRef<MapView>( undefined );
   const mapType: MAP_TYPES = useStore( state => state.layout.mapType );
   const [showsUserLocation, setShowsUserLocation] = useState( showsUserLocationProp );
+  // A map on a screen that's covered or on another tab stays mounted; stop its
+  // location updates until it's visible again.
+  const isFocused = useIsFocused( );
 
   let defaultInitialRegion = null;
 
@@ -181,6 +233,13 @@ const Map = ( {
       : null,
   );
 
+  // On Android, suppress the controlled region prop while the user is dragging
+  // so the map doesn't fight the gesture or snap on release.
+  const [isUserDragging, setIsUserDragging] = useState( false );
+  // Ref so we only call setIsUserDragging/onPanDrag once per gesture, not on
+  // every movement event that onPanDrag fires during the drag.
+  const panDragActiveRef = useRef( false );
+
   // In Android, onMapReady does not fire when we pass parameter region instead
   // of parameter initialRegion. This state allows us to fire onMapReady and
   // fire it only once. This state is always false in iOS.
@@ -191,6 +250,14 @@ const Map = ( {
   // desired region to make it stick. This state stores the region for this
   // gesture. This state is always null in iOS.
   const [androidAnimateRegion, setAndroidAnimateRegion] = useState<Region|null>( null );
+
+  // Measured size of the map, which isn't always the size of the screen
+  const [mapSize, setMapSize] = useState<{ width: number; height: number } | null>( null );
+  const handleMapLayout = ( event: LayoutChangeEvent ) => {
+    const { width, height } = event.nativeEvent.layout;
+    setMapSize( { width, height } );
+    onMapLayout?.( event );
+  };
 
   const animateToRegion = ( newRegion: Region ) => {
     mapViewRef.current?.animateToRegion( newRegion );
@@ -214,13 +281,12 @@ const Map = ( {
     regionToAnimate,
   ] );
 
-  const params = useMemo( ( ) => {
-    const newTileParams = { ...tileMapParams };
-    delete newTileParams.order;
-    delete newTileParams.order_by;
-    delete newTileParams.per_page;
-    return newTileParams;
-  }, [tileMapParams] );
+  // In a stable order, so the same search always has the same tile URL
+  const params = useMemo( ( ) => Object.fromEntries(
+    Object.entries( tileMapParams || {} )
+      .filter( ( [key, value] ) => !NON_TILE_PARAMS.has( key ) && value != null && value !== "" )
+      .sort( ( [a], [b] ) => a.localeCompare( b ) ),
+  ), [tileMapParams] );
 
   const onMapPressForObsLyr = useCallback( async ( latLng: LatLng ) => {
     const uuid = await fetchObservationUUID( currentZoom, latLng, params );
@@ -245,14 +311,18 @@ const Map = ( {
     onPermissionGranted,
   } );
 
-  // In Android, we always return a state, either region or androidLocalRegion.
+  // In Android, we always return a state, either region or androidLocalRegion,
+  // unless the user is actively dragging (to avoid fighting the gesture).
   const setRegion = ( ) => {
-    if ( Platform.OS !== "android" && initialRegion ) {
-      return null;
+    let region;
+    if ( Platform.OS === "android" ) {
+      region = isUserDragging
+        ? undefined
+        : androidLocalRegion;
+    } else if ( !initialRegion ) {
+      region = defaultInitialRegion;
     }
-    return Platform.OS === "android"
-      ? androidLocalRegion
-      : defaultInitialRegion;
+    return region;
   };
 
   const handleCurrentLocationPress = useCallback( ( ) => {
@@ -278,21 +348,14 @@ const Map = ( {
       onCurrentLocationPress( );
     }
     if ( userLocation && mapViewRef?.current ) {
-      // Zoom level based on location accuracy.
-      let latitudeDelta = metersToLatitudeDelta( userLocation.accuracy, userLocation.latitude );
-      // Intentional use of latitudeDelta here because longitudeDelta is harder to calculate
-      let longitudeDelta = metersToLatitudeDelta( userLocation.accuracy, userLocation.latitude );
-      // If this map redefines the level we want to zoom into when the user
-      // wants to see their current location, choose which ever is more
-      // zoomed out, the configured zoom level or the zoom level based on the
-      // coordinate accuracy
-      const [configuredLatitudeDelta, configuredLongitudeDelta] = zoomToDeltas(
-        CURRENT_LOCATION_ZOOM_LEVEL,
-        screenWidth,
-        screenHeight,
+      // Show a viewport CURRENT_LOCATION_VIEWPORT_WIDTH_M wide, with the
+      // height following the map's aspect ratio
+      const { latitudeDelta, longitudeDelta } = regionForViewportWidth(
+        userLocation.latitude,
+        CURRENT_LOCATION_VIEWPORT_WIDTH_M,
+        mapSize?.width || screenWidth,
+        mapSize?.height || screenHeight,
       );
-      latitudeDelta = Math.max( latitudeDelta, configuredLatitudeDelta );
-      longitudeDelta = Math.max( longitudeDelta, configuredLongitudeDelta );
 
       animateToRegion( {
         latitude: userLocation.latitude,
@@ -304,6 +367,7 @@ const Map = ( {
   }, [
     onCurrentLocationPress,
     hasPermissions,
+    mapSize,
     requestPermissions,
     screenHeight,
     screenWidth,
@@ -335,10 +399,41 @@ const Map = ( {
 
   const showPointTiles = currentZoom > 13;
 
-  // We want green points and (default) orange grid
+  // We want green points and (default) orange grid. The /heatmap endpoint's
+  // density-to-color mapping isn't tied to a fixed scale, so pairing it with
+  // a hardcoded color gradient made the colors look inconsistent between
+  // zoom levels. /grid uses a fixed color scale tuned per zoom level, so it
+  // stays visually consistent as you zoom in and out.
   const tileUrlTemplate = showPointTiles
     ? `${TILE_URL}/points/{z}/{x}/{y}.png?${queryString}&color=%2374ac00`
     : `${TILE_URL}/grid/{z}/{x}/{y}.png?${queryString}`;
+
+  const { isConnected } = useNetInfo( );
+  const isOffline = isConnected === false;
+  // The template shown, and on Android the one before it, kept underneath
+  // until the new tiles have had time to load. Updated while rendering, so the
+  // old layer never unmounts in between.
+  const [tileLayers, setTileLayers] = useState<{
+    current: string;
+    previous: string | null;
+  }>( { current: tileUrlTemplate, previous: null } );
+  if ( tileLayers.current !== tileUrlTemplate ) {
+    setTileLayers( {
+      current: tileUrlTemplate,
+      previous: KEEPS_PREVIOUS_TILES
+        ? tileLayers.current
+        : null,
+    } );
+  }
+  const previousTileTemplate = tileLayers.previous;
+  useEffect( ( ) => {
+    if ( !previousTileTemplate || isOffline ) return ( ) => undefined;
+    const timer = setTimeout(
+      ( ) => setTileLayers( layers => ( { ...layers, previous: null } ) ),
+      PREVIOUS_TILES_MS,
+    );
+    return ( ) => clearTimeout( timer );
+  }, [previousTileTemplate, isOffline] );
 
   const handleRegionChangeComplete = useCallback( async (
     newRegion: Region,
@@ -355,9 +450,13 @@ const Map = ( {
       }
       shouldSkipRegionUpdate = true;
     }
+    panDragActiveRef.current = false;
+    if ( isUserDragging ) {
+      setIsUserDragging( false );
+    }
     if ( !shouldSkipRegionUpdate ) {
       if ( onRegionChangeComplete ) {
-        const boundaries = await mapViewRef?.current?.getMapBoundaries( );
+        const boundaries = await getMapBoundariesSafely( mapViewRef?.current );
         onRegionChangeComplete( newRegion, boundaries );
       }
       if ( androidLocalRegion ) {
@@ -365,11 +464,13 @@ const Map = ( {
       }
     }
     setReportedZoom( calculateZoom( screenWidth, newRegion.longitudeDelta ) );
+    setScaleRegion( newRegion );
   }, [
     onMapReadyHasFiredAndroid,
     onMapReady,
     onRegionChangeComplete,
     androidLocalRegion,
+    isUserDragging,
     screenWidth,
   ] );
 
@@ -396,6 +497,15 @@ const Map = ( {
     ],
   );
 
+  const handlePanDrag = useCallback( ( ) => {
+    if ( panDragActiveRef.current ) return;
+    panDragActiveRef.current = true;
+    if ( Platform.OS === "android" ) {
+      setIsUserDragging( true );
+    }
+    onPanDrag( );
+  }, [onPanDrag] );
+
   const handleMapPress = e => {
     if ( withPressableObsTiles ) onMapPressForObsLyr( e.nativeEvent.coordinate );
     else if ( openMapScreen ) {
@@ -404,6 +514,33 @@ const Map = ( {
   };
 
   const shouldOverlayObsTiles = withPressableObsTiles || withObsTiles;
+
+  useEffect( ( ) => {
+    if ( shouldOverlayObsTiles ) pruneObservationTileCache( );
+  }, [shouldOverlayObsTiles] );
+
+  const renderObsTiles = ( urlTemplate: string, isPrevious: boolean ) => (
+    <UrlTile
+      // Android keeps a layer per template, so an old one stays mounted
+      // under a new one. On iOS one layer changes template in place, which
+      // keeps the old tiles natively.
+      key={KEEPS_PREVIOUS_TILES
+        ? urlTemplate
+        : "obsTiles"}
+      testID={isPrevious
+        ? "Map.UrlTile.previous"
+        : "Map.UrlTile"}
+      tileSize={512}
+      urlTemplate={urlTemplate}
+      opacity={1}
+      zIndex={isPrevious
+        ? 0
+        : 1}
+      tileCachePath={OBSERVATION_TILE_CACHE_PATH}
+      tileCacheMaxAge={OBSERVATION_TILE_MAX_AGE_S}
+      offlineMode={isOffline}
+    />
+  );
 
   const mapRegion = setRegion( );
 
@@ -498,7 +635,7 @@ const Map = ( {
       style={mapContainerStyle}
       testID="MapView"
       className={mapContainerClass}
-      onLayout={onMapLayout}
+      onLayout={handleMapLayout}
     >
       {renderDebugZoomLevel( )}
       <MapView
@@ -510,8 +647,9 @@ const Map = ( {
         mapType={mapType}
         minZoomLevel={MIN_ZOOM_LEVEL}
         onMapReady={handleMapReady}
-        onPanDrag={onPanDrag}
+        onPanDrag={handlePanDrag}
         onPress={handleMapPress}
+        onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
         onUserLocationChange={handleUserLocationChange}
         pitchEnabled={false}
@@ -522,25 +660,15 @@ const Map = ( {
         scrollEnabled={scrollEnabled}
         showsCompass={showsCompass}
         showsMyLocationButton={false}
-        showsUserLocation={showsUserLocation && hasPermissions}
+        showsUserLocation={showsUserLocation && hasPermissions && isFocused}
         style={style}
         testID={testID || "Map.MapView"}
         zoomEnabled={zoomEnabled}
         zoomTapEnabled={zoomTapEnabled}
       >
-        { shouldOverlayObsTiles
-        && (
-          <UrlTile
-            testID="Map.UrlTile"
-            tileSize={512}
-            urlTemplate={tileUrlTemplate}
-            opacity={
-              showPointTiles
-                ? 1
-                : 0.7
-            }
-          />
-        )}
+        { shouldOverlayObsTiles && previousTileTemplate
+          && renderObsTiles( previousTileTemplate, true )}
+        { shouldOverlayObsTiles && renderObsTiles( tileUrlTemplate, false )}
         { observation && hasCoordinates && ( currentUserCanViewCoords
           ? (
             <LocationIndicator
@@ -556,8 +684,10 @@ const Map = ( {
             />
           )
         ) }
+        {mapChildren}
       </MapView>
       <CurrentLocationButton
+        bottomOffset={buttonBottomOffset}
         showCurrentLocationButton={showCurrentLocationButton}
         currentLocationButtonClassName={currentLocationButtonClassName}
         hasPermissions={hasPermissions}
@@ -566,7 +696,13 @@ const Map = ( {
         onPermissionGranted={onPermissionGranted}
         onPress={handleCurrentLocationPress}
       />
+      <ScaleBar
+        region={scaleRegion || mapRegion || initialRegion}
+        mapWidth={mapSize?.width || screenWidth}
+        liveRegionRef={setLiveScaleRegion}
+      />
       <SwitchMapTypeButton
+        bottomOffset={buttonBottomOffset}
         mapType={mapType}
         showSwitchMapTypeButton={showSwitchMapTypeButton}
         switchMapTypeButtonClassName={switchMapTypeButtonClassName}

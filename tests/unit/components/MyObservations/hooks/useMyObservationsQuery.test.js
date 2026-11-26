@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react-native";
+import { renderHook, waitFor } from "@testing-library/react-native";
 import useMyObservationsQuery from "components/MyObservations/hooks/useMyObservationsQuery";
 import useServerOrderedObservations
   from "components/MyObservations/hooks/useServerOrderedObservations";
@@ -6,6 +6,7 @@ import { useMyObservations } from "providers/MyObservationsContext";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useCurrentUser from "sharedHooks/useCurrentUser";
+import useNonAuthenticatedQuery from "sharedHooks/useQuery";
 import factory from "tests/factory";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 
@@ -22,6 +23,16 @@ jest.mock( "providers/MyObservationsContext", ( ) => ( {
 jest.mock( "sharedHooks/useCurrentUser", ( ) => ( {
   __esModule: true,
   default: jest.fn( ),
+} ) );
+
+// No model taxonomy file on the test device
+jest.mock( "sharedHelpers/offlineTaxonomy", ( ) => ( {
+  loadTaxonomyCache: jest.fn( ( ) => Promise.reject( new Error( "no taxonomy file" ) ) ),
+} ) );
+
+jest.mock( "sharedHooks/useQuery", ( ) => ( {
+  __esModule: true,
+  default: jest.fn( ( ) => ( { data: undefined } ) ),
 } ) );
 
 // UNIQUE REALM SETUP
@@ -248,5 +259,83 @@ describe( "useMyObservationsQuery", ( ) => {
     expect( useServerOrderedObservations ).toHaveBeenCalledWith(
       expect.objectContaining( { enabled: false } ),
     );
+  } );
+
+  it( "sorts local observations taxonomically when logged in, since the API can't", async ( ) => {
+    useMyObservations.mockReturnValue( {
+      state: { observationsSort: OBSERVATIONS_SORT.TAXONOMY },
+    } );
+    // Castanea isn't in Realm, so its name comes from the API
+    useNonAuthenticatedQuery.mockImplementation( ( _key, _fn, { enabled } ) => ( {
+      data: enabled
+        ? new Map( [[200, "Castanea"]] )
+        : undefined,
+    } ) );
+    const realm = global.mockRealms[mockRealmIdentifier];
+    safeRealmWrite( realm, ( ) => {
+      realm.create( "Taxon", {
+        ...factory( "LocalTaxon", {
+          id: 100, name: "Quercus", rank: "genus", rank_level: 20,
+        } ),
+        ancestor_ids: [1],
+      }, "modified" );
+    }, "create ancestor taxon for useMyObservationsQuery" );
+    // ancestor_ids set afterwards, because the factory appends overrides to its default ones
+    const taxonObs = ( id, name, ancestorIds ) => factory( "LocalObservation", {
+      needs_sync: false,
+      taxon: { ...factory( "LocalTaxon", { id, name } ), ancestor_ids: ancestorIds },
+    } );
+    const quercusRubra = taxonObs( 101, "Quercus rubra", [1, 100] );
+    const quercusAlba = taxonObs( 102, "Quercus alba", [1, 100] );
+    const castaneaDentata = taxonObs( 201, "Castanea dentata", [1, 200] );
+    const unknown = factory( "LocalObservation", { needs_sync: false, taxon: null } );
+    [quercusRubra, unknown, castaneaDentata, quercusAlba].forEach( createObservation );
+
+    const { result } = renderHook( ( ) => useMyObservationsQuery( ) );
+
+    await waitFor( ( ) => {
+      expect( result.current.observationIds ).toEqual( [
+        { uuid: castaneaDentata.uuid },
+        { uuid: quercusAlba.uuid },
+        { uuid: quercusRubra.uuid },
+        { uuid: unknown.uuid },
+      ] );
+    } );
+    expect( result.current.isServerAuthoritative ).toEqual( false );
+    expect( useServerOrderedObservations ).toHaveBeenCalledWith(
+      expect.objectContaining( { enabled: false } ),
+    );
+    expect( useNonAuthenticatedQuery ).toHaveBeenLastCalledWith(
+      ["fetchTaxaNames", "1,200"],
+      expect.any( Function ),
+      expect.objectContaining( { enabled: true } ),
+    );
+  } );
+
+  it( "limits taxonomic order to the searched taxon and its descendants", async ( ) => {
+    useMyObservations.mockReturnValue( {
+      state: {
+        observationsSort: OBSERVATIONS_SORT.TAXONOMY,
+        searchedTaxon: { id: 100, name: "Quercus" },
+      },
+    } );
+    const taxonObs = ( id, ancestorIds ) => factory( "LocalObservation", {
+      needs_sync: false,
+      taxon: { ...factory( "LocalTaxon", { id } ), ancestor_ids: ancestorIds },
+    } );
+    const genus = taxonObs( 100, [1] );
+    const species = taxonObs( 101, [1, 100] );
+    const otherGenus = taxonObs( 201, [1, 200] );
+    [genus, species, otherGenus].forEach( createObservation );
+
+    const { result } = renderHook( ( ) => useMyObservationsQuery( ) );
+
+    await waitFor( ( ) => {
+      expect( result.current.observationIds ).toEqual( [
+        { uuid: genus.uuid },
+        { uuid: species.uuid },
+      ] );
+    } );
+    expect( result.current.isServerAuthoritative ).toEqual( false );
   } );
 } );

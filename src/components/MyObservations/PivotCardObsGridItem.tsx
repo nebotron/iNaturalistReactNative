@@ -1,5 +1,8 @@
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
-import { photoFromObservation } from "components/ObservationsFlashList/util";
+import {
+  photoFromObservation,
+  soundUriFromObservation,
+} from "components/ObservationsFlashList/util";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
@@ -29,6 +32,7 @@ const PivotCardObsGridItem = ( { uuid }: { uuid: string } ) => {
       source={photoUri
         ? { uri: photoUri }
         : undefined}
+      soundUri={soundUriFromObservation( obs )}
       testID="PivotCardGridItem"
       useShortGradient
       white

@@ -11,10 +11,12 @@ import { View } from "components/styledComponents";
 import capitalize from "lodash/capitalize";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { RealmTaxon } from "realmModels/types";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
+
+import AddLocationForIDSheet from "./Sheets/AddLocationForIDSheet";
 
 const { useRealm } = RealmContext;
 
@@ -25,7 +27,10 @@ interface Props {
       rank_level: number;
     };
     observationPhotos: object[];
+    observationSounds?: object[];
   };
+  hasLocation: boolean;
+  onLocationPress: ( ) => void;
   resetScreen: boolean;
   setResetScreen: ( resetScreen: boolean ) => void;
   updateObservationKeys: ( param: { taxon: RealmTaxon | undefined } ) => void;
@@ -33,6 +38,8 @@ interface Props {
 
 const IdentificationSection = ( {
   currentObservation,
+  hasLocation,
+  onLocationPress,
   resetScreen,
   setResetScreen,
   updateObservationKeys,
@@ -45,16 +52,21 @@ const IdentificationSection = ( {
   const realm = useRealm( );
 
   const identTaxon = currentObservation?.taxon;
-  const hasPhotos = currentObservation?.observationPhotos?.length > 0;
+  // Sounds get suggestions from Audio ID
+  const hasMedia = ( currentObservation?.observationPhotos?.length || 0 ) > 0
+    || ( currentObservation?.observationSounds?.length || 0 ) > 0;
 
   const hasIdentification = identTaxon && identTaxon.rank_level !== 100;
+
+  const [showNoLocationSheet, setShowNoLocationSheet] = useState( false );
+  const [pendingNavToSuggestions, setPendingNavToSuggestions] = useState( false );
 
   const removeTaxon = useCallback( ( ) => {
     updateObservationKeys( { taxon: undefined } );
   }, [updateObservationKeys] );
 
-  const navToSuggestions = useCallback( ( ) => {
-    if ( hasPhotos ) {
+  const doNavToSuggestions = useCallback( ( ) => {
+    if ( hasMedia ) {
       navigation.push( "Suggestions", {
         entryScreen: "ObsEdit",
         lastScreen: "ObsEdit",
@@ -69,9 +81,25 @@ const IdentificationSection = ( {
     }
   }, [
     hasIdentification,
-    hasPhotos,
+    hasMedia,
     navigation,
   ] );
+
+  const navToSuggestions = useCallback( ( ) => {
+    if ( !hasLocation ) {
+      setShowNoLocationSheet( true );
+    } else {
+      doNavToSuggestions( );
+    }
+  }, [hasLocation, doNavToSuggestions] );
+
+  // Once the user adds a location after pressing "Add Location", navigate to Suggestions
+  useEffect( ( ) => {
+    if ( pendingNavToSuggestions && hasLocation ) {
+      setPendingNavToSuggestions( false );
+      doNavToSuggestions( );
+    }
+  }, [pendingNavToSuggestions, hasLocation, doNavToSuggestions] );
 
   const navToSuggestionsSearch = useCallback( ( ) => {
     navigation.navigate( "SuggestionsTaxonSearch", {
@@ -94,7 +122,7 @@ const IdentificationSection = ( {
       <IconicTaxonChooser
         before={(
           <View className="flex-row ml-6">
-            {hasPhotos
+            {hasMedia
               ? (
                 <Button
                   level={identTaxon
@@ -163,6 +191,20 @@ const IdentificationSection = ( {
 
   return (
     <View className="mt-2">
+      {showNoLocationSheet && (
+        <AddLocationForIDSheet
+          onAddLocation={( ) => {
+            setShowNoLocationSheet( false );
+            setPendingNavToSuggestions( true );
+            onLocationPress( );
+          }}
+          onSkip={( ) => {
+            setShowNoLocationSheet( false );
+            doNavToSuggestions( );
+          }}
+          onClose={( ) => setShowNoLocationSheet( false )}
+        />
+      )}
       <View className="ml-6 flex-row">
         <Heading4>{t( "IDENTIFICATION" )}</Heading4>
         {hasIdentification && (

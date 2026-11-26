@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>iNaturalist</string>
+	<string>Feral iNat</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>iNaturalist</string>
+	<string>Feral iNat</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -29,6 +29,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>feralinat</string>
 				<string>inaturalistmobile</string>
 			</array>
 		</dict>
@@ -69,6 +70,8 @@
 	<string>iNaturalist uses the camera to add photos to your observations of nature.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© iNaturalist</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Track your location in the background so we can compare it to your photos' GPS data.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Add GPS coordinates to observations, show your location on maps, and more.</string>
 	<key>NSMicrophoneUsageDescription</key>
@@ -79,6 +82,16 @@
 	<string>Export and import iNaturalist photos to and from your library.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).usbimport.*</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>location</string>
+		<string>processing</string>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Lato-Bold.ttf</string>
@@ -89,6 +102,23 @@
 		<string>Lato-Regular.ttf</string>
 		<string>INatIcon.ttf</string>
 	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIDesignRequiresCompatibility</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -13,6 +13,8 @@ module.exports = {
     mtime: new Date(),
   } ) ),
   readFile: jest.fn( ( ) => "testdata" ),
+  read: jest.fn( async ( ) => "" ),
+  downloadFile: jest.fn( ( ) => ( { promise: Promise.resolve( { statusCode: 200 } ) } ) ),
   readDir: jest.fn( async ( ) => ( [
     {
       ctime: new Date(),

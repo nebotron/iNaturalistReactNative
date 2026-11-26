@@ -1,11 +1,14 @@
 import { useCallback } from "react";
+import { getTunable } from "sharedHelpers/tunableParams";
 import useLayoutPrefs from "sharedHooks/useLayoutPrefs";
 
 /**
  * If a user logs in and their account has at least this many
  * uploaded observations, auto-switch to advanced mode
  */
-export const AUTO_ADVANCED_MODE_OBSERVATION_THRESHOLD = 100;
+export const AUTO_ADVANCED_MODE_OBSERVATION_THRESHOLD = getTunable(
+  "autoAdvancedModeObservations",
+);
 
 // Layout preferences set after any successful sign-in
 const useApplySignInPrefs = ( ) => {

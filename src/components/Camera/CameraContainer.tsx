@@ -16,17 +16,21 @@ import React, {
 import { Alert, StatusBar } from "react-native";
 import type { CameraRef, CapturePhotoSettings } from "react-native-vision-camera";
 import { CommonResolutions } from "react-native-vision-camera";
+import { getBestRecentFix, startPositionWarmup } from "sharedHelpers/accuratePositionWatcher";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { log } from "sharedHelpers/logger";
+import { setMemoryContext } from "sharedHelpers/memoryWatermark";
 import { hasWriteMediaPermission } from "sharedHelpers/permissions";
 import { completeSentinelFile, createSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
-import { useTranslation } from "sharedHooks";
+import { getTunable } from "sharedHelpers/tunableParams";
+import { useLayoutPrefs, useTranslation } from "sharedHooks";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import { FIREBASE_TRACE_ATTRIBUTES, FIREBASE_TRACES } from "stores/createFirebaseTraceSlice";
 import useStore from "stores/useStore";
 
 import CameraWithDevice from "./CameraWithDevice";
 import { handleCameraError } from "./helpers";
+import { savePhotoToPhotoLibraryAtCapture } from "./helpers/savePhotosToPhotoLibrary";
 import savePhotoToDocumentsDirectory from "./helpers/savePhotoToDocumentsDirectory";
 import usePrepareStoreAndNavigate from "./hooks/usePrepareStoreAndNavigate";
 
@@ -53,7 +57,7 @@ export interface SavePhotoOptions {
   visionResult?: StoredResult | null;
 }
 
-export const MAX_PHOTOS_ALLOWED = 20;
+export const MAX_PHOTOS_ALLOWED = getTunable( "maxPhotosPerObservation" );
 
 const logger = log.extend( "CameraContainer" );
 
@@ -97,7 +101,12 @@ const CameraContainer = ( ) => {
 
   const { t } = useTranslation( );
 
-  const [cameraPosition, setCameraPosition] = useState<"front" | "back">( "back" );
+  const { aiCameraSettings, setAICameraSetting } = useLayoutPrefs( );
+  const isAICamera = cameraType === "AI";
+  const [localCameraPosition, setLocalCameraPosition] = useState<"front" | "back">( "back" );
+  const cameraPosition = isAICamera
+    ? aiCameraSettings.cameraPosition
+    : localCameraPosition;
   // https://react-native-vision-camera.com/docs/guides/devices#selecting-multi-cams
   const device = useCameraDevice( cameraPosition, {
     physicalDevices: [
@@ -133,7 +142,11 @@ const CameraContainer = ( ) => {
     // We had this set to true in Seek but received many reports of it not respecting OS-wide sound
     // level and scared away wildlife. So maybe better to just disable it.
     enableShutterSound: false,
-    ...( hasFlash && { flashMode: "off" } as const ),
+    ...( hasFlash && {
+      flashMode: isAICamera
+        ? aiCameraSettings.flash
+        : "off",
+    } as const ),
   } as const;
   const [takePhotoOptions, setTakePhotoOptions] = useState<CapturePhotoSettings>(
     initialPhotoOptions,
@@ -158,7 +171,11 @@ const CameraContainer = ( ) => {
     const newPosition = cameraPosition === "back"
       ? "front"
       : "back";
-    setCameraPosition( newPosition );
+    if ( isAICamera ) {
+      setAICameraSetting( "cameraPosition", newPosition );
+    } else {
+      setLocalCameraPosition( newPosition );
+    }
   };
 
   const prepareStoreAndNavigate = usePrepareStoreAndNavigate( );
@@ -204,12 +221,11 @@ const CameraContainer = ( ) => {
   ] );
 
   const toggleFlash = ( ) => {
-    setTakePhotoOptions( {
-      ...takePhotoOptions,
-      flashMode: takePhotoOptions.flashMode === "on"
-        ? "off"
-        : "on",
-    } );
+    const flashMode = takePhotoOptions.flashMode === "on"
+      ? "off"
+      : "on";
+    setTakePhotoOptions( { ...takePhotoOptions, flashMode } );
+    if ( isAICamera ) setAICameraSetting( "flash", flashMode );
   };
 
   const updateTakePhotoStore = async (
@@ -268,11 +284,23 @@ const CameraContainer = ( ) => {
         throw new Error( "Failed to take photo: missing camera" );
       }
       const uri = await savePhotoToDocumentsDirectory( cameraPhoto );
+      // Into the photo library right away, not at the checkmark, so a crash
+      // before then doesn't lose the photo. Not awaited: the shutter shouldn't
+      // wait on the library.
+      savePhotoToPhotoLibraryAtCapture( uri, getBestRecentFix( ) )
+        .catch( e => logger.error( "Saving photo to photo library at capture failed", e ) );
       const newPhotoState = await updateTakePhotoStore( uri, options );
       if ( options?.navigateImmediately ) {
         await handleNavigation( newPhotoState, options?.visionResult );
       }
       setNewPhotoUris( [...newPhotoUris, uri] );
+      // A camera session climbed ~470 MB per 20 s to the memory limit on
+      // Nov 20; this says whether that tracks the photos taken
+      setMemoryContext( "camera", {
+        type: cameraType,
+        photos: newPhotoUris.length + 1,
+        resolution: `${targetResolution.width}x${targetResolution.height}`,
+      } );
       storedUri = uri;
     } catch ( captureError ) {
       const error = captureError instanceof Error
@@ -287,6 +315,11 @@ const CameraContainer = ( ) => {
     return storedUri;
   };
 
+  useEffect( ( ) => {
+    setMemoryContext( "camera", { type: cameraType, photos: 0 } );
+    return ( ) => setMemoryContext( "camera" );
+  }, [cameraType] );
+
   useEffect( () => {
     const unsubscribe = navigation.addListener( "blur", () => {
       // This is only needed for the AI camera, since the multicapture camera is supposed to set
@@ -300,15 +333,20 @@ const CameraContainer = ( ) => {
   }, [navigation] );
 
   useEffect( ( ) => {
-    const fetchLocation = async ( ) => {
-      const accurateUserLocation = await fetchAccurateUserLocation( );
-      setUserLocationForGeomodel( accurateUserLocation );
-      return accurateUserLocation;
-    };
+    if ( !hasLocationPermissions ) { return ( ) => {}; }
 
-    if ( hasLocationPermissions ) {
-      fetchLocation( );
-    }
+    // Keep a high accuracy watch running the whole time the camera is open.
+    // GPS needs a few seconds to converge, so warming it up here means the fix
+    // we geotag the photo with is already accurate when the user taps the
+    // shutter, instead of being whatever coarse fix the OS produces first.
+    const stopWarmup = startPositionWarmup( );
+
+    const fetchLocation = async ( ) => {
+      setUserLocationForGeomodel( await fetchAccurateUserLocation( ) );
+    };
+    fetchLocation( );
+
+    return stopWarmup;
   }, [hasLocationPermissions] );
 
   if ( loadingDevices ) {

@@ -21,6 +21,8 @@ const KEY_PATHS = [
 interface ObservationCounts {
   numUnuploadedObservations: number;
   numObsMissingBasics: number;
+  numObsMissingLocationOrDate: number;
+  numUnuploadedObsNoTaxon: number;
 }
 
 const useObservationCounts = ( ): ObservationCounts => {
@@ -38,6 +40,10 @@ const useObservationCounts = ( ): ObservationCounts => {
       numUnuploadedObservations: unsyncedObs.length,
       numObsMissingBasics: unsyncedObs
         .filter( obs => obs.missingBasics( ) ).length,
+      numObsMissingLocationOrDate: unsyncedObs
+        .filter( obs => obs.missingLocationOrDate( ) ).length,
+      numUnuploadedObsNoTaxon: unsyncedObs
+        .filter( obs => !obs.taxon ).length,
     } ),
     [unsyncedObs],
   );

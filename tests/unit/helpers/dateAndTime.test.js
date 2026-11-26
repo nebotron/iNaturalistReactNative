@@ -15,7 +15,9 @@ import {
   formatObsFieldDatetime,
   formatObsFieldTime,
   formatProjectsApiDatetimeLong,
+  getMonthsAroundDate,
   getNowISO,
+  parseDateForPicker,
 } from "sharedHelpers/dateAndTime";
 
 const remoteObservation = factory( "RemoteObservation", {
@@ -43,46 +45,46 @@ describe( "formatApiDatetime", ( ) => {
       expect( formatApiDatetime( date, i18next ) ).toEqual( "Missing Date" );
     } );
 
-    it( "should return a localized date when a date string is passed in", ( ) => {
+    it( "should return a YYYY-MM-DD date when a date string is passed in", ( ) => {
       const date = "2022-11-02";
-      expect( formatApiDatetime( date, i18next ) ).toEqual( "11/2/22" );
+      expect( formatApiDatetime( date, i18next ) ).toEqual( "2022-11-02" );
     } );
 
     it( "should return a localized datetime when a datetime string is passed in", ( ) => {
       const date = "2022-11-02T18:43:00+00:00";
-      expect( formatApiDatetime( date, i18next ) ).toEqual( "11/2/22 6:43 PM UTC" );
+      expect( formatApiDatetime( date, i18next ) ).toEqual( "2022-11-02 6:43 PM UTC" );
     } );
 
     it( "should return a localized datetime for a remote observation created_at date", ( ) => {
       expect(
         formatApiDatetime( remoteObservation.created_at, i18next, { inViewerTimeZone: true } ),
-      ).toEqual( "2/13/15 4:41 AM UTC" );
+      ).toEqual( "2015-02-13 4:41 AM UTC" );
     } );
 
     it( "should return a localized datetime for a remote identification created_at date", ( ) => {
       expect(
         formatApiDatetime( remoteIdentification.created_at, i18next ),
-      ).toEqual( "2/13/15 5:12 AM UTC" );
+      ).toEqual( "2015-02-13 5:12 AM UTC" );
     } );
 
     it( "should return a localized datetime for a remote comment created_at date", ( ) => {
       expect(
         formatApiDatetime( remoteComment.created_at, i18next ),
-      ).toEqual( "2/13/15 5:15 AM UTC" );
+      ).toEqual( "2015-02-13 5:15 AM UTC" );
     } );
 
     it( "should return the date in the local time zone by default", () => {
       expect( process.env.TZ ).toEqual( "UTC" );
       expect(
         formatApiDatetime( "2023-01-02T08:00:00+01:00", i18next ),
-      ).toEqual( "1/2/23 7:00 AM UTC" );
+      ).toEqual( "2023-01-02 7:00 AM UTC" );
     } );
 
     it( "should return the date in a requested time zone", () => {
       expect( process.env.TZ ).toEqual( "UTC" );
       expect(
         formatApiDatetime( "2023-01-02T08:00:00+01:00", i18next, { timeZone: "Asia/Tokyo" } ),
-      ).toEqual( "1/2/23 4:00 PM GMT+9" );
+      ).toEqual( "2023-01-02 4:00 PM GMT+9" );
     } );
 
     it.todo(
@@ -127,13 +129,13 @@ describe( "formatApiDatetime", ( ) => {
             i18next,
             { timeZone: "Australia/Sydney" },
           ),
-        ).toEqual( "1/2/23 6:00 PM GMT+11" );
+        ).toEqual( "2023-01-02 6:00 PM GMT+11" );
       } );
 
       it( "still shows a real GMT/UTC abbreviation for an actually-zero offset", () => {
         expect(
           formatApiDatetime( "2023-01-02T08:00:00+01:00", i18next, { timeZone: "UTC" } ),
-        ).toEqual( "1/2/23 7:00 AM UTC" );
+        ).toEqual( "2023-01-02 7:00 AM UTC" );
       } );
     } );
   } );
@@ -143,9 +145,9 @@ describe( "formatApiDatetime", ( ) => {
       await initI18next( { lng: "es-MX" } );
     } );
 
-    it( "should return a localized date when a date string is passed in", ( ) => {
+    it( "should return a YYYY-MM-DD date when a date string is passed in", ( ) => {
       const date = "2022-11-02";
-      expect( formatApiDatetime( date, i18next ) ).toEqual( "2/11/22" );
+      expect( formatApiDatetime( date, i18next ) ).toEqual( "2022-11-02" );
     } );
   } );
 } );
@@ -208,27 +210,10 @@ describe( "formatDifferenceForHumans", ( ) => {
   it( "should show not show fractional weeks", ( ) => {
     expect( formatDifferenceForHumans( subDays( new Date(), 16 ), i18next ) ).toMatch( /2w/ );
   } );
-  it( "should show day and month if over 30 days ago but still this year", ( ) => {
-    const now = new Date();
-    // This test will only work after the first 40 days of the year have
-    // passed
-    if ( now.getUTCMonth() <= 1 ) return;
-    if ( now.getUTCMonth() <= 2 && now.getDay() < 10 ) return;
-
-    const date = subDays( now, 40 );
-    const dateString = formatDifferenceForHumans( date, i18next );
-    const pattern = new RegExp( `\\w+ ${date.getDate()}` );
-    expect( dateString ).toMatch( pattern );
-  } );
-  it( "should show full date for prior years", ( ) => {
-    const date = subDays( new Date(), 400 );
-    const dateString = formatDifferenceForHumans( date, i18next );
-    const pattern = new RegExp( [
-      date.getMonth() + 1,
-      date.getDate(),
-      date.getFullYear() % 1000,
-    ].join( "/" ) );
-    expect( dateString ).toMatch( pattern );
+  it( "should show YYYY-MM-DD if over 30 days ago", ( ) => {
+    const date = subDays( new Date(), 40 );
+    expect( formatDifferenceForHumans( date, i18next ) )
+      .toEqual( date.toISOString( ).substring( 0, 10 ) );
   } );
 } );
 
@@ -280,5 +265,55 @@ describe( "formatObsFieldDate/Time/Datetime", ( ) => {
     it( "stores datetime as UTC date and time", ( ) => {
       expect( formatObsFieldDatetime( picked ) ).toEqual( "2026-01-01 03:30" );
     } );
+  } );
+} );
+
+describe( "getMonthsAroundDate", ( ) => {
+  it( "returns the previous, current, and next month", ( ) => {
+    expect( getMonthsAroundDate( new Date( 2026, 5, 15 ) ) ).toEqual( [5, 6, 7] );
+  } );
+
+  it( "wraps around the start of the year", ( ) => {
+    expect( getMonthsAroundDate( new Date( 2026, 0, 1 ) ) ).toEqual( [12, 1, 2] );
+  } );
+
+  it( "wraps around the end of the year", ( ) => {
+    expect( getMonthsAroundDate( new Date( 2026, 11, 31 ) ) ).toEqual( [11, 12, 1] );
+  } );
+} );
+
+describe( "parseDateForPicker", ( ) => {
+  it( "returns undefined for a missing or unparseable value", ( ) => {
+    expect( parseDateForPicker( null ) ).toBeUndefined( );
+    expect( parseDateForPicker( "" ) ).toBeUndefined( );
+    expect( parseDateForPicker( "not a date" ) ).toBeUndefined( );
+  } );
+
+  it( "parses a date-only string as local midnight on that day", ( ) => {
+    expect( parseDateForPicker( "2024-05-01" ) ).toEqual( new Date( 2024, 4, 1 ) );
+  } );
+
+  it( "parses date and time with a space or T separator", ( ) => {
+    expect( parseDateForPicker( "2024-05-01 10:30" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+    expect( parseDateForPicker( "2024-05-01T10:30" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+  } );
+
+  it( "uses the literal time when there is no time zone", ( ) => {
+    expect( parseDateForPicker( "2024-05-01T10:30:00-07:00" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+  } );
+
+  it( "uses wall time in the given time zone", ( ) => {
+    expect( parseDateForPicker( "2024-05-01T17:30:00Z", "America/Los_Angeles" ) )
+      .toEqual( new Date( 2024, 4, 1, 10, 30 ) );
+  } );
+
+  it( "puts a time-only value on today", ( ) => {
+    const parsed = parseDateForPicker( "08:15" );
+    const expected = new Date( );
+    expected.setHours( 8, 15, 0, 0 );
+    expect( parsed ).toEqual( expected );
   } );
 } );

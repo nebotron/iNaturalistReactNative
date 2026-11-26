@@ -26,6 +26,7 @@ interface Props<ValueT extends RadioSheetPrimitive> {
   confirmText?: string;
   headerText: string;
   hidden?: boolean;
+  immediate?: boolean;
   insideModal?: boolean;
   loading?: boolean;
   onPressClose?: ( ) => void;
@@ -45,6 +46,7 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
   confirmText,
   headerText,
   hidden,
+  immediate,
   insideModal,
   loading,
   onPressClose,
@@ -61,14 +63,26 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
   const isDirty = checkedValue !== selectedValue;
   const confirmBlockedByDirtyCheck = requireSelectionChange && !isDirty;
 
-  const radioButtonRow = ( radioRow: string ) => (
-    <View key={radioRow} className="pb-4">
+  const radioKeys = Object.keys( radioValues );
+  const radioButtonRow = ( radioRow: string, index: number ) => (
+    <View
+      key={radioRow}
+      // No trailing padding when nothing follows the last row
+      className={immediate && index === radioKeys.length - 1
+        ? undefined
+        : "pb-4"}
+    >
       <RadioButtonRow
         classNames={buttonRowClassName}
         value={radioValues[radioRow].value.toString( )}
         icon={radioValues[radioRow].icon}
         checked={checkedValue === radioValues[radioRow].value}
-        onPress={() => setCheckedValue( radioValues[radioRow].value )}
+        onPress={() => {
+          setCheckedValue( radioValues[radioRow].value );
+          if ( immediate ) {
+            confirm( radioValues[radioRow].value );
+          }
+        }}
         label={radioValues[radioRow].label}
         description={radioValues[radioRow].text}
         labelComponent={radioValues[radioRow].labelComponent}
@@ -100,22 +114,26 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
       insideModal={insideModal}
       onPressClose={onPressClose}
       testID={testID}
-      scrollEnabled={false}
     >
-      <View className="p-4 pt-2">
+      <View className={immediate
+        ? "px-4 pt-2"
+        : "p-4 pt-2"}
+      >
         {topDescriptionText}
         <View className="p-3">
-          {Object.keys( radioValues ).map( radioRow => radioButtonRow( radioRow ) )}
+          {radioKeys.map( radioButtonRow )}
         </View>
         {bottomComponent}
-        {secondaryButton
-          ? (
-            <View className="flex-row gap-x-4">
-              {secondaryButton}
-              {renderConfirmButton( "flex-1" )}
-            </View>
-          )
-          : renderConfirmButton( )}
+        {!immediate && (
+          secondaryButton
+            ? (
+              <View className="flex-row gap-x-4">
+                {secondaryButton}
+                {renderConfirmButton( "flex-1" )}
+              </View>
+            )
+            : renderConfirmButton( )
+        )}
       </View>
     </BottomSheet>
   );

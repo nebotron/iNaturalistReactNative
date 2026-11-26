@@ -1,16 +1,17 @@
-import {
-  useNetInfo,
-} from "@react-native-community/netinfo";
-import { useQueryClient } from "@tanstack/react-query";
 import scoreImage from "api/computerVision";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useEffect, useState,
+  useEffect, useMemo, useRef,
 } from "react";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import {
+  getCachedSuggestions,
+  onlineSuggestionsCacheKey,
+  setCachedSuggestions,
+} from "sharedHelpers/suggestionsCache";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -20,11 +21,6 @@ import useStore from "stores/useStore";
 import { startOfflineExperimentInBackground } from "./suggestionComparisonExperiment";
 import type { ScoreImageParams, UseSuggestionsOnlineSuggestion } from "./types";
 import { predictOffline } from "./useOfflineSuggestions";
-
-// Keep the first request short so we fall back to offline suggestions quickly,
-// but if the user explicitly retries, allow more time to get online suggestions
-export const INITIAL_SCORE_IMAGE_TIMEOUT = 5_000;
-export const RETRY_SCORE_IMAGE_TIMEOUT = 10_000;
 
 const { useRealm } = RealmContext;
 
@@ -42,9 +38,7 @@ interface UseOnlineSuggestionsResponse {
     results: UseSuggestionsOnlineSuggestion[];
     common_ancestor?: UseSuggestionsOnlineSuggestion;
   };
-  timedOut: boolean;
   error: Error | null;
-  resetTimeout: ( options?: { isRetry?: boolean } ) => void;
   refetch: () => void;
 }
 
@@ -90,40 +84,64 @@ const useOnlineSuggestions = (
     shouldFetchOnlineSuggestions,
   } = options;
 
-  const queryClient = useQueryClient( );
-  const [timedOut, setTimedOut] = useState( false );
-  const [timeoutMs, setTimeoutMs] = useState( INITIAL_SCORE_IMAGE_TIMEOUT );
-  const { isConnected } = useNetInfo( );
   const currentUser = useCurrentUser();
   // Use locale in case there is no user session
   const locale = i18n?.language ?? "en";
 
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
+  // Counts requests for the current query so retries are labeled in the log
+  const attempts = useRef( { key: "", count: 0 } );
+
+  // Read already-scored results synchronously so they show on the first render
+  // instead of after the image is resized and the query runs, which would
+  // briefly flash the offline suggestions
+  const syncCacheKey = onlineSuggestionsCacheKey( queryKey, !!currentUser, locale );
+  const cachedOnlineSuggestions = useMemo( ( ) => ( queryKey.length > 0
+    ? getCachedSuggestions<OnlineSuggestionsQueryResponse>( syncCacheKey )
+    : undefined ), [queryKey.length, syncCacheKey] );
 
   // TODO if this is a remote observation with an `id` param, use
   // scoreObservation instead so we don't have to spend time resizing and
   // uploading images
   const {
-    data: onlineSuggestions,
+    data: fetchedOnlineSuggestions,
     dataUpdatedAt,
     refetch,
-    fetchStatus,
     error,
   } = useAuthenticatedQuery<OnlineSuggestionsQueryResponse>(
     queryKey,
     async optsWithAuth => {
+      // Calling the API is expensive (network + server-side scoring), so
+      // avoid re-fetching for a query/auth state we've already resolved,
+      // even across app restarts.
+      const cacheKey = onlineSuggestionsCacheKey( queryKey, !!currentUser, locale );
+      const cachedSuggestions = getCachedSuggestions<OnlineSuggestionsQueryResponse>( cacheKey );
+      if ( cachedSuggestions ) {
+        return cachedSuggestions;
+      }
+
       const obsUuid = getCurrentObservation().uuid;
       const params = {
         ...scoreImageParams,
         ...( !currentUser && { locale } ),
       };
 
-      const suggestionsResponse
-        = await scoreImage( params, optsWithAuth ) as OnlineSuggestionsApiResponse;
+      const attemptKey = queryKey.join( "|" );
+      if ( attempts.current.key !== attemptKey ) {
+        attempts.current = { key: attemptKey, count: 0 };
+      }
+      attempts.current.count += 1;
+      const suggestionsResponse = await scoreImage(
+        params,
+        optsWithAuth,
+        { source: "suggestions", attempt: attempts.current.count },
+      ) as OnlineSuggestionsApiResponse;
+      attempts.current.count = 0;
 
       // there's a slight discrepancy between online/offline responses which this smooths over for
       // the eventual UI
       const shimmedOnlineResponse = shimApiResponseForCommonAncestor( suggestionsResponse );
+      setCachedSuggestions( cacheKey, shimmedOnlineResponse );
 
       if ( !!scoreImageParams && typeof obsUuid === "string" ) {
         startOfflineExperimentInBackground(
@@ -147,33 +165,7 @@ const useOnlineSuggestions = (
     },
   );
 
-  // Give up on suggestions request after a timeout
-  useEffect( ( ) => {
-    const timer = setTimeout( ( ) => {
-      if ( onlineSuggestions === undefined ) {
-        queryClient.cancelQueries( { queryKey } );
-        onFetchError( { isOnline: true } );
-        setTimedOut( true );
-      }
-    }, timeoutMs );
-
-    return ( ) => {
-      clearTimeout( timer );
-    };
-  }, [onlineSuggestions, queryKey, queryClient, onFetchError, timeoutMs] );
-
-  const resetTimeout = useCallback( ( { isRetry = false }: { isRetry?: boolean } = {} ) => {
-    setTimedOut( false );
-    setTimeoutMs( isRetry
-      ? RETRY_SCORE_IMAGE_TIMEOUT
-      : INITIAL_SCORE_IMAGE_TIMEOUT );
-  }, [] );
-
-  useEffect( () => {
-    if ( isConnected === false ) {
-      setTimedOut( true );
-    }
-  }, [isConnected] );
+  const onlineSuggestions = fetchedOnlineSuggestions ?? cachedOnlineSuggestions;
 
   useEffect( ( ) => {
     if ( onlineSuggestions !== undefined ) {
@@ -203,24 +195,12 @@ const useOnlineSuggestions = (
     }
   }, [onFetchError, onlineSuggestions, error, onFetched, realm] );
 
-  const queryObject = {
+  return {
     dataUpdatedAt,
     error,
     refetch,
-    timedOut,
-    resetTimeout,
-    fetchStatus,
+    onlineSuggestions,
   };
-
-  return timedOut
-    ? {
-      ...queryObject,
-      onlineSuggestions: undefined,
-    }
-    : {
-      ...queryObject,
-      onlineSuggestions,
-    };
 };
 
 export default useOnlineSuggestions;

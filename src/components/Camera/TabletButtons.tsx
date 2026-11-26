@@ -1,5 +1,5 @@
 import classnames from "classnames";
-import PhotoLibraryIcon from "components/Camera/Buttons/PhotoLibraryIcon";
+import LatestPhoto from "components/Camera/Buttons/LatestPhoto";
 import RotatableIconWrapper from "components/Camera/RotatableIconWrapper";
 import { CloseButton } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -41,12 +41,13 @@ const cameraOptionsClasses = [
 interface Props {
   handleZoomButtonPress: ( ) => void;
   disabled: boolean;
-  disabledPhotoLibrary: boolean;
   flipCamera: ( ) => void;
   handleCheckmarkPress?: ( ) => void;
   handleClose?: ( ) => void;
   hasFlash?: boolean;
-  hasPhotoLibraryButton?: boolean;
+  hasLatestPhoto?: boolean;
+  latestPhotoUri?: string;
+  onPressLatestPhoto?: ( ) => void;
   photosTaken?: boolean;
   rotatableAnimatedStyle: AnimatedStyle;
   showPrediction?: boolean;
@@ -58,7 +59,6 @@ interface Props {
   useLocation: boolean;
   toggleLocation: ( ) => void;
   isDefaultMode: boolean;
-  completeSentinelFile: ( ) => Promise<void>;
 }
 
 // Empty space where a camera button should be so buttons don't jump around
@@ -79,12 +79,13 @@ const CameraButtonPlaceholder = ( { extraClassName }: { extraClassName?: string 
 const TabletButtons = ( {
   handleZoomButtonPress,
   disabled,
-  disabledPhotoLibrary,
   flipCamera,
   handleCheckmarkPress,
   handleClose,
   hasFlash,
-  hasPhotoLibraryButton,
+  hasLatestPhoto,
+  latestPhotoUri,
+  onPressLatestPhoto,
   photosTaken,
   rotatableAnimatedStyle,
   showPrediction,
@@ -96,7 +97,6 @@ const TabletButtons = ( {
   useLocation,
   toggleLocation,
   isDefaultMode,
-  completeSentinelFile,
 }: Props ) => {
   const tabletCameraOptionsClasses = [
     "absolute",
@@ -170,12 +170,12 @@ const TabletButtons = ( {
       </View>
       { hasFlash && <CameraButtonPlaceholder extraClassName="mt-[25px]" /> }
       { showZoomButton && <CameraButtonPlaceholder extraClassName="mt-[25px]" /> }
-      { hasPhotoLibraryButton && (
+      { hasLatestPhoto && (
         <View className="absolute bottom-6">
-          <PhotoLibraryIcon
+          <LatestPhoto
+            onPress={onPressLatestPhoto}
+            photoUri={latestPhotoUri}
             rotatableAnimatedStyle={rotatableAnimatedStyle}
-            disabled={disabledPhotoLibrary}
-            completeSentinelFile={completeSentinelFile}
           />
         </View>
       ) }

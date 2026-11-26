@@ -2,6 +2,8 @@ import { refresh } from "@react-native-community/netinfo";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import type { ApiTaxon } from "api/types";
+import GridOverlaysSheet
+  from "components/Explore/components/GridOverlaysSheet";
 import type { ViewOption } from "components/Explore/ObservationsViewBar";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
@@ -13,6 +15,7 @@ import {
 } from "components/OnboardingModal/PivotCards";
 import {
   Body1,
+  INatIconButton,
   InfiniteScrollLoadingWheel,
   OfflineNotice,
   PerformanceDebugView,
@@ -23,6 +26,7 @@ import {
 import SortButton from "components/SharedComponents/Buttons/SortButton";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { ObservationsStatTab, SpeciesStatTab } from "components/SharedComponents/StatTab";
+import UsbImportProgress from "components/SharedComponents/UsbImportProgress";
 import { View } from "components/styledComponents";
 import {
   MY_OBSERVATIONS_ACTION,
@@ -39,6 +43,7 @@ import type { UserPojo } from "realmModels/User";
 import type { MyObservationsSort } from "sharedHelpers/observationsSort";
 import {
   MY_OBSERVATIONS_SORT_OPTIONS,
+  OBSERVATIONS_SORT,
   useObservationsSortLabels,
 } from "sharedHelpers/observationsSort";
 import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
@@ -51,9 +56,11 @@ import { useGridLayout, useLayoutPrefs, useTranslation } from "sharedHooks";
 import useFeatureFlag from "sharedHooks/useFeatureFlag";
 import { FeatureFlag, selectFeatureFlagsSettled } from "stores/createFeatureFlagSlice";
 import useStore from "stores/useStore";
+import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 import type { SpeciesCount } from "types/sorting";
 
+import CombineObservationsBar from "./CombineObservationsBar";
 import FullScreenActivityIndicator from "./FullScreenActivityIndicator";
 import LoginSheet from "./LoginSheet";
 import MyObservationsGroupedByIconicTaxaView from "./MyObservationsGroupedByIconicTaxaView";
@@ -66,6 +73,7 @@ import SearchedTaxonBanner from "./Search/SearchedTaxonBanner";
 import SearchEmptyState from "./Search/SearchEmptyState";
 import SimpleHeader from "./SimpleHeader";
 import SimpleTaxonGridItem from "./SimpleTaxonGridItem";
+import TaxonomicFetchNotice from "./TaxonomicFetchNotice";
 
 interface Props {
   activeTab: string;
@@ -84,6 +92,8 @@ interface Props {
   numTotalTaxa?: number;
   numUnuploadedObservations: number;
   numObsMissingBasics: number;
+  numObsMissingLocationOrDate: number;
+  numUnuploadedObsNoTaxon: number;
   observationIds: { uuid: string }[];
   observationsSortOptionId: MyObservationsSort;
   onEndReached: ( ) => void;
@@ -128,6 +138,11 @@ interface ObservationsSortOption {
   value: MyObservationsSort;
 }
 
+const DROP_SHADOW = getShadow( {
+  offsetHeight: 4,
+  elevation: 6,
+} );
+
 const STAT_TAB_PADDING = "pt-[10px] px-3 pb-3";
 
 export const OBSERVATIONS_TAB = "observations";
@@ -150,6 +165,8 @@ const MyObservationsSimple = ( {
   numTotalTaxa,
   numUnuploadedObservations,
   numObsMissingBasics: numUnuploadedObsMissingBasics,
+  numObsMissingLocationOrDate,
+  numUnuploadedObsNoTaxon,
   observationIds,
   observationsSortOptionId,
   onEndReached,
@@ -200,14 +217,14 @@ const MyObservationsSimple = ( {
   const navigation = useNavigation( );
   const route = useRoute( );
   const {
-    flashListStyle,
-    gridItemStyle,
-    numColumns,
+    flashListStyle: taxaFlashListStyleBase,
+    gridItemStyle: taxaGridItemStyle,
+    numColumns: taxaNumColumns,
   } = useGridLayout( );
   const taxaFlashListStyle = useMemo( ( ) => ( {
-    ...flashListStyle,
+    ...taxaFlashListStyleBase,
     paddingTop: 10,
-  } ), [flashListStyle] );
+  } ), [taxaFlashListStyleBase] );
 
   const taxaSortOptions = MY_OBSERVATIONS_SPECIES_SORT_OPTIONS.reduce(
     ( acc, sortBy ) => {
@@ -269,6 +286,7 @@ const MyObservationsSimple = ( {
           iconUri: photo?.url,
           iconicTaxonName: taxon.iconic_taxon_name,
         },
+        rememberPrevious: true,
       } );
       setActiveTab( OBSERVATIONS_TAB );
     };
@@ -288,7 +306,7 @@ const MyObservationsSimple = ( {
     return (
       <SimpleTaxonGridItem
         key={itemKey}
-        style={gridItemStyle}
+        style={taxaGridItemStyle}
         speciesCount={speciesCount}
         canSearchFromSpeciesTab={canSearchFromSpeciesTab}
         navToTaxonDetails={navToTaxonDetails}
@@ -301,11 +319,11 @@ const MyObservationsSimple = ( {
     canSearchFromSpeciesTab,
     currentUser,
     dispatch,
-    gridItemStyle,
     navigation,
     route.key,
     setActiveTab,
     t,
+    taxaGridItemStyle,
   ] );
 
   const taxaFooterComponent = useMemo( ( ) => {
@@ -334,21 +352,68 @@ const MyObservationsSimple = ( {
     taxa?.length,
   ] );
 
-  const obsMissingBasicsExist = numUnuploadedObservations > 0 && numUnuploadedObsMissingBasics > 0;
+  // The header warning is about location and date only; obs that are just
+  // missing a taxon shouldn't trigger it.
+  const obsMissingLocationOrDateExist = numObsMissingLocationOrDate > 0;
 
   // if user is not logged in, we'll consider all obs 'uploadable' to shepherd people to login flow
   const numUploadableObservations = isDefaultMode && !!currentUser
     ? numUnuploadedObservations - numUnuploadedObsMissingBasics
     : numUnuploadedObservations;
 
-  const observationsHeader = useMemo( ( ) => {
+  // The tabs show the total counts, so they live in the list header and scroll
+  // off the top with the list whenever there's a list to scroll
+  const tabsHeader = (
+    <Tabs
+      activeColor={String( colors?.inatGreen )}
+      activeId={activeTab}
+      tabs={[
+        {
+          id: OBSERVATIONS_TAB,
+          text: t( "Observations" ),
+          onPress: () => setActiveTab( OBSERVATIONS_TAB ),
+          renderComponent: ( ) => (
+            <ObservationsStatTab
+              count={numTotalObservations}
+              wrapperClassName={STAT_TAB_PADDING}
+            />
+          ),
+        },
+        {
+          id: TAXA_TAB,
+          text: t( "Species" ),
+          onPress: () => setActiveTab( TAXA_TAB ),
+          renderComponent: ( ) => (
+            <SpeciesStatTab
+              count={numTotalTaxa}
+              wrapperClassName={STAT_TAB_PADDING}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+
+  const observationsListShown = !showSearchOfflineNotice
+    && !showSearchEmptyState
+    && layout !== "map"
+    && !( layout === "smallGrid" && isConnected === false );
+  const listShowsTabs = activeTab === OBSERVATIONS_TAB
+    ? observationsListShown
+    : !!taxa?.length;
+
+  const observationsHeader = ( ( ) => {
     if ( layout !== "grid" ) {
       return (
-        <SimpleHeader
-          isConnected={isConnected}
-          obsMissingBasicsExist={obsMissingBasicsExist}
-          numTotalObservations={numTotalObservations}
-        />
+        <>
+          {tabsHeader}
+          <SimpleHeader
+            isConnected={isConnected}
+            obsMissingLocationOrDateExist={obsMissingLocationOrDateExist}
+            numTotalObservations={numTotalObservations}
+          />
+          <TaxonomicFetchNotice />
+        </>
       );
     }
 
@@ -359,26 +424,28 @@ const MyObservationsSimple = ( {
     return (
       <View
         style={{
-          marginTop: -Math.ceil( flashListStyle.paddingTop ),
-          marginLeft: -Math.ceil( flashListStyle.paddingLeft ),
-          marginRight: -Math.ceil( flashListStyle.paddingRight ),
-          marginBottom: TARGET_SPACING - flashListStyle.paddingTop,
+          marginTop: -Math.ceil( taxaFlashListStyleBase.paddingTop ),
+          marginLeft: -Math.ceil( taxaFlashListStyleBase.paddingLeft ),
+          marginRight: -Math.ceil( taxaFlashListStyleBase.paddingRight ),
+          marginBottom: TARGET_SPACING - taxaFlashListStyleBase.paddingTop,
         }}
       >
+        {tabsHeader}
         <SimpleHeader
           isConnected={isConnected}
-          obsMissingBasicsExist={obsMissingBasicsExist}
+          obsMissingLocationOrDateExist={obsMissingLocationOrDateExist}
           numTotalObservations={numTotalObservations}
         />
+        <TaxonomicFetchNotice />
       </View>
     );
-  }, [flashListStyle, isConnected, layout, numTotalObservations, obsMissingBasicsExist] );
+  } )( );
 
   const dataFilledWithEmptyBoxes = useMemo( ( ) => {
     const data = observationIds;
     // In grid layout fill up to 8 items to make sure the grid is filled
     // but don't add the empty boxes at the end of a long existing list
-    if ( layout === "grid" && data.length < 8 ) {
+    if ( layout === "grid" && data.length < 8 && !hasActiveSearch ) {
     // Fill up to 8 items to make sure the grid is filled
       const emptyBoxes = new Array( 8 - ( data.length % 8 ) ).fill( { empty: true } );
       // Add random id to empty boxes to ensure they are unique
@@ -389,7 +456,7 @@ const MyObservationsSimple = ( {
       return [...data, ...emptyBoxesWithId];
     }
     return data;
-  }, [observationIds, layout] );
+  }, [observationIds, layout, hasActiveSearch] );
 
   const renderOfflineFallback = ( onPress: ( ) => void ) => (
     <View className="flex-1 items-center justify-center">
@@ -413,8 +480,9 @@ const MyObservationsSimple = ( {
     if ( isConnected === false ) {
       return renderOfflineFallback( ( ) => refresh( ) );
     }
-    // searching while in small grid view should show a flat grid
-    if ( hasActiveSearch ) {
+    // searching while in small grid view should show a flat grid, as should taxonomic order,
+    // which already groups observations more finely than iconic taxa do
+    if ( hasActiveSearch || observationsSortOptionId === OBSERVATIONS_SORT.TAXONOMY ) {
       return (
         <MyObservationsSmallGridSearchResults
           handlePullToRefresh={handlePullToRefresh}
@@ -440,6 +508,7 @@ const MyObservationsSimple = ( {
       <ObservationsFlashList
         data={dataFilledWithEmptyBoxes}
         dataCanBeFetched={!!currentUser}
+        fullWidthGrid={layout === "grid"}
         fetchFromLastObservation={fetchFromLastObservation}
         handlePullToRefresh={handlePullToRefresh}
         handleIndividualUploadPress={handleIndividualUploadPress}
@@ -457,6 +526,7 @@ const MyObservationsSimple = ( {
         onLayout={onListLayout}
         onScroll={onScroll}
         ref={listRef}
+        selectable
         showNoResults={showNoResults}
         testID="MyObservationsAnimatedList"
         listHeaderContent={observationsHeader}
@@ -485,6 +555,18 @@ const MyObservationsSimple = ( {
             accessibilityLabel={t( "Change-observations-sort-order" )}
           />
         )}
+        {layout === "grid" && (
+          <INatIconButton
+            icon="tune"
+            size={22}
+            className="bg-white rounded-full h-[46px] w-[46px] border-[1px] border-lightGray
+              absolute bottom-[76px] z-10 right-5"
+            accessibilityLabel={t( "Change-view-options" )}
+            onPress={() => setOpenSheet( ACTIVE_SHEET.VIEW_OPTIONS )}
+            style={DROP_SHADOW}
+          />
+        )}
+        <CombineObservationsBar />
       </>
     );
   };
@@ -565,37 +647,11 @@ const MyObservationsSimple = ( {
           currentUser={currentUser}
           isConnected={isConnected}
           numUploadableObservations={numUploadableObservations}
+          numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
           handleSyncButtonPress={handleSyncButtonPress}
         />
-        <Tabs
-          activeColor={String( colors?.inatGreen )}
-          activeId={activeTab}
-          tabs={[
-            {
-              id: OBSERVATIONS_TAB,
-              text: t( "Observations" ),
-              onPress: () => setActiveTab( OBSERVATIONS_TAB ),
-              renderComponent: ( ) => (
-                <ObservationsStatTab
-                  count={numTotalObservations}
-                  wrapperClassName={STAT_TAB_PADDING}
-                />
-              ),
-            },
-            {
-              id: TAXA_TAB,
-              text: t( "Species" ),
-              onPress: () => setActiveTab( TAXA_TAB ),
-              renderComponent: ( ) => (
-                <SpeciesStatTab
-                  count={numTotalTaxa}
-                  wrapperClassName={STAT_TAB_PADDING}
-                />
-              ),
-            },
-          ]}
-        />
-        <SearchedTaxonBanner />
+        { !listShowsTabs && tabsHeader }
+        <SearchedTaxonBanner onBack={( ) => setActiveTab( TAXA_TAB )} />
         { activeTab === OBSERVATIONS_TAB && renderObservationsTabContent( ) }
         { ( activeTab === TAXA_TAB && taxa.length > 0 ) && (
           <>
@@ -610,7 +666,7 @@ const MyObservationsSimple = ( {
                 item: SpeciesCount,
               ) => `${item.taxon.id}-${item?.taxon?.default_photo?.url || "no-photo"}`}
               layout="grid"
-              numColumns={numColumns}
+              numColumns={taxaNumColumns}
               renderItem={renderTaxaItem}
               totalResults={numTotalTaxa}
               onEndReached={
@@ -619,6 +675,18 @@ const MyObservationsSimple = ( {
                   : undefined
               }
               refreshing={isFetchingTaxa}
+              ListHeaderComponent={(
+                <View
+                  style={{
+                    marginTop: -taxaFlashListStyle.paddingTop,
+                    marginLeft: -Math.ceil( taxaFlashListStyle.paddingLeft ),
+                    marginRight: -Math.ceil( taxaFlashListStyle.paddingRight ),
+                    marginBottom: taxaFlashListStyle.paddingTop,
+                  }}
+                >
+                  {tabsHeader}
+                </View>
+              )}
               ListFooterComponent={taxaFooterComponent}
             />
             <SortButton
@@ -632,6 +700,7 @@ const MyObservationsSimple = ( {
       {openSheet === ACTIVE_SHEET.SORT && activeTab === OBSERVATIONS_TAB && (
         <RadioButtonSheet
           headerText={t( "SORT-OBSERVATIONS" )}
+          immediate
           radioValues={observationsSortOptions}
           selectedValue={observationsSortOptionId}
           confirm={optionId => handleObservationsSortConfirm( optionId as MyObservationsSort )}
@@ -647,7 +716,15 @@ const MyObservationsSimple = ( {
           onPressClose={() => setOpenSheet( ACTIVE_SHEET.NONE )}
         />
       )}
+      {openSheet === ACTIVE_SHEET.VIEW_OPTIONS && (
+        <GridOverlaysSheet
+          myObs
+          onPressClose={() => setOpenSheet( ACTIVE_SHEET.NONE )}
+          showGridOverlays
+        />
+      )}
       {openSheet === ACTIVE_SHEET.LOGIN && <LoginSheet setShowLoginSheet={setOpenSheet} />}
+      <UsbImportProgress />
       {isDefaultMode && (
         <>
           {/* These four cards should show only in default mode */}

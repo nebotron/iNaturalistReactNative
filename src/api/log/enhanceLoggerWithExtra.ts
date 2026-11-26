@@ -1,4 +1,4 @@
-import { isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
+import { isObject, isPrimitive } from "sharedHelpers/runtimeTypeUtil";
 
 // tl;dr: to support `extra`, we "wrap" certain input to react-native-logs and then "unwrap" it
 // when handling it in our iNat-specific log handler
@@ -90,11 +90,17 @@ const extractExtraForLogWrapper = ( rawMsg: unknown ) => {
   }
   // make sure maybeExtra is an object w/ primitive values
   const extraCandidate = rawMsg.at( -1 );
-  if ( !isObjectWithPrimitiveValues( extraCandidate )
-  ) {
+  if ( !isObject( extraCandidate ) || Array.isArray( extraCandidate ) ) {
     return null;
   }
-  return { [extraSentinelKey]: true, ...extraCandidate };
+  // Nested values (an array of timings, a native diagnostics dictionary) go
+  // as JSON rather than costing the whole extra.
+  const flattened = Object.fromEntries( Object.entries( extraCandidate ).map(
+    ( [key, value] ) => [key, isPrimitive( value )
+      ? value
+      : JSON.stringify( value )],
+  ) );
+  return { [extraSentinelKey]: true, ...flattened };
 };
 
 const wrapLogFunctionWithExtra = (

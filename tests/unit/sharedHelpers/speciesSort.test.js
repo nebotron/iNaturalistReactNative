@@ -43,6 +43,7 @@ describe( "speciesSort", ( ) => {
       expect( EXPLORE_SPECIES_SORT_OPTIONS ).toEqual( [
         SPECIES_SORT.COUNT_DESC,
         SPECIES_SORT.COUNT_ASC,
+        SPECIES_SORT.TAXONOMY,
       ] );
     } );
   } );
