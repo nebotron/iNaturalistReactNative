@@ -14,7 +14,21 @@ interface ExitOptions {
 interface Options {
   navigate?: ( ) => void;
   promptDeleteOriginalPhotos?: boolean;
+  // Go back to the screen the user opened ObsEdit from (e.g. ObsDetails in
+  // the Explore tab) instead of resetting into the Me tab, when that screen
+  // is somewhere they were browsing rather than part of the create flow
+  returnToPreviousScreen?: boolean;
 }
+
+// Screens that can sit beneath ObsEdit when editing an existing observation
+// and that are safe to return to once the flow state is reset
+const BROWSING_SCREENS = new Set( [
+  "ObsDetails",
+  "ObsList",
+  "RootExplore",
+  "Explore",
+  "Notifications",
+] );
 
 export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
   // This hook is used in:
@@ -38,8 +52,19 @@ export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
       ? [...useStore.getState( ).removedOriginalDevicePhotoUris]
       : [];
 
+    const canReturnToPreviousScreen = ( ) => {
+      const state = navigation.getState( );
+      if ( !state || state.index < 1 ) return false;
+      const previousRoute = state.routes[state.index - 1];
+      return !!previousRoute && BROWSING_SCREENS.has( previousRoute.name );
+    };
+    const returnToPreviousScreen = !!options.returnToPreviousScreen
+      && canReturnToPreviousScreen( );
+
     const finishExit = ( ) => {
-      if ( typeof ( options.navigate ) === "function" ) {
+      if ( returnToPreviousScreen ) {
+        navigation.goBack( );
+      } else if ( typeof ( options.navigate ) === "function" ) {
         // This seems only to be used in ObsEditHeader in a few cases of backing out
         options.navigate( );
       } else {

@@ -59,6 +59,7 @@ const ObsEditHeader = ( {
     } else {
       exitObservationFlow( {
         navigate: ( ) => navigateToObsDetails( navigation, currentObservation?.uuid ),
+        returnToPreviousScreen: true,
       } );
     }
   }, [
@@ -120,6 +121,7 @@ const ObsEditHeader = ( {
     } else {
       exitObservationFlow( {
         navigate: ( ) => navigateToObsDetails( navigation, currentObservation?.uuid ),
+        returnToPreviousScreen: true,
       } );
     }
   }, [

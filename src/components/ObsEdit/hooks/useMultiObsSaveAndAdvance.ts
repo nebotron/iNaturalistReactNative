@@ -82,6 +82,7 @@ const useMultiObsSaveAndAdvance = ( {
     if ( numObservations === 1 ) {
       exitObservationFlow( {
         promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
+        returnToPreviousScreen: !observationIsNew,
       } );
     } else {
       removeObservationFromMultiObsFlowAtIndex( savedObservationIndex );
