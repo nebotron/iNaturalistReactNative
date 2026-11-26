@@ -324,6 +324,7 @@ const IdentifyView = ( {
             key={currentSound.file_url}
             sizeClass="w-full"
             sound={currentSound}
+            observation={observation}
             isVisible
           />
         </View>

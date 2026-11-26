@@ -1,12 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
 import { View } from "components/styledComponents";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Svg, { Path } from "react-native-svg";
 import { log } from "sharedHelpers/logger";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
 import type { AudioIdSpecies } from "./audioIdModel";
-import { speciesOutput } from "./audioIdModel";
+import { prepareAudioId, speciesOutput } from "./audioIdModel";
 import { AudioBirdId, BINS_PER_S } from "./audioIdSession";
 
 const logger = log.extend( "AudioId" );
@@ -14,67 +15,85 @@ const HEIGHT = 56;
 
 const sigmoid = ( logit: number ) => 1 / ( 1 + Math.exp( -logit ) );
 
-interface Scored { key: string; logits: ( number | null )[] }
+// Scored once per sound and set of outputs, as it takes a run of the model
+// per 2.5 s of sound
+type Logits = ( number | null )[];
+const timelines = new Map<string, Promise<Logits>>( );
+const MAX_TIMELINES = 20;
 
-// The model's per-frame logits for `sp` in each 1/3 s of the clip at `path`
-// (null where none were scored), or null until it is scored or when it can't
-// be. A timeline the live session kept is used as it is; otherwise the clip
-// is scored, which takes 5 runs of the model for a 15 s clip.
+// The model's per-frame logits in each 1/3 s of the clip or sound at `uri`,
+// as clipTimeline gives them for `outputs` (null where none were scored), or
+// null until it is scored or when it can't be. A timeline the live session
+// kept is used as it is.
+const useTimeline = (
+  uri: string,
+  outputs: number[] | null,
+  kept?: Logits,
+) => {
+  const key = outputs && outputs.length > 0
+    ? `${uri}:${outputs.join( "," )}`
+    : null;
+  // Kept with what they score, so a new sound shows none until it is scored.
+  const [scored, setScored] = useState<{ key: string; logits: Logits } | null>( null );
+  const needed = !kept;
+  useEffect( ( ) => {
+    let current = true;
+    if ( needed && key && outputs && AudioBirdId?.clipTimeline ) {
+      let timeline = timelines.get( key );
+      if ( !timeline ) {
+        timeline = AudioBirdId.clipTimeline( uri, outputs );
+        timelines.set( key, timeline );
+        const [oldest] = timelines.keys( );
+        if ( timelines.size > MAX_TIMELINES ) timelines.delete( oldest );
+        timeline.catch( ( e: Error ) => {
+          timelines.delete( key );
+          logger.error( `scoring clip timeline failed: ${e.message}` );
+        } );
+      }
+      timeline
+        .then( logits => { if ( current ) setScored( { key, logits } ); } )
+        .catch( ( ) => undefined );
+    }
+    return ( ) => { current = false; };
+  }, [needed, key, uri, outputs] );
+  if ( kept ) return kept;
+  return scored && scored.key === key
+    ? scored.logits
+    : null;
+};
+
+// The timeline of `sp` in the Audio ID clip at `path`. Scoring a 15 s clip
+// takes 5 runs of the model.
 export const useClipTimeline = (
   path: string,
   sp: AudioIdSpecies,
   kept?: ( number | null )[],
 ) => {
   const output = speciesOutput( sp );
-  const key = `${path}:${output}`;
-  // Kept with what they score, so a new clip shows none until it is scored.
-  const [scored, setScored] = useState<Scored | null>( null );
-  const needed = !kept;
-  useEffect( ( ) => {
-    let current = true;
-    if ( needed && output >= 0 && AudioBirdId?.clipTimeline ) {
-      AudioBirdId.clipTimeline( path, output )
-        .then( logits => { if ( current ) setScored( { key, logits } ); } )
-        .catch( ( e: Error ) => logger.error( `scoring clip timeline failed: ${e.message}` ) );
-    }
-    return ( ) => { current = false; };
-  }, [needed, path, output, key] );
-  if ( kept ) return kept;
-  return scored?.key === key
-    ? scored.logits
-    : null;
+  const outputs = useMemo( ( ) => ( output >= 0
+    ? [output]
+    : null ), [output] );
+  return useTimeline( path, outputs, kept );
 };
 
-export interface SoundTimeline { logits: ( number | null )[]; duration: number }
-// Scored once per sound, as it takes a run of the model per 2.5 s of it
-const soundTimelines = new Map<string, Promise<SoundTimeline>>( );
-
-// For the sound at `uri` (a file path, file URL or remote URL): the logit of
-// whichever species the model finds most likely in each 1/3 s of it, with its
-// length in seconds, or null until it is scored or when it can't be.
-export const useSoundTopTimeline = ( uri: string ) => {
-  const [scored, setScored] = useState<{ uri: string; timeline: SoundTimeline } | null>( null );
-  useEffect( ( ) => {
-    let current = true;
-    if ( AudioBirdId?.soundTopTimeline ) {
-      let timeline = soundTimelines.get( uri );
-      if ( !timeline ) {
-        timeline = AudioBirdId.soundTopTimeline( uri );
-        soundTimelines.set( uri, timeline );
-        timeline.catch( ( e: Error ) => {
-          soundTimelines.delete( uri );
-          logger.error( `scoring sound timeline failed: ${e.message}` );
-        } );
-      }
-      timeline
-        .then( result => { if ( current ) setScored( { uri, timeline: result } ); } )
-        .catch( ( ) => undefined );
-    }
-    return ( ) => { current = false; };
-  }, [uri] );
-  return scored?.uri === uri
-    ? scored.timeline
-    : null;
+// For a recorded sound, the timeline of whichever species likely at `place`
+// and `date` (any species, where the place is unknown) the model finds most
+// likely at each moment.
+export const useSoundTimeline = (
+  uri: string,
+  place: { latitude: number; longitude: number } | null,
+  date: Date,
+) => {
+  const { data: setup } = useQuery( {
+    queryKey: ["audioIdSetup", place, date],
+    queryFn: ( ) => ( AudioBirdId
+      ? prepareAudioId( AudioBirdId.geo, place, date )
+      : Promise.reject( new Error( "Audio ID is unavailable" ) ) ),
+    enabled: !!AudioBirdId,
+    staleTime: Infinity,
+    retry: false,
+  } );
+  return useTimeline( uri, setup?.outputs ?? null );
 };
 
 interface Props {

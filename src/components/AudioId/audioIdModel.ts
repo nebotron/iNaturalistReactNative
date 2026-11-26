@@ -119,6 +119,34 @@ export const speciesOutput = ( sp: AudioIdSpecies ) => (
   ? name === sp.modelName
   : taxonId === sp.taxonId && name === sp.name ) );
 
+// Where and when an observation's sounds were recorded, as prepareAudioId
+// takes them: null for an unknown place, and today for an unknown time. A new
+// local observation has only observed_on_string until it's uploaded, and
+// without it the geomodel would use this week rather than the sound's.
+export interface SoundObservation {
+  latitude?: number | null;
+  longitude?: number | null;
+  time_observed_at?: string | null;
+  observed_on_string?: string | null;
+  observed_on?: string | null;
+}
+export const soundPlaceAndDate = ( observation?: SoundObservation | null ) => {
+  const { latitude, longitude } = observation || {};
+  const observedTime = Date.parse( observation?.time_observed_at
+    || observation?.observed_on_string
+    || observation?.observed_on
+    || "" );
+  return {
+    place: latitude != null && longitude != null
+      ? { latitude, longitude }
+      : null,
+    // The start of today, so it's the same on every render
+    date: Number.isNaN( observedTime )
+      ? new Date( new Date( ).toDateString( ) )
+      : new Date( observedTime ),
+  };
+};
+
 // BirdNET's 48-week year: four weeks per month.
 const birdnetWeek = ( d: Date ) => d.getMonth( ) * 4
   + Math.min( 4, Math.floor( ( d.getDate( ) - 1 ) / 7 ) + 1 );

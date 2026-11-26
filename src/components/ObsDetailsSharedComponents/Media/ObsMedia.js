@@ -42,6 +42,9 @@ const ObsMedia = ( {
   const [mediaViewerVisible, setMediaViewerVisible] = useState( false );
 
   const items = useMemo( ( ) => ( [...photos, ...sounds] ), [photos, sounds] );
+  const soundObservation = useMemo( ( ) => (
+    { latitude, longitude, time_observed_at: timeObservedAt }
+  ), [latitude, longitude, timeObservedAt] );
 
   const CarouselSlide = useCallback(
     ( { item } ) => ( item.file_url
@@ -49,6 +52,7 @@ const ObsMedia = ( {
         <SoundContainer
           sizeClass="h-72 w-screen"
           sound={item}
+          observation={soundObservation}
           isVisible={items.indexOf( item ) === index}
         />
       )
@@ -61,7 +65,7 @@ const ObsMedia = ( {
           }}
         />
       ) ),
-    [setMediaViewerVisible, setIndex, items, index],
+    [setMediaViewerVisible, setIndex, items, index, soundObservation],
   );
 
   const currentPhotoUrl = index >= photos.length
@@ -102,6 +106,7 @@ const ObsMedia = ( {
     <View className="w-full h-full">
       <MasonryLayout
         items={items}
+        soundObservation={soundObservation}
         onImagePress={newIndex => {
           setIndex( newIndex );
           setMediaViewerVisible( true );

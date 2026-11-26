@@ -6,6 +6,7 @@ import {
 } from "@dr.pogodin/react-native-fs";
 import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
+import type { SoundObservation } from "components/AudioId/audioIdModel";
 import { WarningSheet } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { format } from "date-fns";
@@ -124,6 +125,9 @@ interface Props {
   onReorderPhotos?: Function;
   photos?: PhotoItem[];
   sounds?: SoundItem[];
+  // The observation the sounds are of, when it isn't the latitude, longitude
+  // and timeObservedAt given
+  soundObservation?: SoundObservation | null;
   timeObservedAt?: string | null;
   uri?: string | null;
 }
@@ -144,6 +148,7 @@ const MediaViewer = ( {
   onReorderPhotos,
   photos = [],
   sounds = [],
+  soundObservation,
   timeObservedAt,
   uri,
 }: Props ) => {
@@ -374,6 +379,8 @@ const MediaViewer = ( {
         editable={editable}
         photos={photos}
         sounds={sounds}
+        soundObservation={soundObservation
+          ?? { latitude, longitude, time_observed_at: timeObservedAt }}
         onClose={onClose}
         selectedMediaIndex={selectedMediaIndex}
         horizontalScroll={horizontalScroll}

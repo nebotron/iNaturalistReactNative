@@ -8,6 +8,7 @@ import {
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import { useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
 
 import ObsPhotoSelectionList from "./ObsPhotoSelectionList";
 
@@ -43,6 +44,7 @@ const SuggestionsHeader = ( {
   showImproveWithLocationButton,
 }: Props ) => {
   const { t } = useTranslation( );
+  const currentObservation = useStore( state => state.currentObservation );
   const hasMultipleMedia = photoUris.length + soundUris.length > 1;
 
   return (
@@ -76,6 +78,7 @@ const SuggestionsHeader = ( {
               key={soundUri}
               sizeClass="w-full py-4"
               sound={{ file_url: soundUri }}
+              observation={currentObservation}
               isVisible
             />
           </View>

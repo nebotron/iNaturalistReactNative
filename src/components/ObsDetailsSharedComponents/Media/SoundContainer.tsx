@@ -3,12 +3,12 @@ import {
   useNetInfo,
 } from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
+import type { SoundObservation } from "components/AudioId/audioIdModel";
+import { soundPlaceAndDate } from "components/AudioId/audioIdModel";
 import {
-  normalizedSoundUri, playerStarted, setPlayingAudio,
+  BINS_PER_S, normalizedSoundUri, playerStarted, setPlayingAudio,
 } from "components/AudioId/audioIdSession";
-import ClipProbabilityGraph, {
-  useSoundTopTimeline,
-} from "components/AudioId/ClipProbabilityGraph";
+import ClipProbabilityGraph, { useSoundTimeline } from "components/AudioId/ClipProbabilityGraph";
 import SoundSpectrogram, { SPECTROGRAM_HEIGHT } from "components/AudioId/SoundSpectrogram";
 import {
   Body2,
@@ -36,6 +36,9 @@ import colors from "styles/tailwindColors";
 interface SoundContainerProps {
   autoPlay?: boolean;
   isVisible: boolean;
+  // The observation the sound is of, so the graph under it only considers
+  // species likely where and when it was recorded
+  observation?: SoundObservation | null;
   sizeClass: string;
   sound: {
     file_url: string;
@@ -47,6 +50,7 @@ interface SoundContainerProps {
 const SoundContainer = ( {
   autoPlay,
   isVisible,
+  observation,
   sizeClass,
   sound,
 }: SoundContainerProps ) => {
@@ -87,7 +91,9 @@ const SoundContainer = ( {
   const clock = useRef( { fromMs: 0, started: 0 } );
   const durationMs = useRef( 0 );
   // How sure the model is of the most likely species at each moment
-  const topTimeline = useSoundTopTimeline( sound.file_url );
+  const { place, date } = soundPlaceAndDate( observation );
+  const logits = useSoundTimeline( sound.file_url, place, date );
+  const logitsDuration = ( logits?.length ?? 0 ) / BINS_PER_S;
 
   const holdPlayhead = useCallback( ( fraction?: number ) => {
     clearInterval( timer.current );
@@ -367,12 +373,11 @@ const SoundContainer = ( {
               pointerEvents="none"
             />
           </View>
-          {topTimeline && topTimeline.duration > 0
-            && topTimeline.logits.some( logit => logit != null ) && (
+          {logits && logits.some( logit => logit != null ) && (
             <ClipProbabilityGraph
-              logits={topTimeline.logits}
-              duration={topTimeline.duration}
-              position={playhead * topTimeline.duration}
+              logits={logits}
+              duration={logitsDuration}
+              position={playhead * logitsDuration}
             />
           )}
         </View>
