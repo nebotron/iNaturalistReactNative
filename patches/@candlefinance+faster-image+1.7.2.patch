@@ -150,7 +150,7 @@ index a8401df..4856de2 100644
 +
  @end
 diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
-index d653e1c..cb215b0 100644
+index d653e1c..8e4998f 100644
 --- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 @@ -15,6 +15,9 @@ final class FasterImageViewManager: RCTViewManager {
@@ -163,7 +163,7 @@ index d653e1c..cb215b0 100644
        DataLoader.sharedUrlCache.removeAllCachedResponses()
        URLSession.shared.invalidateAndCancel()
        DispatchQueue.main.async {
-@@ -23,14 +26,72 @@ final class FasterImageViewManager: RCTViewManager {
+@@ -23,14 +26,74 @@ final class FasterImageViewManager: RCTViewManager {
      }
    }
    
@@ -181,14 +181,14 @@ index d653e1c..cb215b0 100644
 -    let prefetcher = ImagePrefetcher()
 -    prefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
 +    Self.prefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
-+    resolve(true)
-+  }
+     resolve(true)
+   }
 +
 +  // Downloads into the disk cache only, without decoding. For lists whose
 +  // cells decode at their own size (maxPixelSize): a decoded full-size image
 +  // in the memory cache is keyed apart from the cells' thumbnails, so
 +  // prefetching into memory decoded every upcoming photo for nothing.
-+  private static let dataPrefetcher = ImagePrefetcher(
++  static let dataPrefetcher = ImagePrefetcher(
 +    pipeline: CachePolicy.dataCachePipeline,
 +    destination: .diskCache
 +  )
@@ -197,9 +197,11 @@ index d653e1c..cb215b0 100644
 +  func prefetchData(sources: [String],
 +                    resolve: @escaping RCTPromiseResolveBlock,
 +                    reject: @escaping RCTPromiseRejectBlock) {
++    FasterImageMemoryStats.add("dataPrefetchCalls")
++    FasterImageMemoryStats.add("dataPrefetchUrls", sources.count)
 +    Self.dataPrefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
-     resolve(true)
-   }
++    resolve(true)
++  }
 +
 +  // The subset of `sources` already in the memory or disk cache, so JS can
 +  // show a cached lower-resolution variant while a larger one downloads.
@@ -238,7 +240,7 @@ index d653e1c..cb215b0 100644
  }
  
  struct ImageOptions: Decodable {
-@@ -55,6 +116,11 @@ struct ImageOptions: Decodable {
+@@ -55,6 +118,11 @@ struct ImageOptions: Decodable {
    let colorMatrix: [[Double]]?
    let ignoreQueryParamsForCacheKey: Bool?
    let priority: String?
@@ -250,7 +252,64 @@ index d653e1c..cb215b0 100644
  }
  
  struct BorderRadii {
-@@ -176,6 +242,7 @@ final class FasterImageView: UIView {
+@@ -88,6 +156,37 @@ extension ImageRequest.Priority {
+   }
+ }
+ 
++// What the image pipeline holds and has been asked for, for the app's memory
++// snapshots (ImageCropper memorySnapshot). The app reads it through the
++// Objective-C runtime, so it needn't import this pod's module.
++@objc(FasterImageMemoryStats)
++final class FasterImageMemoryStats: NSObject {
++  private static let lock = NSLock()
++  nonisolated(unsafe) private static var counts = [String: Int]()
++
++  static func add(_ key: String, _ amount: Int = 1) {
++    lock.lock()
++    counts[key, default: 0] += amount
++    lock.unlock()
++  }
++
++  // Off the main thread only: the prefetchers' counts wait for the pipeline queue
++  @objc static func stats() -> NSDictionary {
++    lock.lock()
++    var result: [String: Any] = counts
++    lock.unlock()
++    result["dataPrefetchPending"] = FasterImageViewManager.dataPrefetcher.pendingTaskCount
++    if let dataCache = CachePolicy.dataCachePipeline.configuration.dataCache as? DataCache {
++      let staged = dataCache.stagedChanges
++      result["dataCacheStaged"] = staged.count
++      result["dataCacheStagedMB"] = Double(staged.bytes / 104857) / 10
++    }
++    result["imageCacheMB"] = Double(ImageCache.shared.totalCost / 104857) / 10
++    result["imageCacheCount"] = ImageCache.shared.totalCount
++    return result as NSDictionary
++  }
++}
++
+ /// A wrapper around `LazyImageView` to make it compatible with React Native.
+ final class FasterImageView: UIView {
+   
+@@ -97,6 +196,7 @@ final class FasterImageView: UIView {
+     self.priority = .normal
+     
+     super.init(frame: .zero)
++    FasterImageMemoryStats.add("liveViews")
+     addSubview(lazyImageView)
+     lazyImageView.translatesAutoresizingMaskIntoConstraints = false
+     NSLayoutConstraint.activate([
+@@ -116,6 +216,10 @@ final class FasterImageView: UIView {
+   required init?(coder: NSCoder) {
+     fatalError("init(coder:) has not been implemented")
+   }
++
++  deinit {
++    FasterImageMemoryStats.add("liveViews", -1)
++  }
+   
+   // MARK: - Views
+   
+@@ -176,6 +280,7 @@ final class FasterImageView: UIView {
          grayscale = options.grayscale ?? 0.0
          colorMatrix = options.colorMatrix ?? [[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0]]
          ignoreQueryParamsForCacheKey = options.ignoreQueryParamsForCacheKey ?? false
@@ -258,7 +317,7 @@ index d653e1c..cb215b0 100644
          
          if let url = URL(string: options.url) {
            var urlRequestFromOptions = URLRequest(url: url)
-@@ -284,6 +351,11 @@ final class FasterImageView: UIView {
+@@ -284,6 +389,11 @@ final class FasterImageView: UIView {
      
    var colorMatrix = [[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0]] {
        didSet {
@@ -270,7 +329,7 @@ index d653e1c..cb215b0 100644
            if !colorMatrix.isEmpty && colorMatrix.count == 4 && colorMatrix.allSatisfy(({ $0.count == 5 })) {
                lazyImageView.processors = [
                    ImageProcessors.CoreImageFilter(
-@@ -424,9 +496,21 @@ final class FasterImageView: UIView {
+@@ -424,9 +534,21 @@ final class FasterImageView: UIView {
      }
    }
    
@@ -294,10 +353,29 @@ index d653e1c..cb215b0 100644
    }
    
 diff --git a/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift b/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift
-index 8a63cf1..e3dea8a 100644
+index 8a63cf1..ba75366 100644
 --- a/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/Nuke/Caching/DataCache.swift
-@@ -143,7 +143,14 @@ public final class DataCache: DataCaching, @unchecked Sendable {
+@@ -65,6 +65,18 @@ public final class DataCache: DataCaching, @unchecked Sendable {
+ 
+     var flushInterval: DispatchTimeInterval = .seconds(1)
+ 
++    /// The writes accepted and not yet flushed to disk, which are held in
++    /// memory until they are, for the app's memory snapshots
++    public var stagedChanges: (count: Int, bytes: Int) {
++        lock.lock()
++        defer { lock.unlock() }
++        var bytes = 0
++        for change in staging.changes.values {
++            if case let .add(data) = change.type { bytes += data.count }
++        }
++        return (staging.changes.count, bytes)
++    }
++
+     private struct Metadata: Codable {
+         var lastSweepDate: Date?
+     }
+@@ -143,7 +155,14 @@ public final class DataCache: DataCaching, @unchecked Sendable {
          guard let url = url(for: key) else {
              return nil
          }
@@ -339,6 +417,24 @@ index adb40b8..8f17197 100644
         let orientationValue = imageProperties[kCGImagePropertyOrientation as String] as? UInt32,
         let cgOrientation = CGImagePropertyOrientation(rawValue: orientationValue) {
          orientation = UIImage.Orientation(cgOrientation)
+diff --git a/node_modules/@candlefinance/faster-image/ios/Nuke/Prefetching/ImagePrefetcher.swift b/node_modules/@candlefinance/faster-image/ios/Nuke/Prefetching/ImagePrefetcher.swift
+index 210ca60..afe85d7 100644
+--- a/node_modules/@candlefinance/faster-image/ios/Nuke/Prefetching/ImagePrefetcher.swift
++++ b/node_modules/@candlefinance/faster-image/ios/Nuke/Prefetching/ImagePrefetcher.swift
+@@ -54,6 +54,13 @@ public final class ImagePrefetcher: @unchecked Sendable {
+ 
+     private let pipeline: ImagePipeline
+     private var tasks = [TaskLoadImageKey: Task]()
++
++    /// The prefetches started and not yet finished, queued or loading, for the
++    /// app's memory snapshots. Waits for the pipeline queue, so it must never
++    /// be read on it.
++    public var pendingTaskCount: Int {
++        pipeline.queue.sync { tasks.count }
++    }
+     private let destination: Destination
+     private var _priority: ImageRequest.Priority = .low
+     let queue = OperationQueue() // internal for testing
 diff --git a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts b/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
 index 445d872..fb8eec4 100644
 --- a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts

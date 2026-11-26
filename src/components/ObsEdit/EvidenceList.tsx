@@ -323,6 +323,7 @@ const EvidenceList = ( {
         photos={observationPhotos.map( obsPhoto => obsPhoto.photo )}
         showModal={!!selectedMediaUri || deleting}
         sounds={observationSounds.map( obsSound => obsSound.sound )}
+        soundObservation={currentObservation}
         uri={selectedMediaUri}
       />
     </>

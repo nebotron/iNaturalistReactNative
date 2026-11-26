@@ -65,6 +65,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { log } from "sharedHelpers/logger";
+import { setMemoryContext } from "sharedHelpers/memoryWatermark";
 import {
   EXPLORE_OBSERVATIONS_SORT_OPTIONS,
   OBSERVATIONS_SORT,
@@ -348,6 +349,17 @@ const ExploreResults = ( ) => {
     sortsTaxonomically,
     observationLineages,
   ] );
+
+  // What Explore shows, for the memory log: the Nov 25 kill climbed ~1 GB at a
+  // time while it was open, and the map and the grid hold very different things
+  useEffect( ( ) => {
+    setMemoryContext( "explore", {
+      tab: state.activeTab,
+      layout,
+      results: sortedObservations.length,
+    } );
+  }, [state.activeTab, layout, sortedObservations.length] );
+  useEffect( ( ) => ( ) => setMemoryContext( "explore" ), [] );
 
   // Diagnostics: observations sometimes show nothing after switching from
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload

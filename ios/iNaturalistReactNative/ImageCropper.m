@@ -3150,6 +3150,29 @@ static NSNumber *roundedMB( uint64_t bytes )
   return @( round( bytes / 1048576.0 * 10 ) / 10 );
 }
 
+// Counts from the libraries that hold the most on browsing screens, so a
+// climb can be put down to one: the map's tile layers (patched
+// react-native-maps) and the image pipeline's prefetches and caches (patched
+// faster-image). Read through the runtime, as the app doesn't import their
+// modules. Off the main thread: the image counts wait for Nuke's queue.
+static NSDictionary *nativeMemoryCounters( void )
+{
+  NSMutableDictionary *counters = [NSMutableDictionary new];
+  NSDictionary<NSString *, NSString *> *sources = @{
+    @"mapTiles": @"AIRMapUrlTileMemoryStats",
+    @"images": @"FasterImageMemoryStats",
+  };
+  SEL statsSelector = NSSelectorFromString( @"stats" );
+  for ( NSString *key in sources ) {
+    Class source = NSClassFromString( sources[key] );
+    if ( ![source respondsToSelector:statsSelector] ) continue;
+    NSDictionary *( *stats )( id, SEL ) = (void *)[source methodForSelector:statsSelector];
+    NSDictionary *value = stats( source, statsSelector );
+    if ( [value isKindOfClass:[NSDictionary class]] ) counters[key] = value;
+  }
+  return counters;
+}
+
 // What the snapshot before this one counted per tag, for the growth since it
 static NSDictionary<NSString *, NSNumber *> *lastTagBytes = nil;
 static CFAbsoluteTime lastSnapshotAt = 0;
@@ -3281,6 +3304,7 @@ static NSDictionary *memorySnapshot( void )
     }
     snapshot[@"mallocZones"] = zones;
   }
+  snapshot[@"counters"] = nativeMemoryCounters( );
   return snapshot;
 }
 
@@ -3314,6 +3338,17 @@ RCT_EXPORT_METHOD( memoryStats
   resolve( @{
     @"footprintMB": @( footprintMB( ) ),
     @"freeMB":      @( freeMB( ) ),
+  } );
+}
+
+// Just the library counters, for memoryWatermark.ts to sample with the
+// footprint and say what changed when the footprint jumps
+RCT_EXPORT_METHOD( memoryCounters
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( memorySnapshotQueue( ), ^{
+    resolve( nativeMemoryCounters( ) );
   } );
 }
 

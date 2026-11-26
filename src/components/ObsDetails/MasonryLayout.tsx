@@ -1,3 +1,4 @@
+import type { SoundObservation } from "components/AudioId/audioIdModel";
 import PhotoContainer from "components/ObsDetailsSharedComponents/Media/PhotoContainer";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import { ScrollView, View } from "components/styledComponents";
@@ -23,6 +24,8 @@ type MediaItem = PhotoItem | SoundItem;
 interface Props {
   items: MediaItem[];
   onImagePress: ( index: number ) => void;
+  // The observation the sounds are of, for the graph under each
+  soundObservation?: SoundObservation | null;
 }
 
 interface SizedPhoto extends PhotoItem {
@@ -51,7 +54,7 @@ const photoUrl = ( photo: PhotoItem ): string => (
 
 const isSound = ( item: MediaItem ): item is SoundItem => "file_url" in item;
 
-const MasonryLayout = ( { items, onImagePress }: Props ) => {
+const MasonryLayout = ( { items, onImagePress, soundObservation }: Props ) => {
   const [columns, setColumns] = useState<EnrichedMediaItem[][]>(
     Array.from( { length: numColumns }, () => [] ),
   );
@@ -107,6 +110,7 @@ const MasonryLayout = ( { items, onImagePress }: Props ) => {
       key={`MasonryLayout.column${column}.sound_${index}`}
       sizeClass="w-full aspect-square"
       sound={item}
+      observation={soundObservation}
       isVisible
     />
   );

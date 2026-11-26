@@ -16,6 +16,13 @@ const logger = log.extend( "memoryWatermark" );
 // growth since the last step, the largest allocations, malloc zones) and what
 // the app was doing (setMemoryContext). The last snapshot at a high footprint
 // is kept on disk, and the next launch logs it, since a kill logs nothing.
+//
+// The Nov 25 kill climbed ~1 GB at a time while browsing Explore, in small
+// native allocations, on the build that started caching map tiles on disk.
+// So every sample also reads counters from the map's tile layers and the image
+// pipeline (ImageCropper.memoryCounters), and a jump of JUMP_MB between two
+// samples logs memory_jump with what each counter did over it, whatever the
+// total, to say which of them the memory went to.
 const FIRST_STEP_MB = 1536;
 const STEP_MB = 512;
 // Sampled between screen changes too, since memory also grows within one
@@ -27,16 +34,24 @@ const HIGH_MB = 2048;
 // How often the on-disk snapshot is refreshed while the footprint is high
 const PERSIST_MS = 10_000;
 const TRAIL_LENGTH = 10;
+const JUMP_MB = 250;
+// Only between samples this close together, so a jump is attributable
+const JUMP_MAX_GAP_MS = 15_000;
+const JUMP_MIN_INTERVAL_MS = 30_000;
+const MAX_JUMPS_LOGGED = 20;
 
 interface MemoryStats { footprintMB: number; freeMB: number }
 
 type MemoryContext = Record<string, unknown>;
+
+type MemoryCounters = Record<string, Record<string, number>>;
 
 // iOS only; elsewhere there is nothing to sample and this all does nothing.
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
     memoryStats?: ( ) => Promise<MemoryStats>;
     memorySnapshot?: ( context: MemoryContext | null ) => Promise<Record<string, unknown>>;
+    memoryCounters?: ( ) => Promise<MemoryCounters>;
     takePreviousMemorySnapshot?: ( ) => Promise<( MemoryStats & {
       at?: number;
       context?: MemoryContext;
@@ -53,6 +68,23 @@ let started = false;
 let persistedAt = 0;
 let persistedHigh = false;
 const contexts: Record<string, MemoryContext> = {};
+let lastSample: { footprintMB: number; at: number; counters: MemoryCounters | null } | null = null;
+let lastJumpAt = 0;
+let jumpsLogged = 0;
+
+// How each counter changed between two samples, leaving out those that didn't
+const counterChanges = ( before: MemoryCounters | null, after: MemoryCounters | null ) => {
+  if ( !before || !after ) return null;
+  const changes: Record<string, Record<string, number>> = {};
+  Object.entries( after ).forEach( ( [source, values] ) => {
+    Object.entries( values ).forEach( ( [key, value] ) => {
+      const change = value - ( before[source]?.[key] ?? 0 );
+      if ( change === 0 ) return;
+      changes[source] = { ...changes[source], [key]: Math.round( change * 10 ) / 10 };
+    } );
+  } );
+  return changes;
+};
 
 // What a feature that holds a lot of memory is doing, for the snapshots: the
 // camera's photos taken, Audio ID's listening time and runs. undefined clears.
@@ -73,11 +105,38 @@ const currentContext = ( ): MemoryContext => ( {
   trail: trail.join( " > " ),
 } );
 
+const logJump = async (
+  stats: MemoryStats,
+  previous: NonNullable<typeof lastSample>,
+  counters: MemoryCounters | null,
+  now: number,
+) => {
+  const grewMB = stats.footprintMB - previous.footprintMB;
+  if ( grewMB < JUMP_MB || now - previous.at > JUMP_MAX_GAP_MS ) return;
+  if ( now - lastJumpAt < JUMP_MIN_INTERVAL_MS || jumpsLogged >= MAX_JUMPS_LOGGED ) return;
+  lastJumpAt = now;
+  jumpsLogged += 1;
+  const snapshot = await ImageCropper?.memorySnapshot?.( null ).catch( ( ) => null );
+  logger.warnWithExtra( "memory_jump", {
+    ...stats,
+    ...currentContext( ),
+    grewMB,
+    overS: Math.round( ( now - previous.at ) / 100 ) / 10,
+    counters,
+    counterChanges: counterChanges( previous.counters, counters ),
+    snapshot,
+  } );
+};
+
 const sample = async ( ): Promise<number | null> => {
   const stats = await memoryStats( )?.catch( ( ) => null );
   if ( !stats || stats.footprintMB < 0 ) return null;
   const { footprintMB } = stats;
   const now = Date.now( );
+  const counters = await ImageCropper?.memoryCounters?.( ).catch( ( ) => null ) ?? null;
+  const previous = lastSample;
+  lastSample = { footprintMB, at: now, counters };
+  if ( previous ) await logJump( stats, previous, counters, now );
   const high = footprintMB >= FIRST_STEP_MB;
   // Keep the on-disk snapshot no more than PERSIST_MS old while high, and
   // overwrite it once when the footprint comes back down, so the next launch

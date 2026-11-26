@@ -900,13 +900,15 @@ RCT_EXPORT_METHOD( scoreSound:( NSString * )uri
   }];
 }
 
-// What timeline gives for the clip at `path` (32 kHz mono, as Audio ID saves
-// them): model output `output`'s (as start takes outputs) mean per-frame logit
-// in each 1/3 s, from 5 s windows every 2.5 s, the last ending at the clip's
-// end, and a clip shorter than a window padded with silence. A 15 s clip takes
-// 5 runs.
-RCT_EXPORT_METHOD( clipTimeline:( NSString * )path
-                   output:( double )output
+// What timeline gives, for a clip or any recorded sound at `uri` (as
+// normalizeSound takes it): in each 1/3 s, the highest mean per-frame logit
+// any of `outputs` (as start takes them) reaches there, so for one output its
+// timeline, and for many, how sure the model is of the likeliest of them at
+// each moment. Windows are 5 s every 2.5 s, the last ending at the sound's
+// end, and a sound shorter than a window is padded with silence. A 15 s clip
+// takes 5 runs.
+RCT_EXPORT_METHOD( clipTimeline:( NSString * )uri
+                   outputs:( NSArray<NSNumber *> * )outputs
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
@@ -914,15 +916,14 @@ RCT_EXPORT_METHOD( clipTimeline:( NSString * )path
     reject( @"model", @"Could not load the audio model", nil );
     return;
   }
-  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
-    NSError *error = nil;
-    AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path]
-                                                      error:&error];
-    AVAudioPCMBuffer *buffer = file
-      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
-                                      frameCapacity:(AVAudioFrameCount)file.length]
-      : nil;
-    if ( !buffer || ![file readIntoBuffer:buffer error:&error] || buffer.frameLength == 0 ) {
+  if ( outputs.count == 0 ) {
+    resolve( @[] );
+    return;
+  }
+  NSString *name = [NSUUID UUID].UUIDString;
+  [self withLocalSound:uri name:name done:^( NSURL *source, NSError *error ) {
+    AVAudioPCMBuffer *buffer = source ? ABReadMono( source, &error ) : nil;
+    if ( !buffer || buffer.frameLength == 0 ) {
       reject( @"clip", error.localizedDescription ?: @"Could not read the clip", error );
       return;
     }
@@ -931,82 +932,19 @@ RCT_EXPORT_METHOD( clipTimeline:( NSString * )path
     memcpy( samples, buffer.floatChannelData[0], n * sizeof( float ) );
     double binLen = AB_SR / 3.0;
     NSInteger bins = MAX( (NSInteger)lround( n / binLen ), 1 );
-    double *sum = (double *)calloc( bins, sizeof( double ) );
-    int *count = (int *)calloc( bins, sizeof( int ) );
-    NSArray<NSNumber *> *outputs = @[@( (NSInteger)output )];
-    NSString *inferError = nil;
-    BOOL ran = NO;
-    for ( NSInteger start = 0; ; start += AB_WIN / 2 ) {
-      BOOL last = start + AB_WIN >= length;
-      if ( last ) start = length - AB_WIN;
-      NSData *frames = nil;
-      NSInteger t = 0;
-      NSData *probs = [self run:self->_session input:samples + start length:AB_WIN
-                      inputName:"input" outputName:"output" outputs:outputs
-                         frames:&frames frameCount:&t error:&inferError];
-      if ( !probs || !frames || t <= 0 || (NSInteger)frames.length < t * (NSInteger)sizeof( float ) ) {
-        break;
-      }
-      ran = YES;
-      const float *f = (const float *)frames.bytes;
-      for ( NSInteger i = 0; i < t; i++ ) {
-        NSInteger b = (NSInteger)floor( ( start + ( i + 0.5 ) * AB_WIN / t ) / binLen );
-        if ( b < 0 || b >= bins ) continue;
-        sum[b] += f[i];
-        count[b]++;
-      }
-      if ( last ) break;
-    }
-    NSMutableArray *out = [NSMutableArray arrayWithCapacity:bins];
-    for ( NSInteger b = 0; b < bins; b++ ) {
-      [out addObject:count[b] ? @( sum[b] / count[b] ) : [NSNull null]];
-    }
-    free( samples );
-    free( sum );
-    free( count );
-    if ( ran && !inferError ) resolve( out );
-    else reject( @"model", inferError ?: @"Could not score the clip", nil );
-  } );
-}
-
-// For a recorded sound (as normalizeSound takes it): in each 1/3 s, the
-// highest mean per-frame logit any model output reaches there, i.e. how sure
-// the model is of the most likely species at that moment, as clipTimeline
-// gives for one output, with the sound's length in seconds. Windows are 5 s
-// every 2.5 s, the last ending at the sound's end, and a sound shorter than a
-// window is padded with silence.
-RCT_EXPORT_METHOD( soundTopTimeline:( NSString * )uri
-                   resolver:( RCTPromiseResolveBlock )resolve
-                   rejecter:( RCTPromiseRejectBlock )reject )
-{
-  if ( ![self loadModel] ) {
-    reject( @"model", @"Could not load the audio model", nil );
-    return;
-  }
-  NSString *name = [NSUUID UUID].UUIDString;
-  [self withLocalSound:uri name:name done:^( NSURL *source, NSError *error ) {
-    AVAudioPCMBuffer *buffer = source ? ABReadMono( source, &error ) : nil;
-    if ( !buffer || buffer.frameLength == 0 ) {
-      reject( @"sound", error.localizedDescription ?: @"Could not read the sound", error );
-      return;
-    }
-    NSInteger n = buffer.frameLength, length = MAX( n, (NSInteger)AB_WIN );
-    float *samples = (float *)calloc( length, sizeof( float ) );
-    memcpy( samples, buffer.floatChannelData[0], n * sizeof( float ) );
-    double binLen = AB_SR / 3.0;
-    NSInteger bins = MAX( (NSInteger)lround( n / binLen ), 1 );
+    NSInteger rows = (NSInteger)outputs.count;
     // Sums per output for the bins a window can still reach, in a ring of
     // `slots`, so a long sound needs no more than a short one: a bin is done
     // once a window starts past it, since no later window starts earlier.
     NSInteger slots = (NSInteger)ceil( AB_WIN / binLen ) + 3;
-    __block float *sum = NULL;
+    float *sum = (float *)calloc( rows * slots, sizeof( float ) );
     int *count = (int *)calloc( slots, sizeof( int ) );
-    __block NSInteger rows = 0, done = 0;
+    __block NSInteger done = 0;
     NSMutableArray *logits = [NSMutableArray arrayWithCapacity:bins];
     void ( ^finish )( NSInteger ) = ^( NSInteger upTo ) {
       for ( ; done < MIN( upTo, bins ); done++ ) {
         NSInteger slot = done % slots;
-        if ( !count[slot] || !sum ) {
+        if ( !count[slot] ) {
           [logits addObject:[NSNull null]];
           continue;
         }
@@ -1028,15 +966,12 @@ RCT_EXPORT_METHOD( soundTopTimeline:( NSString * )uri
       NSData *frames = nil;
       NSInteger t = 0;
       NSData *probs = [self run:self->_session input:samples + start length:AB_WIN
-                      inputName:"input" outputName:"output" outputs:nil
+                      inputName:"input" outputName:"output" outputs:outputs
                          frames:&frames frameCount:&t error:&inferError];
-      if ( !probs || !frames || t <= 0 ) break;
-      NSInteger r = (NSInteger)( frames.length / ( t * sizeof( float ) ) );
-      if ( !sum ) {
-        rows = r;
-        sum = (float *)calloc( rows * slots, sizeof( float ) );
+      if ( !probs || !frames || t <= 0
+           || (NSInteger)frames.length < rows * t * (NSInteger)sizeof( float ) ) {
+        break;
       }
-      if ( r != rows || rows <= 0 ) break;
       ran = YES;
       const float *f = (const float *)frames.bytes;
       for ( NSInteger i = 0; i < t; i++ ) {
@@ -1052,11 +987,8 @@ RCT_EXPORT_METHOD( soundTopTimeline:( NSString * )uri
     free( samples );
     free( sum );
     free( count );
-    if ( ran && !inferError ) {
-      resolve( @{ @"logits": logits, @"duration": @( (double)n / AB_SR ) } );
-    } else {
-      reject( @"model", inferError ?: @"Could not score the sound", nil );
-    }
+    if ( ran && !inferError ) resolve( logits );
+    else reject( @"model", inferError ?: @"Could not score the clip", nil );
   }];
 }
 

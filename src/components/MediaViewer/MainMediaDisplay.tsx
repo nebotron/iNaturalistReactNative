@@ -1,3 +1,4 @@
+import type { SoundObservation } from "components/AudioId/audioIdModel";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
   INatIconButton,
@@ -76,6 +77,8 @@ interface Props {
   onSharePhoto?: ( uri: string, crop?: NormalizedCrop ) => void;
   photos: Omit<PhotoItem, "type">[];
   sounds?: Omit<SoundItem, "type">[];
+  // The observation the sounds are of, for the graph under each
+  soundObservation?: SoundObservation | null;
   selectedMediaIndex: number;
   setSelectedMediaIndex: ( index: number ) => void;
 }
@@ -92,6 +95,7 @@ const MainMediaDisplay = ( {
   onSharePhoto,
   photos,
   sounds = [],
+  soundObservation,
   selectedMediaIndex,
   setSelectedMediaIndex,
 }: Props ) => {
@@ -325,6 +329,7 @@ const MainMediaDisplay = ( {
           autoPlay={autoPlaySound}
           sizeClass="h-72 w-screen"
           sound={sound}
+          observation={soundObservation}
           isVisible={items.indexOf( sound ) === selectedMediaIndex}
         />
         {

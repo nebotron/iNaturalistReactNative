@@ -1,6 +1,6 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
-import { prepareAudioId } from "components/AudioId/audioIdModel";
+import { prepareAudioId, soundPlaceAndDate } from "components/AudioId/audioIdModel";
 import { AudioBirdId, isHeard } from "components/AudioId/audioIdSession";
 import React, { useEffect, useState } from "react";
 import useStore from "stores/useStore";
@@ -89,22 +89,12 @@ const SoundSuggestionsContainer = ( {
     ?? ( ownSoundUri && soundUris.includes( ownSoundUri )
       ? ownSoundUri
       : soundUris[0] );
-  const { latitude, longitude } = currentObservation || {};
-  // A new local observation has only observed_on_string until it's uploaded,
-  // and without it the geomodel would use this week rather than the sound's.
-  const observedAt = currentObservation?.time_observed_at
-    || currentObservation?.observed_on_string
-    || currentObservation?.observed_on;
-  const observedTime = Date.parse( observedAt ?? "" );
+  const { place, date } = soundPlaceAndDate( currentObservation );
   const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: false } );
 
   const { data, isLoading } = useQuery( {
-    queryKey: ["soundSuggestions", soundUri, latitude, longitude, observedTime],
-    queryFn: ( ) => scoreSound( soundUri as string, latitude != null && longitude != null
-      ? { latitude, longitude }
-      : null, Number.isNaN( observedTime )
-      ? new Date( )
-      : new Date( observedTime ) ),
+    queryKey: ["soundSuggestions", soundUri, place, date],
+    queryFn: ( ) => scoreSound( soundUri as string, place, date ),
     enabled: !!soundUri,
     retry: false,
   } );
@@ -126,7 +116,7 @@ const SoundSuggestionsContainer = ( {
       hideSkip={params?.hideSkip}
       improveWithLocationButtonOnPress={( ) => undefined}
       isLoading={!!soundUri && isLoading}
-      shouldUseEvidenceLocation={latitude != null}
+      shouldUseEvidenceLocation={place != null}
       detectSubject={detectSubject}
       onPressPhoto={onPressPhoto ?? ( ( ) => undefined )}
       onPressSound={onPressSound ?? setOwnSoundUri}

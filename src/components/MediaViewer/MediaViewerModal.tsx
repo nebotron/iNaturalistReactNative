@@ -1,3 +1,4 @@
+import type { SoundObservation } from "components/AudioId/audioIdModel";
 import MediaViewer from "components/MediaViewer/MediaViewer";
 import Modal from "components/SharedComponents/Modal";
 import React from "react";
@@ -34,6 +35,9 @@ interface Props {
   onReorderPhotos?: ( photos: PhotoItem[] ) => void;
   photos?: PhotoItem[];
   sounds?: SoundItem[];
+  // The observation the sounds are of, when it isn't the latitude, longitude
+  // and timeObservedAt given
+  soundObservation?: SoundObservation | null;
   showModal: boolean;
   timeObservedAt?: string;
   uri?: string | null;
@@ -56,6 +60,7 @@ const MediaViewerModal = ( {
   photos = [],
   showModal,
   sounds,
+  soundObservation,
   timeObservedAt,
   uri,
 }: Props ) => (
@@ -81,6 +86,7 @@ const MediaViewerModal = ( {
         onReorderPhotos={onReorderPhotos}
         photos={photos}
         sounds={sounds}
+        soundObservation={soundObservation}
         timeObservedAt={timeObservedAt}
         uri={uri}
       />
