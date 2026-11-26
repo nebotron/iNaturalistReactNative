@@ -7,6 +7,8 @@ import { getShadow } from "styles/global";
 const DROP_SHADOW = getShadow( );
 
 interface Props {
+  // Distance from the bottom of the map, overriding the className's bottom-5
+  bottomOffset?: number;
   currentLocationButtonClassName?: string;
   onPress: () => void;
   showCurrentLocationButton?: boolean;
@@ -14,6 +16,7 @@ interface Props {
 }
 
 const CurrentLocationButton = ( {
+  bottomOffset,
   currentLocationButtonClassName,
   onPress,
   showCurrentLocationButton,
@@ -31,7 +34,9 @@ const CurrentLocationButton = ( {
           "absolute bg-white rounded-full",
           currentLocationButtonClassName || "bottom-5 right-5",
         )}
-        style={DROP_SHADOW}
+        style={bottomOffset === undefined
+          ? DROP_SHADOW
+          : { ...DROP_SHADOW, bottom: bottomOffset }}
         accessibilityLabel={t( "Zoom-to-current-location" )}
         onPress={onPress}
         testID="Map.CurrentLocationButton"

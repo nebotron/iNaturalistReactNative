@@ -200,14 +200,18 @@ const RozeniteContainer = () => {
   return null;
 };
 
-// The full insets leave dead space: the Dynamic Island ends ~14pt above the
-// top inset, and the home indicator needs only ~14pt of the 34pt bottom inset.
+// The full insets leave dead space: the Dynamic Island ends ~11pt above the
+// top inset (59pt inset, island bottom at 48pt), and the home indicator needs
+// only ~14pt of the 34pt bottom inset. Trim the top by less than that gap so
+// content placed at insets.top still clears the island (and notches).
+const TOP_INSET_TRIM = 6;
+
 const TrimmedSafeAreaInsets = ( { children } ) => {
   const insets = useSafeAreaInsets( );
   const trimmed = useMemo( ( ) => ( {
     ...insets,
     top: insets.top > 40
-      ? insets.top - 16
+      ? insets.top - TOP_INSET_TRIM
       : insets.top,
     bottom: Math.min( insets.bottom, 14 ),
   } ), [insets] );

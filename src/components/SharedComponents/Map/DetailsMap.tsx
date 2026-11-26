@@ -9,7 +9,7 @@ import {
   Map,
   Modal,
 } from "components/SharedComponents";
-import { BottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
+import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import { t } from "i18next";
 import React, { useState } from "react";
@@ -99,7 +99,8 @@ const DetailsMap = ( {
   };
 
   return (
-    <BottomInsetViewWrapper>
+    // No bottom inset padding: the map runs to the bottom edge of the screen
+    <ScreenShell>
       <View
         className="bg-white w-fit flex-row py-[22px] pl-[21px] pr-[24px] items-start"
         style={{ paddingTop: insets.top }}
@@ -114,6 +115,7 @@ const DetailsMap = ( {
       <View className="flex-1">
         <Map
           mapHeight="100%"
+          buttonBottomOffset={20 + insets.bottom}
           observation={observation}
           initialRegion={initialRegion}
           showCurrentLocationButton
@@ -153,7 +155,7 @@ const DetailsMap = ( {
         )}
         backdropOpacity={0}
       />
-    </BottomInsetViewWrapper>
+    </ScreenShell>
   );
 };
 

@@ -9,12 +9,15 @@ import { getShadow } from "styles/global";
 const DROP_SHADOW = getShadow( );
 
 interface Props {
+  // Distance from the bottom of the map, overriding the className's bottom-5
+  bottomOffset?: number;
   mapType?: MAP_TYPES;
   showSwitchMapTypeButton?: boolean;
   switchMapTypeButtonClassName?: string;
 }
 
 const SwitchMapTypeButton = ( {
+  bottomOffset,
   mapType,
   showSwitchMapTypeButton,
   switchMapTypeButtonClassName,
@@ -33,7 +36,9 @@ const SwitchMapTypeButton = ( {
         "absolute bg-white rounded-full",
         switchMapTypeButtonClassName || "bottom-5 left-5",
       )}
-      style={DROP_SHADOW}
+      style={bottomOffset === undefined
+        ? DROP_SHADOW
+        : { ...DROP_SHADOW, bottom: bottomOffset }}
       accessibilityLabel={
         mapType === MAP_TYPES.STANDARD
           ? t( "Standard--map-type" )
