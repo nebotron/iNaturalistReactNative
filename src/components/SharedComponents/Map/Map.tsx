@@ -98,6 +98,9 @@ const getDefaultRegion = ( initialLatitude?: number, initialLongitude?: number )
 } );
 
 interface Props {
+  // Bottom offset for the current-location and map-type buttons, e.g. to
+  // keep them clear of the home indicator on a map that fills the screen
+  buttonBottomOffset?: number;
   children?: React.ReactNode;
   mapChildren?: React.ReactNode;
   className?: string;
@@ -135,6 +138,7 @@ interface Props {
 // TODO: fallback to another map library
 // for people who don't use GMaps (i.e. users in China)
 const Map = ( {
+  buttonBottomOffset,
   children,
   mapChildren,
   className = "flex-1",
@@ -688,6 +692,7 @@ const Map = ( {
         {mapChildren}
       </MapView>
       <CurrentLocationButton
+        bottomOffset={buttonBottomOffset}
         showCurrentLocationButton={showCurrentLocationButton}
         currentLocationButtonClassName={currentLocationButtonClassName}
         hasPermissions={hasPermissions}
@@ -702,6 +707,7 @@ const Map = ( {
         liveRegionRef={setLiveScaleRegion}
       />
       <SwitchMapTypeButton
+        bottomOffset={buttonBottomOffset}
         mapType={mapType}
         showSwitchMapTypeButton={showSwitchMapTypeButton}
         switchMapTypeButtonClassName={switchMapTypeButtonClassName}
