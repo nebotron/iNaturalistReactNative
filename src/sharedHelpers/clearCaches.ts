@@ -1,5 +1,5 @@
 import {
-  CachesDirectoryPath, exists, readDir, TemporaryDirectoryPath,
+  CachesDirectoryPath, DocumentDirectoryPath, exists, readDir, TemporaryDirectoryPath,
 } from "@dr.pogodin/react-native-fs";
 import {
   brightnessAdjustedPath,
@@ -244,6 +244,20 @@ const trimRemoteImageCache = ( ) => trimDirectoryToSize(
   REMOTE_IMAGE_CACHE_MAX_BYTES,
 );
 
+// Explore results used to be downloadable for offline use; Explore now relies
+// on its results cache instead. Removes what earlier versions saved.
+const RETIRED_OFFLINE_EXPLORE_PATHS = [
+  "offlineExplore.realm",
+  "offlineExplore.realm.lock",
+  "offlineExplore.realm.note",
+  "offlineExplore.realm.management",
+  "offlineExploreTiles",
+].map( name => `${DocumentDirectoryPath}/${name}` );
+
+const clearRetiredOfflineExplore = async ( ) => {
+  await Promise.all( RETIRED_OFFLINE_EXPLORE_PATHS.map( path => unlink( path ) ) );
+};
+
 export {
   clearComputerVisionPhotos,
   clearExpiredCropSources,
@@ -251,6 +265,7 @@ export {
   clearExpiredMediaCaches,
   clearExpiredTempFiles,
   clearGalleryPhotos,
+  clearRetiredOfflineExplore,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
   clearSyncedMediaForUpload,

@@ -1,4 +1,3 @@
-import { useNetInfo } from "@react-native-community/netinfo";
 import { useQuery } from "@tanstack/react-query";
 import fetchPlace from "api/places";
 import type { ApiTotalBounds } from "api/types";
@@ -6,10 +5,6 @@ import type {
   ExploreV2QueryParams,
   NearbyCoords,
 } from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import {
-  SavedBaseMapTiles,
-  useHasSavedBaseMap,
-} from "components/Explore/OfflineExplore";
 import Button from "components/SharedComponents/Buttons/Button";
 import {
   boundingBoxGeojsonToBounds,
@@ -95,10 +90,6 @@ const ExploreV2MapView = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const mapRef = useRef<MapView | null>( null );
-  // Offline, tiles saved for offline use fill in the base map
-  const { isConnected } = useNetInfo( );
-  const isOffline = isConnected === false;
-  const showSavedBaseMap = useHasSavedBaseMap( isOffline );
   // The search the user panned away from. The "Redo search in this area"
   // button shows only while that is still the current search, so a new search
   // moving the map out from under the user hides it without a reset.
@@ -282,9 +273,6 @@ const ExploreV2MapView = ( {
         switchMapTypeButtonClassName="right-5 bottom-20"
         tileMapParams={queryParams}
         withPressableObsTiles
-        baseTiles={showSavedBaseMap
-          ? <SavedBaseMapTiles />
-          : undefined}
       />
       {showRedoSearch && (
         <View

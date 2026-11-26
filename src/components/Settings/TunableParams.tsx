@@ -206,18 +206,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-syncedPhotoFolderMaxGb" ),
     t( "Tunable-syncedPhotoFolderMaxGb-description" ),
   ],
-  maxOfflineObservations: [
-    t( "Tunable-maxOfflineObservations" ),
-    t( "Tunable-maxOfflineObservations-description" ),
-  ],
-  offlineMaxTileZoom: [
-    t( "Tunable-offlineMaxTileZoom" ),
-    t( "Tunable-offlineMaxTileZoom-description" ),
-  ],
-  offlineMaxMapPins: [
-    t( "Tunable-offlineMaxMapPins" ),
-    t( "Tunable-offlineMaxMapPins-description" ),
-  ],
   usbMaxPhotosPerScan: [
     t( "Tunable-usbMaxPhotosPerScan" ),
     t( "Tunable-usbMaxPhotosPerScan-description" ),

@@ -19,10 +19,6 @@ const categoryText = ( t: TFunction ): Record<StorageCategory, [string, string]>
   videos: [t( "Videos--storage" ), t( "Videos--storage-description" )],
   usbImports: [t( "USB-imports--storage" ), t( "USB-imports--storage-description" )],
   audioId: [t( "Audio-ID-clips--storage" ), t( "Audio-ID-clips--storage-description" )],
-  offlineExplore: [
-    t( "Offline-Explore--storage" ),
-    t( "Offline-Explore--storage-description" ),
-  ],
   database: [t( "Database--storage" ), t( "Database--storage-description" )],
   appSettings: [t( "App-settings--storage" ), t( "App-settings--storage-description" )],
   temporaryPhotos: [
@@ -42,7 +38,6 @@ const CATEGORY_COLORS: Record<StorageCategory, string> = {
   videos: "#9467BD",
   usbImports: "#8C564B",
   audioId: "#17BECF",
-  offlineExplore: "#2CA02C",
   database: "#FF7F0E",
   appSettings: "#BCBD22",
   temporaryPhotos: "#E377C2",

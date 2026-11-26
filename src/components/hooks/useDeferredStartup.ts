@@ -28,6 +28,7 @@ import {
   clearExpiredMediaCaches,
   clearExpiredTempFiles,
   clearGalleryPhotos,
+  clearRetiredOfflineExplore,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
   clearSyncedMediaForUpload,
@@ -159,6 +160,7 @@ const useDeferredStartup = ( ) => {
     const id16 = deferTask( "clearVideoLibrary", clearVideoLibrary );
     const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
     const id18 = deferTask( "trimRemoteImageCache", trimRemoteImageCache );
+    const idOffline = deferTask( "clearRetiredOfflineExplore", clearRetiredOfflineExplore );
     const idClips = deferTask( "expireOldAudioIdClips", async ( ) => {
       expireOldClips( );
       await retryLabelUploads( );
@@ -221,6 +223,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id16 );
       cancelIdleCallback( id17 );
       cancelIdleCallback( id18 );
+      cancelIdleCallback( idOffline );
       cancelIdleCallback( idClips );
       cancelIdleCallback( idImport );
       cancelIdleCallback( idBirdCodes );

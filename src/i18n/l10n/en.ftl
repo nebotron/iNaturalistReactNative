@@ -74,19 +74,11 @@ ADD-TAXON-FILTER = ADD TAXON FILTER
 Add-to-observation = Add to observation
 Add-to-Projects = Add to Projects
 ADD-TO-PROJECTS = ADD TO PROJECTS
-# Dialog asking to add search results to the ones saved for offline use
-Add-up-to-observations-from-this-search = Add up to { $count } observations from this search to your offline observations? You can filter them further while offline.
 Added-to-X-Projects =
     Added to { $count } { $count ->
         [one] Project
        *[other] Projects
     }
-# Confirmation after saving Explore search results for offline use
-Added-X-offline-observations =
-    Added { $count ->
-        [one] { $count } new observation
-       *[other] { $count } new observations
-    }. { $total } saved for offline use.
 Adds-the-clip-to-this-observation = Adds the clip to this observation.
 # Hint for a button that adds a vote of agreement
 Adds-your-vote-of-agreement = Adds your vote of agreement
@@ -550,8 +542,6 @@ Delete-observation = Delete observation
 DELETE-OBSERVATION--question = DELETE OBSERVATION?
 # Button that deletes the selected observations
 Delete-Observations = Delete Observations
-# Title of dialog to delete Explore results saved for offline use
-Delete-offline-results = Delete saved offline results?
 # Button label or accessibility label for an element that deletes a photo
 Delete-photo = Delete photo
 Delete-saved-filter = Delete saved filter
@@ -628,17 +618,9 @@ DONATE-TO-INATURALIST = DONATE TO INATURALIST
 # Label for a button the user taps when a task is complete
 DONE = DONE
 Dont-have-an-account = <0>Don't have an account? </0><1>Sign up</1>
-# Confirms downloading search results for offline use
-DOWNLOAD = DOWNLOAD
-# Button and dialog title to download the current Explore results for offline use
-Download-for-offline-use = Download for offline use
-# Button on the search screen that downloads the search's results for offline use
-DOWNLOAD-RESULTS = DOWNLOAD RESULTS
 # Progress shown in My Observations while downloading every observation so they can be sorted
 # in taxonomic order
 Downloading-observations-to-sort-fetched-of-total = Downloading observations to sort: { $fetched } of { $total }
-# Button text while search results are being downloaded for offline use
-Downloading-X-observations = Downloading { $count }…
 # Note under the video stabilizer's crop settings explaining how to pick the crop
 Drag-two-fingers-on-the-stabilized-preview-to-set-opposite-corners = Drag two fingers on the stabilized preview to set opposite corners of the crop.
 # Accessibility hint for the stabilized video preview, where two fingers mark opposite corners of the crop
@@ -1436,15 +1418,10 @@ Observers-View = Observers View
 # Month of October
 October = October
 Offline-DQA-description = The DQA may not be accurate. Check your internet connection and try again.
-# Storage category: observations and map tiles downloaded for offline Explore
-Offline-Explore--storage = Offline Explore
-Offline-Explore--storage-description = Observations and map tiles downloaded for use offline
 # Shown above Explore results when offline. timeAgo is a short relative time, e.g. 3h or 2d.
 # Tapping it tries to load the latest results.
 Offline-showing-results-from-time-ago = Offline: showing results from { $timeAgo } ago. Tap to try again.
 Offline-suggestions-may-differ-from-online = Offline suggestions may differ from online suggestions, and taxon images and common names may not load.
-# Label shown in Explore when offline, with the count of saved results matching the filters
-Offline-X-of-Y-saved-observations = Offline: { $count } of { $total } saved
 # Generic confirmation, e.g. button on a warning alert
 OK = OK
 # Sort order, refers to newest or oldest date
@@ -1488,8 +1465,6 @@ Opens-the-history-of-when-this-species-was-heard = Opens the history of when thi
 Opens-the-species-page = Opens the species page.
 Opens-top-faved-sound-observations-in-Explore = Opens top-faved sound observations in Explore.
 Opens-your-saved-clips = Opens your saved clips.
-# Attribution for OpenStreetMap map tiles shown on the offline map
-OpenStreetMap-contributors = © OpenStreetMap contributors
 # Connector placed between any number of alternative project rule sentences, e.g. "must be observed in Germany or must be observed in France"
 or--project-rule = or
 OR-SIGN-IN-WITH = OR SIGN IN WITH
@@ -2279,10 +2254,6 @@ Tunable-maxConcurrentUploads = Concurrent uploads
 # Description of a tunable parameter in settings
 Tunable-maxConcurrentUploads-description = Number of observations uploaded at the same time.
 # Label for a tunable parameter in settings
-Tunable-maxOfflineObservations = Max offline observations
-# Description of a tunable parameter in settings
-Tunable-maxOfflineObservations-description = Maximum number of observations downloaded for offline Explore.
-# Label for a tunable parameter in settings
 Tunable-maxPhotoInspectZoom = Max photo inspection zoom
 # Description of a tunable parameter in settings
 Tunable-maxPhotoInspectZoom-description = Maximum zoom when inspecting a photo during identification.
@@ -2294,14 +2265,6 @@ Tunable-maxPhotosPerObservation-description = Maximum number of photos an observ
 Tunable-mediaCacheDays = Media cache lifetime (days)
 # Description of a tunable parameter in settings
 Tunable-mediaCacheDays-description = How long brightness-adjusted photos, extracted audio, photo thumbnails, and photos prepared for cropping but not yet cropped are kept.
-# Label for a tunable parameter in settings
-Tunable-offlineMaxMapPins = Offline map max pins
-# Description of a tunable parameter in settings
-Tunable-offlineMaxMapPins-description = Maximum number of pins shown on the offline Explore map.
-# Label for a tunable parameter in settings
-Tunable-offlineMaxTileZoom = Offline map max zoom
-# Description of a tunable parameter in settings
-Tunable-offlineMaxTileZoom-description = Highest map zoom level downloaded for offline Explore.
 # Settings button and screen title for adjusting hard-coded app parameters
 TUNABLE-PARAMETERS = TUNABLE PARAMETERS
 # Note at the top of the tunable parameters settings screen

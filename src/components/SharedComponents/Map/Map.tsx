@@ -131,8 +131,6 @@ interface Props {
   zoomEnabled?: boolean;
   zoomTapEnabled?: boolean;
   onMapLayout?: ( event: LayoutChangeEvent ) => void;
-  // Tile layers drawn under the observation tiles, e.g. a saved base map offline
-  baseTiles?: React.ReactNode;
 }
 
 // TODO: fallback to another map library
@@ -169,7 +167,6 @@ const Map = ( {
   zoomEnabled = true,
   zoomTapEnabled = true,
   onMapLayout,
-  baseTiles,
 }: Props ) => {
   const tilesMarkedVisible = useRef( false );
   const [performanceMetrics, setPerformanceMetrics] = useState( {
@@ -526,11 +523,10 @@ const Map = ( {
     <UrlTile
       // Android keeps a layer per template, so an old one stays mounted
       // under a new one. On iOS one layer changes template in place, which
-      // keeps the old tiles natively, but has to be added again after base
-      // tiles to stay on top of them.
+      // keeps the old tiles natively.
       key={KEEPS_PREVIOUS_TILES
         ? urlTemplate
-        : `obsTiles-${!!baseTiles}`}
+        : "obsTiles"}
       testID={isPrevious
         ? "Map.UrlTile.previous"
         : "Map.UrlTile"}
@@ -670,7 +666,6 @@ const Map = ( {
         zoomEnabled={zoomEnabled}
         zoomTapEnabled={zoomTapEnabled}
       >
-        {baseTiles}
         { shouldOverlayObsTiles && previousTileTemplate
           && renderObsTiles( previousTileTemplate, true )}
         { shouldOverlayObsTiles && renderObsTiles( tileUrlTemplate, false )}

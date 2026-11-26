@@ -44,12 +44,6 @@ import useInfiniteExploreScroll
 import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
-import {
-  OfflineMapView,
-  OfflineObservationsView,
-  OfflineSpeciesView,
-  useOfflineExploreResults,
-} from "components/Explore/OfflineExplore";
 import CombineObservationsBar from "components/MyObservations/CombineObservationsBar";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
@@ -70,7 +64,6 @@ import { EXPLORE_V2_ACTION, EXPLORE_V2_PLACE_MODE, useExploreV2 } from "provider
 import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
-import type { BoundingBox } from "react-native-maps";
 import { log } from "sharedHelpers/logger";
 import {
   EXPLORE_OBSERVATIONS_SORT_OPTIONS,
@@ -282,25 +275,6 @@ const ExploreResults = ( ) => {
     ),
     [state, nearbyCoords, currentUserId, excludedSpeciesIds],
   );
-
-  const offlineResults = useOfflineExploreResults( queryParams );
-  // Offline map bounds narrow the offline list; they reset when the filters change
-  const [offlineMapArea, setOfflineMapArea] = useState<{
-    params: typeof queryParams;
-    bounds: BoundingBox;
-  }>( );
-  const offlineListParams = useMemo( ( ) => {
-    if ( offlineMapArea?.params !== queryParams ) return queryParams;
-    const { southWest, northEast } = offlineMapArea.bounds;
-    return {
-      ...queryParams,
-      swlat: southWest.latitude,
-      swlng: southWest.longitude,
-      nelat: northEast.latitude,
-      nelng: northEast.longitude,
-    };
-  }, [offlineMapArea, queryParams] );
-  const offlineListResults = useOfflineExploreResults( offlineListParams );
 
   // Taxonomic order is sorted on device, so it loads its results in bigger pages up front
   const byTaxonomy = state.sortBy === OBSERVATIONS_SORT.TAXONOMY;
@@ -781,7 +755,7 @@ const ExploreResults = ( ) => {
     || isLoading;
 
   const renderContent = ( ) => {
-    // Before anything else, offline results included: they're filtered by it too
+    // Before anything else
     // A saved search it excludes was renamed or deleted, or couldn't be loaded
     if ( excludedSpecies.error ) {
       return <ExcludedSpeciesError error={excludedSpecies.error} />;
@@ -791,50 +765,6 @@ const ExploreResults = ( ) => {
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator testID="ExploreResults.syncingObservedSpecies" />
         </View>
-      );
-    }
-    if ( isConnected === false && offlineResults && state.activeTab === OBSERVATIONS_TAB ) {
-      // Same views as online; the map counts the whole search, the list its map area
-      const offlineCount = ( showMap
-        ? offlineResults
-        : offlineListResults )?.results.length || 0;
-      return (
-        <>
-          <ExploreConnectionBanner offline onRetry={reload} />
-          <Body2 className="px-5 pb-2" testID="ExploreResults.offlineCount">
-            {t( "X-Observations", { count: offlineCount } )}
-          </Body2>
-          {showMap
-            ? (
-              <OfflineMapView
-                queryParams={queryParams}
-                onBoundsChange={bounds => setOfflineMapArea( { params: queryParams, bounds } )}
-              />
-            )
-            : <OfflineObservationsView layout={layout} queryParams={offlineListParams} />}
-          <ObservationsViewBar
-            layout={layout}
-            updateObservationsView={writeLayoutToStorage}
-            viewOptions={["map", "grid", "list"]}
-          />
-          {!showMap && offlineCount > 0 && (
-            <SortButton
-              onPress={() => setShowSortSheet( true )}
-              accessibilityLabel={t( "Change-observations-sort-order" )}
-            />
-          )}
-        </>
-      );
-    }
-    if ( isConnected === false && offlineResults && state.activeTab === SPECIES_TAB ) {
-      return (
-        <>
-          <OfflineSpeciesView queryParams={speciesListParams} />
-          <SortButton
-            onPress={() => setShowSortSheet( true )}
-            accessibilityLabel={t( "Change-species-sort-order" )}
-          />
-        </>
       );
     }
     // Results fetched earlier for this search are still shown, from the cache

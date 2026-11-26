@@ -16,7 +16,6 @@ export type StorageCategory =
   | "videos"
   | "usbImports"
   | "audioId"
-  | "offlineExplore"
   | "database"
   | "appSettings"
   | "temporaryPhotos"
@@ -39,7 +38,6 @@ const DOCUMENT_PREFIXES: [string, StorageCategory][] = [
   ["videoLibrary", "videos"],
   ["usbStaging", "usbImports"],
   ["audioIdClips", "audioId"],
-  ["offlineExplore", "offlineExplore"],
   ["db.realm", "database"],
   ["mmkv", "appSettings"],
   ["rotatedOriginalPhotos", "temporaryPhotos"],

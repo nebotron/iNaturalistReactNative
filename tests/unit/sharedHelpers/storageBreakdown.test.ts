@@ -38,8 +38,6 @@ describe( "categoryForDocument", ( ) => {
   it( "groups a Realm file with its siblings", ( ) => {
     expect( categoryForDocument( "db.realm" ) ).toBe( "database" );
     expect( categoryForDocument( "db.realm.management" ) ).toBe( "database" );
-    expect( categoryForDocument( "offlineExplore.realm" ) ).toBe( "offlineExplore" );
-    expect( categoryForDocument( "offlineExploreTiles" ) ).toBe( "offlineExplore" );
   } );
 
   it( "puts unknown entries in other", ( ) => {
