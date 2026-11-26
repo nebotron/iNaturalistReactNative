@@ -38,6 +38,7 @@ import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
+import { distanceInKm } from "sharedHelpers/geoDistance";
 import { getLatestTrackedLocation } from "sharedHelpers/locationHistoryTracker";
 import { useTranslation } from "sharedHooks";
 import type { HotspotStop } from "stores/createLayoutSlice";
@@ -59,6 +60,9 @@ import { searchPlaces } from "./placeSearch";
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
 const CURRENT_LOCATION_PLACE_ID = -1;
+// How far the user has to move before a restored "Current location" stop
+// follows them
+const CURRENT_LOCATION_MOVED_KM = 0.25;
 // Used only when there's no route to frame
 const INITIAL_REGION: Region = {
   latitude: 25,
@@ -389,9 +393,26 @@ const WildlifeHotspotsScreen = ( {
       if ( loc ) {
         const latLng = { latitude: loc.latitude, longitude: loc.longitude };
         setUserLocation( latLng );
-        setStops( prev => prev.map( s => ( editedStopIdsRef.current.has( s.id )
-          ? s
-          : { ...s, point: latLng, text: t( "Current-location" ) } ) ) );
+        setStops( prev => {
+          let changed = false;
+          const next = prev.map( s => {
+            if ( editedStopIdsRef.current.has( s.id ) ) return s;
+            // A restored stop the user hasn't really moved from keeps its point,
+            // so the route is the same request as before and loads from the
+            // cache offline, rather than failing over a few metres of GPS drift
+            if ( s.point && s.text === t( "Current-location" ) && distanceInKm(
+              s.point.latitude,
+              s.point.longitude,
+              latLng.latitude,
+              latLng.longitude,
+            ) < CURRENT_LOCATION_MOVED_KM ) return s;
+            changed = true;
+            return { ...s, point: latLng, text: t( "Current-location" ) };
+          } );
+          return changed
+            ? next
+            : prev;
+        } );
       }
     };
     initializeLocation();
