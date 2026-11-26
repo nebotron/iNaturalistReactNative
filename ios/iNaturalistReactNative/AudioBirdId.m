@@ -969,6 +969,97 @@ RCT_EXPORT_METHOD( clipTimeline:( NSString * )path
   } );
 }
 
+// For a recorded sound (as normalizeSound takes it): in each 1/3 s, the
+// highest mean per-frame logit any model output reaches there, i.e. how sure
+// the model is of the most likely species at that moment, as clipTimeline
+// gives for one output, with the sound's length in seconds. Windows are 5 s
+// every 2.5 s, the last ending at the sound's end, and a sound shorter than a
+// window is padded with silence.
+RCT_EXPORT_METHOD( soundTopTimeline:( NSString * )uri
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  if ( ![self loadModel] ) {
+    reject( @"model", @"Could not load the audio model", nil );
+    return;
+  }
+  NSString *name = [NSUUID UUID].UUIDString;
+  [self withLocalSound:uri name:name done:^( NSURL *source, NSError *error ) {
+    AVAudioPCMBuffer *buffer = source ? ABReadMono( source, &error ) : nil;
+    if ( !buffer || buffer.frameLength == 0 ) {
+      reject( @"sound", error.localizedDescription ?: @"Could not read the sound", error );
+      return;
+    }
+    NSInteger n = buffer.frameLength, length = MAX( n, (NSInteger)AB_WIN );
+    float *samples = (float *)calloc( length, sizeof( float ) );
+    memcpy( samples, buffer.floatChannelData[0], n * sizeof( float ) );
+    double binLen = AB_SR / 3.0;
+    NSInteger bins = MAX( (NSInteger)lround( n / binLen ), 1 );
+    // Sums per output for the bins a window can still reach, in a ring of
+    // `slots`, so a long sound needs no more than a short one: a bin is done
+    // once a window starts past it, since no later window starts earlier.
+    NSInteger slots = (NSInteger)ceil( AB_WIN / binLen ) + 3;
+    __block float *sum = NULL;
+    int *count = (int *)calloc( slots, sizeof( int ) );
+    __block NSInteger rows = 0, done = 0;
+    NSMutableArray *logits = [NSMutableArray arrayWithCapacity:bins];
+    void ( ^finish )( NSInteger ) = ^( NSInteger upTo ) {
+      for ( ; done < MIN( upTo, bins ); done++ ) {
+        NSInteger slot = done % slots;
+        if ( !count[slot] || !sum ) {
+          [logits addObject:[NSNull null]];
+          continue;
+        }
+        float top = -INFINITY;
+        for ( NSInteger k = 0; k < rows; k++ ) {
+          top = MAX( top, sum[k * slots + slot] );
+          sum[k * slots + slot] = 0;
+        }
+        [logits addObject:@( top / count[slot] )];
+        count[slot] = 0;
+      }
+    };
+    NSString *inferError = nil;
+    BOOL ran = NO;
+    for ( NSInteger start = 0; ; start += AB_WIN / 2 ) {
+      BOOL last = start + AB_WIN >= length;
+      if ( last ) start = length - AB_WIN;
+      finish( (NSInteger)floor( start / binLen ) );
+      NSData *frames = nil;
+      NSInteger t = 0;
+      NSData *probs = [self run:self->_session input:samples + start length:AB_WIN
+                      inputName:"input" outputName:"output" outputs:nil
+                         frames:&frames frameCount:&t error:&inferError];
+      if ( !probs || !frames || t <= 0 ) break;
+      NSInteger r = (NSInteger)( frames.length / ( t * sizeof( float ) ) );
+      if ( !sum ) {
+        rows = r;
+        sum = (float *)calloc( rows * slots, sizeof( float ) );
+      }
+      if ( r != rows || rows <= 0 ) break;
+      ran = YES;
+      const float *f = (const float *)frames.bytes;
+      for ( NSInteger i = 0; i < t; i++ ) {
+        NSInteger bin = (NSInteger)floor( ( start + ( i + 0.5 ) * AB_WIN / t ) / binLen );
+        if ( bin < done || bin >= bins ) continue;
+        NSInteger slot = bin % slots;
+        for ( NSInteger k = 0; k < rows; k++ ) sum[k * slots + slot] += f[k * t + i];
+        count[slot]++;
+      }
+      if ( last ) break;
+    }
+    finish( bins );
+    free( samples );
+    free( sum );
+    free( count );
+    if ( ran && !inferError ) {
+      resolve( @{ @"logits": logits, @"duration": @( (double)n / AB_SR ) } );
+    } else {
+      reject( @"model", inferError ?: @"Could not score the sound", nil );
+    }
+  }];
+}
+
 // Plays a clip, resolving when it ends or is stopped. Measurement mode records
 // without gain control, so clips are quiet; this raises them in memory with
 // ABNormalize, leaving the file untouched.

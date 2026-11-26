@@ -45,11 +45,44 @@ export const useClipTimeline = (
     : null;
 };
 
+export interface SoundTimeline { logits: ( number | null )[]; duration: number }
+// Scored once per sound, as it takes a run of the model per 2.5 s of it
+const soundTimelines = new Map<string, Promise<SoundTimeline>>( );
+
+// For the sound at `uri` (a file path, file URL or remote URL): the logit of
+// whichever species the model finds most likely in each 1/3 s of it, with its
+// length in seconds, or null until it is scored or when it can't be.
+export const useSoundTopTimeline = ( uri: string ) => {
+  const [scored, setScored] = useState<{ uri: string; timeline: SoundTimeline } | null>( null );
+  useEffect( ( ) => {
+    let current = true;
+    if ( AudioBirdId?.soundTopTimeline ) {
+      let timeline = soundTimelines.get( uri );
+      if ( !timeline ) {
+        timeline = AudioBirdId.soundTopTimeline( uri );
+        soundTimelines.set( uri, timeline );
+        timeline.catch( ( e: Error ) => {
+          soundTimelines.delete( uri );
+          logger.error( `scoring sound timeline failed: ${e.message}` );
+        } );
+      }
+      timeline
+        .then( result => { if ( current ) setScored( { uri, timeline: result } ); } )
+        .catch( ( ) => undefined );
+    }
+    return ( ) => { current = false; };
+  }, [uri] );
+  return scored?.uri === uri
+    ? scored.timeline
+    : null;
+};
+
 interface Props {
   logits: ( number | null )[];
   duration: number;
-  // Seconds from the clip's start, as the spectrogram above shows them
-  trim: [number, number];
+  // Seconds from the clip's start, as the spectrogram above shows them;
+  // without it, none of the clip is shaded
+  trim?: [number, number];
   position: number;
 }
 
@@ -57,7 +90,7 @@ interface Props {
 // sigmoid of its per-frame logits, which the clip's score pools over 5 s),
 // lined up with the spectrogram above it.
 const ClipProbabilityGraph = ( {
-  logits, duration, trim, position,
+  logits, duration, trim = [0, duration], position,
 }: Props ) => {
   const { t } = useTranslation( );
   const [width, setWidth] = useState( 0 );

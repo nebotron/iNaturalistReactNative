@@ -6,6 +6,9 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   normalizedSoundUri, playerStarted, setPlayingAudio,
 } from "components/AudioId/audioIdSession";
+import ClipProbabilityGraph, {
+  useSoundTopTimeline,
+} from "components/AudioId/ClipProbabilityGraph";
 import SoundSpectrogram, { SPECTROGRAM_HEIGHT } from "components/AudioId/SoundSpectrogram";
 import {
   Body2,
@@ -83,6 +86,8 @@ const SoundContainer = ( {
   const timer = useRef<ReturnType<typeof setInterval>>( undefined );
   const clock = useRef( { fromMs: 0, started: 0 } );
   const durationMs = useRef( 0 );
+  // How sure the model is of the most likely species at each moment
+  const topTimeline = useSoundTopTimeline( sound.file_url );
 
   const holdPlayhead = useCallback( ( fraction?: number ) => {
     clearInterval( timer.current );
@@ -340,23 +345,36 @@ const SoundContainer = ( {
     shownPosition = mmss( dragAt * playBackState.duration );
   }
 
-  // The same spectrogram interface as Audio ID clips: drag or tap anywhere on
-  // it to hear the sound from there.
+  const playhead = dragAt ?? position;
+  // The same spectrogram interface as Audio ID clips, with the same graph
+  // below it, here for whichever species is likeliest at each moment: drag or
+  // tap anywhere on either to hear the sound from there.
   return (
     <View className={`${sizeClass} justify-center px-4`}>
       <GestureDetector gesture={scrub}>
         <View
-          className="rounded overflow-hidden"
           collapsable={false}
-          style={{ height: SPECTROGRAM_HEIGHT }}
           onLayout={e => { width.current = e.nativeEvent.layout.width || 1; }}
         >
-          <SoundSpectrogram uri={sound.file_url} />
           <View
-            className="absolute h-full w-0.5 bg-warningRed"
-            style={{ left: `${( dragAt ?? position ) * 100}%` }}
-            pointerEvents="none"
-          />
+            className="rounded overflow-hidden"
+            style={{ height: SPECTROGRAM_HEIGHT }}
+          >
+            <SoundSpectrogram uri={sound.file_url} />
+            <View
+              className="absolute h-full w-0.5 bg-warningRed"
+              style={{ left: `${playhead * 100}%` }}
+              pointerEvents="none"
+            />
+          </View>
+          {topTimeline && topTimeline.duration > 0
+            && topTimeline.logits.some( logit => logit != null ) && (
+            <ClipProbabilityGraph
+              logits={topTimeline.logits}
+              duration={topTimeline.duration}
+              position={playhead * topTimeline.duration}
+            />
+          )}
         </View>
       </GestureDetector>
       <View className="flex-row items-center">
