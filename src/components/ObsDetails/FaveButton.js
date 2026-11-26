@@ -23,6 +23,19 @@ const { useRealm } = RealmContext;
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
 
+// handleError JSON-parses API error messages, so a message can be a string, an
+// array, or a nested object like { error: "..." } or { errors: { base: [...] } }.
+// Collect the strings so the alert never shows "[object Object]".
+const apiErrorText = ( value: Object | string | number | boolean | null | void ): string => {
+  if ( value === null || value === undefined ) return "";
+  if ( typeof value === "string" ) return value;
+  if ( typeof value === "number" || typeof value === "boolean" ) return String( value );
+  const parts = Array.isArray( value )
+    ? value.map( apiErrorText )
+    : Object.values( value ).map( apiErrorText );
+  return parts.filter( Boolean ).join( "; " );
+};
+
 type Props = {
   observation: Object,
   currentUser?: Object,
@@ -73,9 +86,16 @@ const FaveButton = ( {
   const [isFaved, setIsFaved] = useState( observationFaved || false );
 
   const showErrorAlert = error => {
-    let msg = error?.json?.errors.map( err => err.message ).join( "; " );
-    if ( error.status === 401 ) {
+    let msg = apiErrorText( error?.json?.errors?.map( err => err?.message ) )
+      || apiErrorText( error?.json?.error );
+    if ( error?.status === 401 ) {
       msg = t( "You-need-log-in-to-do-that" );
+    } else if ( error?.status === 429 ) {
+      msg = t( "Connection-problem-Please-try-again-later" );
+    } else if ( !msg ) {
+      msg = error?.message?.match( /Network request failed/ )
+        ? t( "Connection-problem-Please-try-again-later" )
+        : t( "Something-went-wrong" );
     }
     Alert.alert(
       t( "Error-title" ),
