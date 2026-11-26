@@ -18,10 +18,20 @@ import {
   useTranslation,
 } from "sharedHooks";
 import colors from "styles/tailwindColors";
+import withRetry from "uploaders/utils/retry";
 
 const { useRealm } = RealmContext;
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
+
+// The server can 404 an observation for a little while after creating it (the
+// uploader retries its own fave for the same reason), so a fave tapped just as
+// an upload finishes retries a 404 instead of showing an error.
+const JUST_UPLOADED_MS = 2 * 60 * 1000;
+
+const callFaveApi = ( apiFn, { uuid, justUploaded }, optsWithAuth ) => ( justUploaded
+  ? withRetry( ( ) => apiFn( { uuid }, optsWithAuth ), { alsoRetryStatuses: [404] } )
+  : apiFn( { uuid }, optsWithAuth ) );
 
 // handleError JSON-parses API error messages, so a message can be a string, an
 // array, or a nested object like { error: "..." } or { errors: { base: [...] } }.
@@ -144,7 +154,7 @@ const FaveButton = ( {
   }, [realm, uuid, currentUser] );
 
   const { mutate: createUnfaveMutate } = useAuthenticatedMutation(
-    ( faveOrUnfaveParams, optsWithAuth ) => unfaveObservation( faveOrUnfaveParams, optsWithAuth ),
+    ( params, optsWithAuth ) => callFaveApi( unfaveObservation, params, optsWithAuth ),
     {
       onSuccess: ( ) => {
         afterToggleFave( false );
@@ -160,7 +170,7 @@ const FaveButton = ( {
   );
 
   const { mutate: createFaveMutate } = useAuthenticatedMutation(
-    ( faveOrUnfaveParams, optsWithAuth ) => faveObservation( faveOrUnfaveParams, optsWithAuth ),
+    ( params, optsWithAuth ) => callFaveApi( faveObservation, params, optsWithAuth ),
     {
       onSuccess: ( ) => {
         afterToggleFave( true );
@@ -203,10 +213,14 @@ const FaveButton = ( {
     // the change now so a later refetch isn't the only thing that can. Reverted
     // in the mutation's onError below.
     writeLocalFave( newIsFaved );
+    const syncedAt = realmObservation && realmObservation.isValid( )
+      ? realmObservation._synced_at
+      : null;
+    const justUploaded = !!syncedAt && Date.now( ) - syncedAt.getTime( ) < JUST_UPLOADED_MS;
     if ( newIsFaved ) {
-      createFaveMutate( { uuid } );
+      createFaveMutate( { uuid, justUploaded } );
     } else {
-      createUnfaveMutate( { uuid } );
+      createUnfaveMutate( { uuid, justUploaded } );
     }
   }, [
     currentUser,
