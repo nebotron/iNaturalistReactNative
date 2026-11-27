@@ -33,6 +33,11 @@ export interface ExploreSessionSlice {
   // Keyed by list and the search it shows, so a different search starts at the top
   listScrollOffsets: Record<string, number>;
   setListScrollOffset: ( _key: string, _offset: number ) => void;
+  // The species each exclusion last resolved to, by the saved searches it
+  // names, so returning to Explore offline can still apply it when it can't
+  // be resolved again (e.g. Nearby moved and species_counts isn't cached)
+  excludedSpeciesIds: Record<string, number[]>;
+  setExcludedSpeciesIds: ( _key: string, _ids: number[] ) => void;
 }
 
 const createExploreSessionSlice: StateCreator<ExploreSessionSlice> = set => ( {
@@ -52,6 +57,10 @@ const createExploreSessionSlice: StateCreator<ExploreSessionSlice> = set => ( {
     // Re-added last so it's the newest
     return { listScrollOffsets: { ...others, [key]: offset } };
   } ),
+  excludedSpeciesIds: {},
+  setExcludedSpeciesIds: ( key, ids ) => set( state => ( {
+    excludedSpeciesIds: { ...state.excludedSpeciesIds, [key]: ids },
+  } ) ),
 } );
 
 export default createExploreSessionSlice;

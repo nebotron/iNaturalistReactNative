@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { NearbyCoords } from "components/Explore/helpers/buildQueryParams";
 import { excludesSpecies } from "components/Explore/helpers/buildQueryParams";
 import {
+  ExcludedSavedSearchError,
   referencedSavedSearches,
   resolveExcludedSpeciesIds,
 } from "components/Explore/helpers/excludedSpecies";
@@ -9,6 +10,7 @@ import savedSearchKey from "components/Explore/helpers/savedSearchKey";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import type { ExploreSearch } from "providers/ExploreContext";
 import { defaultExploreFilters } from "providers/ExploreContext";
+import { useEffect } from "react";
 import useStore from "stores/useStore";
 
 // Please don't change these to aliased paths or the e2e mocks will not get used
@@ -43,6 +45,11 @@ export const fetchNearbyCoords = async ( ): Promise<NearbyCoords | undefined> =>
     : undefined;
 };
 
+// Failures the last resolved species can stand in for: being offline or the
+// request failing, rather than the search itself being unresolvable
+const canUseLastResolved = ( error: Error ) => !( error instanceof ExcludedSavedSearchError )
+  || error.reason === "offline";
+
 // The species a search leaves out (see excludedSpecies), fetched again each
 // time the search is applied so they're up to date
 const useExcludedSpecies = (
@@ -57,6 +64,10 @@ const useExcludedSpecies = (
   // Editing, renaming or deleting a referenced saved search changes the key
   const referenced = referencedSavedSearches( search, savedSearches )
     .map( saved => `${saved.name}:${savedSearchKey( saved )}` );
+  // What the exclusion is, without what's only needed to fetch it again
+  const lastResolvedKey = JSON.stringify( [savedSearchName, referenced, currentUserId] );
+  const lastResolvedIds = useStore( state => state.excludedSpeciesIds[lastResolvedKey] );
+  const setExcludedSpeciesIds = useStore( state => state.setExcludedSpeciesIds );
 
   const {
     data, error, isFetchedAfterMount, isFetching,
@@ -97,11 +108,22 @@ const useExcludedSpecies = (
   } );
 
   const settled = isFetchedAfterMount && !isFetching;
+  const resolved = settled && !error
+    ? data
+    : undefined;
+  useEffect( ( ) => {
+    if ( resolved ) setExcludedSpeciesIds( lastResolvedKey, resolved );
+  }, [resolved, lastResolvedKey, setExcludedSpeciesIds] );
+
+  // Coming back to Explore offline (e.g. from the camera or Audio ID), the
+  // species can't always be fetched again, so the ones resolved earlier this
+  // session are applied instead, which also finds the results cached for them
+  if ( settled && error && lastResolvedIds && canUseLastResolved( error ) ) {
+    return { active, ids: lastResolvedIds, error: null };
+  }
   return {
     active,
-    ids: settled && !error
-      ? data
-      : undefined,
+    ids: resolved,
     error: settled
       ? error
       : null,
