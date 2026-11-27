@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Image } from "react-native";
 
 import { getAnimalCrop, subscribeAnimalCropLog } from "./animalCropLog";
-import detectSubjectInImage from "./detectSubjectInImage";
+import { detectSubjectInImageNow } from "./detectSubjectInImage";
 import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
 import type { NormalizedCrop } from "./normalizedCropTypes";
+import queueSubjectDetection, { prioritizeSubjectDetection } from "./subjectDetectionQueue";
 
 interface DetectionResult {
   crop: NormalizedCrop;
@@ -40,6 +41,8 @@ interface SubjectDetectionOptions {
   // AI subject detector. This is how the user's own photos work: they're shown
   // full-frame unless the user has framed them themselves.
   loggedCropOnly?: boolean;
+  // Prepared ahead of being shown, so it waits behind photos on screen
+  inAdvance?: boolean;
 }
 
 const getCachedResult = ( uri: string ): DetectionResult | null => {
@@ -73,7 +76,7 @@ const readResult = (
 // subject detector to be ready".
 export const resolveSubjectDetectionForUri = async (
   uri: string,
-  { loggedCropOnly = false }: SubjectDetectionOptions = {},
+  { loggedCropOnly = false, inAdvance = false }: SubjectDetectionOptions = {},
 ): Promise<DetectionResult | null> => {
   const cached = readResult( uri, loggedCropOnly );
   if ( cached ) return cached;
@@ -85,7 +88,10 @@ export const resolveSubjectDetectionForUri = async (
     ? `loggedCropOnly:${uri}`
     : uri;
   const existing = inflight.get( inflightKey );
-  if ( existing ) return existing;
+  if ( existing ) {
+    if ( !inAdvance ) prioritizeSubjectDetection( inflightKey );
+    return existing;
+  }
 
   const promise = ( async ( ): Promise<DetectionResult | null> => {
     const loggedCrop = getAnimalCrop( uri );
@@ -103,17 +109,21 @@ export const resolveSubjectDetectionForUri = async (
     }
     if ( loggedCropOnly ) return null;
     // Slow path: download to a local file and run the AI subject detector.
-    const localUri = await ensureLocalImageForCrop( uri );
-    const imageSize = await getImageSize( localUri );
-    if ( !imageSize ) return null;
-    const crop = await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
-    const detection = {
-      crop,
-      imageWidth: imageSize.w,
-      imageHeight: imageSize.h,
-    };
-    cache.set( uri, detection );
-    return detection;
+    // All of it waits its turn, not only the detector: the download and the
+    // size read before it are what hold the full original.
+    return queueSubjectDetection( async ( ) => {
+      const localUri = await ensureLocalImageForCrop( uri );
+      const imageSize = await getImageSize( localUri );
+      if ( !imageSize ) return null;
+      const crop = await detectSubjectInImageNow( localUri, imageSize.w, imageSize.h );
+      const detection = {
+        crop,
+        imageWidth: imageSize.w,
+        imageHeight: imageSize.h,
+      };
+      cache.set( uri, detection );
+      return detection;
+    }, { inAdvance, key: inflightKey } );
   } )( );
 
   inflight.set( inflightKey, promise );
@@ -129,7 +139,7 @@ export const resolveSubjectDetectionForUri = async (
 // return synchronously without any async work.
 export const preloadSubjectDetectionForUri = ( uri: string ): void => {
   if ( cache.has( uri ) ) return;
-  resolveSubjectDetectionForUri( uri ).catch( ( ) => {
+  resolveSubjectDetectionForUri( uri, { inAdvance: true } ).catch( ( ) => {
     // Best-effort preload; ignore failures.
   } );
 };

@@ -2497,6 +2497,10 @@ Tunable-gamePoolSize = Species game photos per round
 # Description of a tunable parameter in settings
 Tunable-gamePoolSize-description = Number of photos fetched for each round of the species game.
 # Label for a tunable parameter in settings
+Tunable-identifyPhotoPrefetchAhead = Identify photos downloaded ahead
+# Description of a tunable parameter in settings
+Tunable-identifyPhotoPrefetchAhead-description = How many upcoming observations in Identify have their photos downloaded before you reach them. Higher means less waiting but more data.
+# Label for a tunable parameter in settings
 Tunable-importMaxSectionSize = Photo import max section size
 # Description of a tunable parameter in settings
 Tunable-importMaxSectionSize-description = Sections with more photos than this are split up.
@@ -2588,6 +2592,10 @@ Tunable-subjectCropFrameFraction-description = Fraction of the screen a detected
 Tunable-subjectCropPadding = Subject crop padding
 # Description of a tunable parameter in settings
 Tunable-subjectCropPadding-description = Extra margin added around an automatically detected subject, as a fraction of its size.
+# Label for a tunable parameter in settings
+Tunable-subjectDetectionConcurrency = Subject detections at once
+# Description of a tunable parameter in settings
+Tunable-subjectDetectionConcurrency-description = How many photos are checked for their subject at the same time. Higher is faster but uses more memory.
 # Label for a tunable parameter in settings
 Tunable-syncedPhotoFolderMaxGb = Uploaded photo folder size (GB)
 # Description of a tunable parameter in settings

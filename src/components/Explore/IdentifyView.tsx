@@ -1,4 +1,3 @@
-import { prefetch } from "@candlefinance/faster-image";
 import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { createIdentification } from "api/identifications";
@@ -23,6 +22,7 @@ import {
   INatIconButton,
   OfflineNotice,
 } from "components/SharedComponents";
+import { prefetchImageData } from "components/SharedComponents/CachedImage";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { Pressable, View } from "components/styledComponents";
 import React, {
@@ -35,6 +35,7 @@ import React, {
 import { Dimensions, StyleSheet } from "react-native";
 import Photo from "realmModels/Photo";
 import Taxon from "realmModels/Taxon";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { preloadSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 import {
   useAuthenticatedMutation,
@@ -54,7 +55,7 @@ const PAGINATION_THRESHOLD = 5;
 // How many observations ahead to start downloading photos for. Photos are
 // shown at full original resolution, so we start these downloads well before
 // the user reaches them to hide the latency.
-const PHOTO_PREFETCH_LOOKAHEAD = 15;
+const PHOTO_PREFETCH_LOOKAHEAD = getTunable( "identifyPhotoPrefetchAhead" );
 
 // How long after the photo renders before the taxon name appears, so the name
 // never beats the image it describes onto the screen.
@@ -177,11 +178,11 @@ const IdentifyView = ( {
       .map( obs => photosForObs( obs )[0] )
       .filter( ( url ): url is string => !!url );
     const urls = [...photoUrls, ...upcoming];
-    // faster-image's prefetch, not React Native's: the photos are drawn by
-    // FasterImageView, which reads Nuke's disk cache. Image.prefetch fills
-    // React Native's own image cache instead, which that view never consults,
-    // so the lookahead left every photo to download when it came on screen.
-    prefetch( urls );
+    // Into Nuke's disk cache, which FasterImageView reads, and not decoded:
+    // decoding every upcoming original into memory kept the image cache at its
+    // ~500 MB limit and was part of the Nov 26 out-of-memory kill. (Not
+    // Image.prefetch either, which fills an image cache that view never reads.)
+    prefetchImageData( urls );
     urls.forEach( preloadSubjectDetectionForUri );
     // observations' array identity changes every render; key off stable signals
     // so we don't re-prefetch on every re-render (e.g. during a pinch).

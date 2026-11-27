@@ -44,6 +44,7 @@ export const TUNABLE_PARAMS = {
   matchLikelyConfidence: def( "ai", 50, 0, 100 ),
   subjectCropPadding: def( "ai", 0.1, 0, 1, false ),
   subjectCropFrameFraction: def( "ai", 0.8, 0.1, 1, false ),
+  subjectDetectionConcurrency: def( "ai", 2, 1, 8 ),
 
   audioIdThreshold: def( "audio", 0.5, 0, 1, false ),
   audioIdVibrateThreshold: def( "audio", 0.7, 0, 1, false ),
@@ -89,6 +90,7 @@ export const TUNABLE_PARAMS = {
   usbStagingRetentionDays: def( "usb", 3, 0, 365, false ),
 
   placeSearchMaxSuggestions: def( "explore", 5, 1, 20 ),
+  identifyPhotoPrefetchAhead: def( "explore", 5, 0, 30 ),
 
   gamePoolSize: def( "game", 20, 1, 200 ),
   gameLookalikeRadiusKm: def( "game", 500, 1, 20000 ),

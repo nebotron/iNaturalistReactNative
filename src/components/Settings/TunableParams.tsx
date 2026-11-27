@@ -218,6 +218,14 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-placeSearchMaxSuggestions" ),
     t( "Tunable-placeSearchMaxSuggestions-description" ),
   ],
+  identifyPhotoPrefetchAhead: [
+    t( "Tunable-identifyPhotoPrefetchAhead" ),
+    t( "Tunable-identifyPhotoPrefetchAhead-description" ),
+  ],
+  subjectDetectionConcurrency: [
+    t( "Tunable-subjectDetectionConcurrency" ),
+    t( "Tunable-subjectDetectionConcurrency-description" ),
+  ],
   gamePoolSize: [
     t( "Tunable-gamePoolSize" ),
     t( "Tunable-gamePoolSize-description" ),

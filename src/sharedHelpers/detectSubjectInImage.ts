@@ -5,6 +5,7 @@ import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 import { subjectBoundsToNormalizedCrop } from "sharedHelpers/subjectBoundsToNormalizedCrop";
+import queueSubjectDetection from "sharedHelpers/subjectDetectionQueue";
 
 const logger = log.extend( "detectSubjectInImage" );
 
@@ -68,7 +69,9 @@ export const subjectCropFromBounds = (
   ? subjectBoundsToNormalizedCrop( bounds, imageWidth, imageHeight, SUBJECT_DETECTION_PADDING )
   : defaultSquareCrop( imageWidth, imageHeight ) );
 
-const detectSubjectInImage = async (
+// Runs at once. Only for work already waiting its turn in
+// queueSubjectDetection, which would otherwise take a second turn.
+export const detectSubjectInImageNow = async (
   imageUri: string,
   imageWidth: number,
   imageHeight: number,
@@ -87,5 +90,13 @@ const detectSubjectInImage = async (
     return defaultSquareCrop( imageWidth, imageHeight );
   }
 };
+
+const detectSubjectInImage = (
+  imageUri: string,
+  imageWidth: number,
+  imageHeight: number,
+): Promise<NormalizedCrop> => queueSubjectDetection(
+  ( ) => detectSubjectInImageNow( imageUri, imageWidth, imageHeight ),
+);
 
 export default detectSubjectInImage;
