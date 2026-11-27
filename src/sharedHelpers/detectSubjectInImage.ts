@@ -58,8 +58,14 @@ export const logSubjectDetectionTiming = ( bounds: DetectedBounds | null ) => {
   } );
 };
 
-// The crop the detector's bounds describe, or the default framing when it
-// found nothing. Shared with prepareCropSource, which gets its bounds from the
+// When the detector finds no subject at all, the photo is shown whole rather
+// than cut to a centered square that may hide whatever is in it.
+const WHOLE_IMAGE: NormalizedCrop = {
+  x: 0, y: 0, w: 1, h: 1,
+};
+
+// The crop the detector's bounds describe, or the whole image when it found
+// nothing. Shared with prepareCropSource, which gets its bounds from the
 // same detector through a different native call.
 export const subjectCropFromBounds = (
   bounds: NormalizedBounds | null,
@@ -67,7 +73,7 @@ export const subjectCropFromBounds = (
   imageHeight: number,
 ): NormalizedCrop => ( bounds
   ? subjectBoundsToNormalizedCrop( bounds, imageWidth, imageHeight, SUBJECT_DETECTION_PADDING )
-  : defaultSquareCrop( imageWidth, imageHeight ) );
+  : { ...WHOLE_IMAGE } );
 
 // Runs at once. Only for work already waiting its turn in
 // queueSubjectDetection, which would otherwise take a second turn.
@@ -86,8 +92,8 @@ export const detectSubjectInImageNow = async (
     logSubjectDetectionTiming( bounds );
     return subjectCropFromBounds( bounds, imageWidth, imageHeight );
   } catch ( error ) {
-    logger.warn( "Subject detection failed, using default crop", error );
-    return defaultSquareCrop( imageWidth, imageHeight );
+    logger.warn( "Subject detection failed, showing the whole image", error );
+    return { ...WHOLE_IMAGE };
   }
 };
 

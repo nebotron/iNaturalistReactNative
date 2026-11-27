@@ -1,6 +1,5 @@
 import { NativeModules } from "react-native";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
-import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
 
 describe( "detectSubjectInImage", ( ) => {
   const originalImageCropper = NativeModules.ImageCropper;
@@ -17,11 +16,22 @@ describe( "detectSubjectInImage", ( ) => {
     NativeModules.ImageCropper = originalImageCropper;
   } );
 
-  it( "falls back to default square crop when native detection returns no bounds", async ( ) => {
+  it( "shows the whole image when native detection finds no subject", async ( ) => {
     mockDetectSubjectBounds.mockResolvedValue( null );
 
     const crop = await detectSubjectInImage( "file:///tmp/photo.jpg", 2000, 1000 );
-    expect( crop ).toEqual( defaultSquareCrop( 2000, 1000 ) );
+    expect( crop ).toEqual( {
+      x: 0, y: 0, w: 1, h: 1,
+    } );
+  } );
+
+  it( "shows the whole image when native detection throws", async ( ) => {
+    mockDetectSubjectBounds.mockRejectedValue( new Error( "detector failed" ) );
+
+    const crop = await detectSubjectInImage( "file:///tmp/photo.jpg", 2000, 1000 );
+    expect( crop ).toEqual( {
+      x: 0, y: 0, w: 1, h: 1,
+    } );
   } );
 
   it( "uses detected bounds when native detection succeeds", async ( ) => {
