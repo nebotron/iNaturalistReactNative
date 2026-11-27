@@ -56,10 +56,10 @@ index 9b04cad..b2b2762 100644
          // Failback to system font.
          font = RCTDefaultFontWithFontProperties(fontProperties);
 diff --git a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm
-index 0000000..0000000 100644
+index 4f709dc..9e74eff 100644
 --- a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm
 +++ b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm
-@@ -583,6 +583,29 @@
+@@ -557,6 +557,29 @@ typedef struct {
                              shouldPerfLog:(BOOL)shouldPerfLog
                             moduleProvider:(id<RCTModuleProvider>)moduleProvider
  {
