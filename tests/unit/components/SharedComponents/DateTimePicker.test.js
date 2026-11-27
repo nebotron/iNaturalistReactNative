@@ -3,8 +3,8 @@ import DateTimePicker from "components/SharedComponents/DateTimePicker";
 import React from "react";
 import { Pressable as MockPressable } from "react-native";
 
-const STALE_DATE = new Date( "2024-03-05T12:00:00" );
-const SETTLED_DATE = new Date( "2024-03-09T12:00:00" );
+const mockStaleDate = new Date( "2024-03-05T12:00:00" );
+const mockSettledDate = new Date( "2024-03-09T12:00:00" );
 
 // Mimics the modal: Confirm reports what the wheel showed when tapped, and
 // onHide later reports the value the wheel settled on. Like the real modal,
@@ -18,17 +18,17 @@ jest.mock( "react-native-modal-datetime-picker", () => function (
       <MockPressable
         accessibilityRole="button"
         testID="confirm"
-        onPress={( ) => onConfirm( STALE_DATE )}
+        onPress={( ) => onConfirm( mockStaleDate )}
       />
       <MockPressable
         accessibilityRole="button"
         testID="hide"
-        onPress={( ) => onHide?.( true, SETTLED_DATE )}
+        onPress={( ) => onHide?.( true, mockSettledDate )}
       />
       <MockPressable
         accessibilityRole="button"
         testID="cancel-hide"
-        onPress={( ) => onHide?.( false, SETTLED_DATE )}
+        onPress={( ) => onHide?.( false, mockSettledDate )}
       />
     </>
   );
@@ -51,7 +51,7 @@ describe( "DateTimePicker", ( ) => {
     expect( onDatePicked ).not.toHaveBeenCalled( );
     fireEvent.press( screen.getByTestId( "hide" ) );
     expect( onDatePicked ).toHaveBeenCalledTimes( 1 );
-    expect( onDatePicked ).toHaveBeenCalledWith( SETTLED_DATE );
+    expect( onDatePicked ).toHaveBeenCalledWith( mockSettledDate );
   } );
 
   it( "on iOS commits nothing when the picker hides without Confirm", ( ) => {
