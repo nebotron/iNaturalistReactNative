@@ -10,7 +10,13 @@ import savedSearchKey from "components/Explore/helpers/savedSearchKey";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import type { ExploreSearch } from "providers/ExploreContext";
 import { defaultExploreFilters } from "providers/ExploreContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  PERSISTED_QUERY_META,
+  PERSISTED_QUERY_TTL_MS,
+  readPersistedQuery,
+  readPersistedQueryUpdatedAt,
+} from "sharedHelpers/persistedQueries";
 import useStore from "stores/useStore";
 
 // Please don't change these to aliased paths or the e2e mocks will not get used
@@ -20,7 +26,8 @@ import { getLatestTrackedLocation } from "../../../sharedHelpers/locationHistory
 interface Options {
   // Re-resolve each time a search is applied, not just on mount
   searchCount: number;
-  // Offline, a saved search's species come from the HTTP cache
+  // Offline, a saved search's species come from the HTTP cache, or failing
+  // that, the ones last resolved
   offline: boolean;
   // Nearby for the current search, also used for a nearby saved search
   nearbyCoords?: NearbyCoords;
@@ -45,9 +52,9 @@ export const fetchNearbyCoords = async ( ): Promise<NearbyCoords | undefined> =>
     : undefined;
 };
 
-// Failures the last resolved species can stand in for: being offline or the
-// request failing, rather than the search itself being unresolvable
-const canUseLastResolved = ( error: Error ) => !( error instanceof ExcludedSavedSearchError )
+// Failures the saved species can stand in for: being offline or the request
+// failing, rather than the search itself being unresolvable
+const canUseSavedSpecies = ( error: Error ) => !( error instanceof ExcludedSavedSearchError )
   || error.reason === "offline";
 
 // The species a search leaves out (see excludedSpecies), fetched again each
@@ -64,32 +71,40 @@ const useExcludedSpecies = (
   // Editing, renaming or deleting a referenced saved search changes the key
   const referenced = referencedSavedSearches( search, savedSearches )
     .map( saved => `${saved.name}:${savedSearchKey( saved )}` );
-  // What the exclusion is, without what's only needed to fetch it again
-  const lastResolvedKey = JSON.stringify( [savedSearchName, referenced, currentUserId] );
-  const lastResolvedIds = useStore( state => state.excludedSpeciesIds[lastResolvedKey] );
-  const setExcludedSpeciesIds = useStore( state => state.setExcludedSpeciesIds );
+
+  // What the exclusion is. Where Nearby is, whether the app is offline and
+  // how many times the search was applied only change when it's fetched again,
+  // so the results saved for it are found again, offline too, after leaving
+  // Explore (e.g. for Audio ID) or restarting
+  const queryKey = [
+    "excludedSpecies",
+    savedSearchName,
+    referenced,
+    currentUserId,
+  ];
+  const refetchWhen = JSON.stringify( [
+    searchCount,
+    offline,
+    nearbyCoords?.lat,
+    nearbyCoords?.lng,
+  ] );
+  const [fetchedFor, setFetchedFor] = useState( refetchWhen );
+  // Until the refetch below starts, what's shown is for the old ones
+  const refetchPending = fetchedFor !== refetchWhen;
 
   const {
-    data, error, isFetchedAfterMount, isFetching,
+    data, error, isFetchedAfterMount, isFetching, refetch,
   } = useQuery( {
     // The key holds the referenced saved searches rather than all of them, so
     // editing an unrelated one doesn't re-resolve
     // eslint-disable-next-line @tanstack/query/exhaustive-deps
-    queryKey: [
-      "excludedSpecies",
-      savedSearchName,
-      referenced,
-      searchCount,
-      offline,
-      currentUserId,
-      nearbyCoords?.lat,
-      nearbyCoords?.lng,
-    ],
+    queryKey,
     queryFn: async ( ) => {
       // Offline too, so the request matches the one cached when the user
       // last viewed the search
       const apiToken = await getJWT( ).catch( ( ) => null );
-      // Rebuilt from the key, so only what the key covers can change the result
+      // Rebuilt from the key and what refetches it, so nothing else can
+      // change the result
       return resolveExcludedSpeciesIds( {
         filters: { ...defaultExploreFilters, excludeSpeciesInSavedSearch: savedSearchName },
       }, {
@@ -101,30 +116,33 @@ const useExcludedSpecies = (
       } );
     },
     enabled: active && enabled,
+    // Resolved again each time Explore opens, showing nothing until then, so
+    // the saved copy only stands in when that fails
     refetchOnMount: "always",
-    gcTime: 0,
+    meta: PERSISTED_QUERY_META,
+    gcTime: PERSISTED_QUERY_TTL_MS,
+    initialData: ( ) => readPersistedQuery( queryKey ) as number[] | undefined,
+    initialDataUpdatedAt: ( ) => readPersistedQueryUpdatedAt( queryKey ),
     // A missing saved search won't appear on a retry
     retry: false,
   } );
 
-  const settled = isFetchedAfterMount && !isFetching;
-  const resolved = settled && !error
-    ? data
-    : undefined;
   useEffect( ( ) => {
-    if ( resolved ) setExcludedSpeciesIds( lastResolvedKey, resolved );
-  }, [resolved, lastResolvedKey, setExcludedSpeciesIds] );
+    if ( !refetchPending ) return;
+    setFetchedFor( refetchWhen );
+    if ( active && enabled ) refetch( );
+  }, [refetchPending, refetchWhen, active, enabled, refetch] );
 
-  // Coming back to Explore offline (e.g. from the camera or Audio ID), the
-  // species can't always be fetched again, so the ones resolved earlier this
-  // session are applied instead, which also finds the results cached for them
-  if ( settled && error && lastResolvedIds && canUseLastResolved( error ) ) {
-    return { active, ids: lastResolvedIds, error: null };
-  }
+  const settled = isFetchedAfterMount && !isFetching && !refetchPending;
+  // Offline or when the request fails, the species resolved last time, as
+  // React Query keeps them, rather than an error
+  const usable = !error || ( data && canUseSavedSpecies( error ) );
   return {
     active,
-    ids: resolved,
-    error: settled
+    ids: settled && usable
+      ? data
+      : undefined,
+    error: settled && !usable
       ? error
       : null,
   };
