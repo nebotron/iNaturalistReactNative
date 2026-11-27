@@ -25,6 +25,12 @@ const EmptyHeader = ( ) => null;
 // presentation has had time to finish leaving.
 const DISMISS_MS = 400;
 
+// An iOS spinner only reports its value once the wheel stops. Tapping Confirm
+// while it is still coasting hands back the previous value, so the change
+// looks ignored. On iOS we therefore commit when the modal has finished
+// hiding, by which time the wheel has settled and reported its final value.
+const COMMIT_ON_HIDE = Platform.OS === "ios";
+
 const DatePicker = ( {
   date,
   isDateTimePickerVisible,
@@ -38,6 +44,7 @@ const DatePicker = ( {
   const [pickedDay, setPickedDay] = React.useState<Date | null>( null );
   const [isDismissing, setIsDismissing] = React.useState( false );
   const dismissTimer = React.useRef<ReturnType<typeof setTimeout> | null>( null );
+  const confirmed = React.useRef( false );
   const maxDateForTimePicker = new Date( );
   maxDateForTimePicker.setHours( 24, 0, 0, 0 );
 
@@ -58,6 +65,22 @@ const DatePicker = ( {
 
   const isVisible = isDateTimePickerVisible && !isDismissing;
 
+  const confirm = ( selectedDate: Date ) => {
+    if ( COMMIT_ON_HIDE ) {
+      confirmed.current = true;
+    } else {
+      onDatePicked( selectedDate );
+    }
+    _toggleDateTimePicker( );
+  };
+
+  const onHide = ( didConfirm: boolean, finalDate?: Date ) => {
+    if ( !COMMIT_ON_HIDE ) return;
+    const shouldCommit = confirmed.current && didConfirm;
+    confirmed.current = false;
+    if ( shouldCommit && finalDate ) onDatePicked( finalDate );
+  };
+
   if ( Platform.OS === "android" && mode === "datetime" ) {
     return (
       <DateTimePicker
@@ -68,10 +91,8 @@ const DatePicker = ( {
         maximumDate={new Date( )}
         mode="datetime"
         onCancel={_toggleDateTimePicker}
-        onConfirm={selectedDate => {
-          onDatePicked( selectedDate );
-          _toggleDateTimePicker( );
-        }}
+        onConfirm={confirm}
+        onHide={onHide}
         date={date || new Date( )}
       />
     );
@@ -88,10 +109,8 @@ const DatePicker = ( {
         maximumDate={new Date( )}
         mode="time"
         onCancel={_toggleDateTimePicker}
-        onConfirm={selectedDate => {
-          onDatePicked( selectedDate );
-          _toggleDateTimePicker( );
-        }}
+        onConfirm={confirm}
+        onHide={onHide}
         date={pickedDay || date || new Date( )}
       />
     );
@@ -107,10 +126,8 @@ const DatePicker = ( {
         isVisible={isVisible}
         mode="time"
         onCancel={_toggleDateTimePicker}
-        onConfirm={selectedDate => {
-          onDatePicked( selectedDate );
-          _toggleDateTimePicker( );
-        }}
+        onConfirm={confirm}
+        onHide={onHide}
         maximumDate={maxDateForTimePicker}
         date={date || new Date( )}
       />
@@ -133,10 +150,10 @@ const DatePicker = ( {
           setPickedDay( selectedDate );
           setisTimeVisible( true );
         } else {
-          onDatePicked( selectedDate );
-          _toggleDateTimePicker( );
+          confirm( selectedDate );
         }
       }}
+      onHide={onHide}
       date={date || new Date( )}
     />
   );
