@@ -1,5 +1,5 @@
 # Imports the library photo into a new observation, which opens the cropper,
-# then zooms in a little and turns the exposure down before the shot
+# then turns the exposure down a little before the shot
 appId: ${APP_ID}
 ---
 - runFlow: start.yaml
@@ -39,14 +39,13 @@ appId: ${APP_ID}
 - extendedWaitUntil:
     visible: Adjust brightness
     timeout: 60000
+# A short drag of the exposure slider down from its middle, so the bright
+# egret darkens a little. Points rather than "from" the slider: a swipe from
+# an element runs to the screen edge, and takes the slider to its end
 - swipe:
-    from: Adjust zoom
-    direction: RIGHT
-    duration: 1500
-- swipe:
-    from: Adjust brightness
-    direction: LEFT
-    duration: 1500
+    start: 26%, 74%
+    end: 21%, 74%
+    duration: 800
 - waitForAnimationToEnd:
     timeout: 10000
 - takeScreenshot: ${SHOT}
