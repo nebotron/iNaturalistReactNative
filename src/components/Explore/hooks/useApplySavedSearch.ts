@@ -31,15 +31,15 @@ export const useLoadSavedSearch = ( ) => {
   }, [dispatch, layoutKey, replaceOverlays] );
 };
 
-const useApplySavedSearch = ( ) => {
+// An Explore opened from a hotspot link sits on top of the Explore showing the
+// Hotspots view. A search that replaces both is loaded into the Explore
+// underneath and this one is closed, leaving no way back to the hotspot.
+// Returns false when this Explore wasn't opened from a hotspot link.
+export const useReplaceHotspotExplore = ( ) => {
   const navigation = useNavigation<ExploreStackScreenProps<"ExploreResults">["navigation"]>( );
   const fromHotspot = useExploreFromHotspot( );
-  const loadSavedSearch = useLoadSavedSearch( );
 
   return useCallback( ( savedSearch: SavedSearch ) => {
-    // An Explore opened from a hotspot link sits on top of the Explore showing the
-    // Hotspots view. A saved search replaces both: it's loaded into the Explore
-    // underneath and this one is closed, leaving no way back to the hotspot.
     const tabStack = fromHotspot
       ? navigation.getParent( )
       : undefined;
@@ -47,17 +47,26 @@ const useApplySavedSearch = ( ) => {
     const opener = tabState && tabState.index > 0
       ? tabState.routes[tabState.index - 1]
       : undefined;
-    if ( tabStack && opener ) {
-      tabStack.dispatch( {
-        ...CommonActions.setParams( { loadSavedSearch: savedSearch } ),
-        source: opener.key,
-      } );
-      tabStack.goBack( );
-      return;
-    }
+    if ( !tabStack || !opener ) return false;
+    tabStack.dispatch( {
+      ...CommonActions.setParams( { loadSavedSearch: savedSearch } ),
+      source: opener.key,
+    } );
+    tabStack.goBack( );
+    return true;
+  }, [navigation, fromHotspot] );
+};
+
+const useApplySavedSearch = ( ) => {
+  const navigation = useNavigation<ExploreStackScreenProps<"ExploreResults">["navigation"]>( );
+  const replaceHotspotExplore = useReplaceHotspotExplore( );
+  const loadSavedSearch = useLoadSavedSearch( );
+
+  return useCallback( ( savedSearch: SavedSearch ) => {
+    if ( replaceHotspotExplore( savedSearch ) ) return;
     loadSavedSearch( savedSearch );
     navigation.popTo( "ExploreResults" );
-  }, [navigation, fromHotspot, loadSavedSearch] );
+  }, [navigation, replaceHotspotExplore, loadSavedSearch] );
 };
 
 export default useApplySavedSearch;
