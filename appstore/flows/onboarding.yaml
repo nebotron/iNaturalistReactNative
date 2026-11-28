@@ -1,36 +1,66 @@
 # Takes a freshly installed app through first-run onboarding to the tab bar,
-# skipping sign-up. Location is granted with simctl beforehand.
+# skipping sign-up. Handles both onboardings: the carousel, and the step flow
+# behind the OnboardingV2Enabled flag. Location is granted with simctl
+# beforehand.
 appId: ${APP_ID}
 ---
 - launchApp:
     appId: ${APP_ID}
 - extendedWaitUntil:
     visible:
-      id: Onboarding.welcome.next
+      id: "OnboardingCarousel|Onboarding\\.welcome"
     timeout: 60000
-- tapOn:
-    id: Onboarding.welcome.next
-# The demo steps' close button offers to skip them
-- extendedWaitUntil:
-    visible:
-      id: Onboarding.obs_story.close
-    timeout: 30000
-- tapOn:
-    id: Onboarding.obs_story.close
-- tapOn: YES, EXIT
-- extendedWaitUntil:
-    visible:
-      id: Onboarding.signup_email.close
-    timeout: 30000
-- tapOn:
-    id: Onboarding.signup_email.close
-- tapOn: EXIT
-- extendedWaitUntil:
-    visible:
-      id: Onboarding.location_explainer.next
-    timeout: 30000
-- tapOn:
-    id: Onboarding.location_explainer.next
+
+# Carousel: its close button resets to the tabs with Login on top, whose own
+# close button dismisses it
+- runFlow:
+    when:
+      visible:
+        id: OnboardingCarousel
+    commands:
+      - tapOn: Close
+      - waitForAnimationToEnd
+      - extendedWaitUntil:
+          notVisible:
+            id: OnboardingCarousel
+          timeout: 15000
+      - extendedWaitUntil:
+          visible: Close
+          timeout: 15000
+          optional: true
+      - tapOn:
+          text: Close
+          optional: true
+
+# Step flow: skip the demo and sign-up through their exit sheets
+- runFlow:
+    when:
+      visible:
+        id: Onboarding.welcome.next
+    commands:
+      - tapOn:
+          id: Onboarding.welcome.next
+      - extendedWaitUntil:
+          visible:
+            id: Onboarding.obs_story.close
+          timeout: 30000
+      - tapOn:
+          id: Onboarding.obs_story.close
+      - tapOn: YES, EXIT
+      - extendedWaitUntil:
+          visible:
+            id: Onboarding.signup_email.close
+          timeout: 30000
+      - tapOn:
+          id: Onboarding.signup_email.close
+      - tapOn: EXIT
+      - extendedWaitUntil:
+          visible:
+            id: Onboarding.location_explainer.next
+          timeout: 30000
+      - tapOn:
+          id: Onboarding.location_explainer.next
+
 - runFlow:
     when:
       visible: Allow While Using App

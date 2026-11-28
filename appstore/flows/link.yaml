@@ -3,6 +3,16 @@
 appId: ${APP_ID}
 ---
 - openLink: ${LINK}
+# iOS asks before a link opens an app
+- extendedWaitUntil:
+    visible: Open
+    timeout: 10000
+    optional: true
+- runFlow:
+    when:
+      visible: Open
+    commands:
+      - tapOn: Open
 - runFlow:
     when:
       true: ${TAP_ID != ''}
