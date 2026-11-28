@@ -322,6 +322,35 @@ const applyTrackedLocationToObservation = async (
   return true;
 };
 
+// The tracked location for an observation's time, or null when it has no
+// timestamp, tracking recorded no fixes, or no fix falls within the match
+// window. `usablePoints` must come from filterUsableTrackedPoints.
+const findTrackedLocationMatch = (
+  observation: Pick<RealmObservationPojo, "uuid" | "observed_on_string" | "observed_on">,
+  usablePoints: TrackedPoint[],
+): TrackedLocationMatch | null => {
+  const observedOn = observation.observed_on_string ?? observation.observed_on;
+  if ( !observedOn ) {
+    logger.info( `No timestamp on observation ${observation.uuid}; skipping tracked location` );
+    return null;
+  }
+  if ( usablePoints.length === 0 ) {
+    logger.info( "No usable tracked location points recorded; skipping tracked location" );
+    return null;
+  }
+  const trackedLocation = interpolateFromUsablePoints(
+    usablePoints,
+    new Date( observedOn ).getTime(),
+  );
+  if ( !trackedLocation ) {
+    logger.info(
+      `No tracked location within match window of ${observedOn} `
+      + `for observation ${observation.uuid}`,
+    );
+  }
+  return trackedLocation;
+};
+
 // Auto-fills an observation's location from tracked location history when it
 // has no location of its own (i.e. its photos carried no GPS EXIF data). Used
 // on import/save so a tracked location is applied automatically to both the
@@ -346,31 +375,11 @@ export const autoApplyTrackedLocationIfMissing = async (
     return false;
   }
 
-  const observedOn = observation.observed_on_string ?? observation.observed_on;
-  if ( !observedOn ) {
-    logger.info( `No timestamp on observation ${observation.uuid}; skipping tracked location` );
-    return false;
-  }
-
   const usablePoints = precomputedUsablePoints ?? filterUsableTrackedPoints(
     realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
   );
-  if ( usablePoints.length === 0 ) {
-    logger.info( "No usable tracked location points recorded; skipping tracked location" );
-    return false;
-  }
-
-  const trackedLocation = interpolateFromUsablePoints(
-    usablePoints,
-    new Date( observedOn ).getTime(),
-  );
-  if ( !trackedLocation ) {
-    logger.info(
-      `No tracked location within match window of ${observedOn} `
-      + `for observation ${observation.uuid}`,
-    );
-    return false;
-  }
+  const trackedLocation = findTrackedLocationMatch( observation, usablePoints );
+  if ( !trackedLocation ) return false;
 
   const applied = await applyTrackedLocationToObservation( realm, observation, trackedLocation );
 
@@ -390,30 +399,23 @@ export const autoApplyTrackedLocationIfMissing = async (
   return applied;
 };
 
-// Saves each observation, then auto-fills tracked location for any that ended
-// up without one, reusing a single accuracy-filtered point set across all of
-// them. Shared by every place that persists freshly-created observations, so
-// the location auto-fill can't drift out of sync between call sites the way
-// it has twice before (see git history on this file). Returns a map of uuid
-// to the location that was applied, for callers that need to mirror the fill
-// back onto their own in-memory copies (e.g. for a CV prefetch cache key).
+// Auto-fills tracked location for any observation without one, then saves
+// them all, reusing a single accuracy-filtered point set across all of them.
+// The location goes into the observation before its first save: saving first
+// and filling afterwards left every such observation in Realm with no location
+// for the seconds the fill took, which My Observations reported as
+// observations missing a location. Writing the location into the photo files
+// and their Photos library assets still happens after the save. Shared by
+// every place that persists freshly-created observations, so the location
+// auto-fill can't drift out of sync between call sites the way it has twice
+// before (see git history on this file). Returns a map of uuid to the location
+// that was applied, for callers that need to mirror the fill back onto their
+// own in-memory copies (e.g. for a CV prefetch cache key).
 export const saveObservationsAndApplyTrackedLocation = async (
   observations: RealmObservationPojo[],
   realm: Realm,
 ): Promise<Record<string, TrackedLocationMatch>> => {
-  const saveResults = await Promise.allSettled(
-    observations.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
-  );
-  saveResults.forEach( ( result, idx ) => {
-    if ( result.status === "rejected" ) {
-      logger.error(
-        `Failed to save observation ${observations[idx]?.uuid}`,
-        result.reason,
-      );
-    }
-  } );
-
-  const trackedLocationByUuid: Record<string, TrackedLocationMatch> = {};
+  const matchByUuid: Record<string, TrackedLocationMatch> = {};
   try {
     const missingLocationObs = observations
       .filter( obs => obs.latitude == null || obs.longitude == null );
@@ -431,39 +433,58 @@ export const saveObservationsAndApplyTrackedLocation = async (
         `Auto-filling tracked location: ${missingLocationObs.length} observation(s) `
         + `missing location, ${usablePoints.length} usable tracked point(s)`,
       );
-      // One transaction — and so one iOS consent alert — for the whole set,
-      // however long its photos take to work through the EXIF write above.
-      beginLocationWriteBatch( );
-      try {
-        await Promise.all( missingLocationObs.map( async obs => {
-          try {
-            const savedObs = realm.objectForPrimaryKey<RealmObservation>(
-              "Observation",
-              obs.uuid,
-            );
-            if ( !savedObs ) return;
-            const applied = await autoApplyTrackedLocationIfMissing(
-              realm,
-              savedObs,
-              usablePoints,
-            );
-            if ( applied ) {
-              trackedLocationByUuid[obs.uuid] = {
-                latitude: savedObs.latitude as number,
-                longitude: savedObs.longitude as number,
-                accuracy: savedObs.positional_accuracy ?? null,
-              };
-            }
-          } catch ( error ) {
-            logger.error( `Failed to auto-apply tracked location to ${obs.uuid}`, error );
-          }
-        } ) );
-      } finally {
-        await endLocationWriteBatch( );
-      }
+      missingLocationObs.forEach( obs => {
+        const match = findTrackedLocationMatch( obs, usablePoints );
+        if ( match ) matchByUuid[obs.uuid] = match;
+      } );
     }
   } catch ( error ) {
     logger.error( "Failed to auto-apply tracked location while saving observations", error );
+  }
+
+  const observationsToSave = observations.map( obs => {
+    const match = matchByUuid[obs.uuid];
+    if ( !match ) return obs;
+    return {
+      ...obs,
+      latitude: match.latitude,
+      longitude: match.longitude,
+      ...( match.accuracy != null
+        ? { positional_accuracy: match.accuracy }
+        : {} ),
+    };
+  } );
+  const saveResults = await Promise.allSettled(
+    observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
+  );
+  saveResults.forEach( ( result, idx ) => {
+    if ( result.status === "rejected" ) {
+      logger.error(
+        `Failed to save observation ${observations[idx]?.uuid}`,
+        result.reason,
+      );
+    }
+  } );
+
+  const trackedLocationByUuid: Record<string, TrackedLocationMatch> = {};
+  const matchedUuids = Object.keys( matchByUuid );
+  if ( matchedUuids.length === 0 ) return trackedLocationByUuid;
+  // One transaction — and so one iOS consent alert — for the whole set,
+  // however long its photos take to work through the EXIF write above.
+  beginLocationWriteBatch( );
+  try {
+    await Promise.all( matchedUuids.map( async uuid => {
+      try {
+        const savedObs = realm.objectForPrimaryKey<RealmObservation>( "Observation", uuid );
+        if ( !savedObs ) return;
+        await applyTrackedLocationToObservation( realm, savedObs, matchByUuid[uuid] );
+        trackedLocationByUuid[uuid] = matchByUuid[uuid];
+      } catch ( error ) {
+        logger.error( `Failed to auto-apply tracked location to ${uuid}`, error );
+      }
+    } ) );
+  } finally {
+    await endLocationWriteBatch( );
   }
 
   return trackedLocationByUuid;

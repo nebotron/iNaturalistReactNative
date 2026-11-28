@@ -32,14 +32,15 @@ interface LifeListCache {
 }
 
 const INDEX_KEY = "exploreLifeList-v1-index";
+// v3: rebuilt so hybrids a v2 sync dropped as above species level come back.
+const KEY_PREFIX = "exploreLifeList-v3-";
 
 export const lifeListCacheKey = ( queryParams: Record<string, unknown> ): string => {
   const filters = Object.keys( queryParams )
     .filter( key => !NON_FILTER_PARAMS.includes( key ) && queryParams[key] !== undefined )
     .sort( )
     .map( key => [key, queryParams[key]] );
-  // v3: rebuilt so hybrids a v2 sync dropped as above species level come back.
-  return `exploreLifeList-v3-${JSON.stringify( filters )}`;
+  return `${KEY_PREFIX}${JSON.stringify( filters )}`;
 };
 
 const readCache = ( key: string ): LifeListCache => {
@@ -66,8 +67,13 @@ const touchIndex = ( key: string ) => {
     index = [];
   }
   index = [key, ...index.filter( k => k !== key )];
-  index.slice( MAX_CACHED_QUERIES ).forEach( k => zustandStorage.removeItem( k ) );
-  zustandStorage.setItem( INDEX_KEY, JSON.stringify( index.slice( 0, MAX_CACHED_QUERIES ) ) );
+  // Caches from an earlier key version are never read again; left in the
+  // index they took ten newer queries to age out (2.1 MB of v2 caches in
+  // storage_metrics, Nov 25-27), and MMKV keeps all of it mapped in memory
+  const current = index.filter( k => k.startsWith( KEY_PREFIX ) );
+  index.filter( k => !k.startsWith( KEY_PREFIX ) ).forEach( k => zustandStorage.removeItem( k ) );
+  current.slice( MAX_CACHED_QUERIES ).forEach( k => zustandStorage.removeItem( k ) );
+  zustandStorage.setItem( INDEX_KEY, JSON.stringify( current.slice( 0, MAX_CACHED_QUERIES ) ) );
 };
 
 const isEarlier = ( date: string | null, than: string | null | undefined ) => (

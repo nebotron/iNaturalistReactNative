@@ -18,6 +18,7 @@ import type {
 } from "react-native-reanimated";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
+import type { GestureLock } from "sharedHelpers/gestureLock";
 
 export type OnPinchStartCallback = (
   event: GestureStateChangeEvent<PinchGestureHandlerEventPayload>
@@ -192,6 +193,12 @@ interface ZoomProps {
    * eliminates cross-detector coordination overhead that causes lag and jitter.
    */
   onSwipeToClose?: () => void;
+  /**
+   * Shared with gestures outside this view (e.g. sliders) so a touch drives
+   * only one of them: while another gesture holds it, pinch, pan and double
+   * tap ignore their touches, and vice versa.
+   */
+  gestureLock?: GestureLock;
 }
 
 type ZoomableProps = AnimateProps<ViewProps> & ZoomProps;
@@ -267,6 +274,7 @@ export type ZoomableUseGesturesProps = Pick<
     | "cropPanContext"
     | "onSwipeToClose"
     | "allowLetterboxPan"
+    | "gestureLock"
   >;
 
 export interface ZoomableRef {

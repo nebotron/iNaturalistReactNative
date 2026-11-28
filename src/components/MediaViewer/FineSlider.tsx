@@ -12,6 +12,12 @@ import { StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import type { GestureLock } from "sharedHelpers/gestureLock";
+import {
+  claimGestureLock,
+  releaseGestureLock,
+  useGestureLockOwner,
+} from "sharedHelpers/gestureLock";
 import usePreventSwipeBack from "sharedHooks/usePreventSwipeBack";
 import colors from "styles/tailwindColors";
 
@@ -76,6 +82,9 @@ interface Props {
   // Values within snapThreshold of snapValue snap to it, marked with a tick.
   snapValue?: number;
   snapThreshold?: number;
+  // Shared with other gestures on the screen so a touch drives only one of
+  // them: while another holds it, this slider ignores drags.
+  gestureLock?: GestureLock;
 }
 
 // A drag-only slider: the thumb moves by the finger's horizontal travel from
@@ -96,6 +105,7 @@ const FineSlider = ( {
   maximumValue = 1,
   snapValue,
   snapThreshold = 0,
+  gestureLock,
 }: Props ) => {
   usePreventSwipeBack( !disabled );
   const [trackWidth, setTrackWidth] = useState( 0 );
@@ -132,6 +142,9 @@ const FineSlider = ( {
   const lastX = useSharedValue( 0 );
   const isDragging = useSharedValue( false );
   const trackWidthSV = useSharedValue( 0 );
+  const lockOwnerId = useGestureLockOwner( gestureLock );
+  // Whether the current drag owns the gesture lock and so may move the thumb.
+  const ownsDrag = useSharedValue( false );
 
   // Follow the controlled value except while dragging, when the accumulated
   // position is authoritative (the parent's value is a rounded round-trip
@@ -188,10 +201,14 @@ const FineSlider = ( {
     .enabled( !disabled && trackWidth > 0 )
     .minDistance( 0 )
     .onStart( event => {
+      const owns = claimGestureLock( gestureLock, lockOwnerId );
+      ownsDrag.set( owns );
+      if ( !owns ) return;
       isDragging.set( true );
       lastX.set( event.x );
     } )
     .onUpdate( event => {
+      if ( !ownsDrag.get( ) ) return;
       const dx = event.x - lastX.get( );
       lastX.set( event.x );
       const next = clamp01( rawPos.get( ) + dx / trackWidthSV.get( ) );
@@ -201,13 +218,19 @@ const FineSlider = ( {
       scheduleOnRN( reportChange, toValue( next ) );
     } )
     .onFinalize( ( ) => {
+      if ( !ownsDrag.get( ) ) return;
+      ownsDrag.set( false );
+      releaseGestureLock( gestureLock, lockOwnerId );
       isDragging.set( false );
       scheduleOnRN( finishDrag, toValue( rawPos.get( ) ) );
     } ), [
     disabled,
     finishDrag,
+    gestureLock,
     isDragging,
     lastX,
+    lockOwnerId,
+    ownsDrag,
     rawPos,
     reportChange,
     shownPos,

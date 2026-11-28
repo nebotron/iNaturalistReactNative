@@ -10,6 +10,11 @@ import type Realm from "realm";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
+import {
+  requireNetworkResponse,
+  wasServedFromCache,
+} from "sharedHelpers/httpCache";
+import { createRequestTimeoutSignal } from "sharedHelpers/logging";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import validateRealmSearch from "sharedHelpers/validateRealmSearch";
 import { useIconicTaxa } from "sharedHooks";
@@ -110,38 +115,66 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
 
   // When online, fetch taxa matching the query from the API and save them to
   // Realm, so they show up now and in future offline searches. Local results
-  // are shown until the online results arrive.
+  // are shown until the online results arrive. A query searched recently is
+  // answered from the HTTP cache first, then replaced by the latest results.
   useEffect( ( ) => {
     if ( taxonQuery.length === 0 || !isConnected ) return ( ) => undefined;
     let isSubscribed = true;
-    const timer = setTimeout( async ( ) => {
+    const fetchRemoteTaxa = async ( fromCacheIfRecent: boolean ) => {
+      const apiToken = await getJWT( );
+      const { signal, clear } = createRequestTimeoutSignal( );
+      // A recent search comes from the cache (see httpCache), the latest
+      // from the network
+      if ( !fromCacheIfRecent ) requireNetworkResponse( signal );
       try {
-        const apiToken = await getJWT( );
-        const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token: apiToken } );
-        if ( !isSubscribed || !remoteTaxa || remoteTaxa.length === 0 ) return;
-        // The API knows official bird codes, which can differ from the one
-        // derived from the common name (e.g. "CANG" for Canada Goose)
-        const exactIds = new Set<number>( remoteTaxa
-          .filter( ( remoteTaxon: ApiTaxon ) => normalize( remoteTaxon.matched_term )
-            === normalize( taxonQuery ) )
-          .map( ( remoteTaxon: ApiTaxon ) => remoteTaxon.id ) );
-        const mappedTaxa = remoteTaxa.map(
-          ( { matched_term: _matchedTerm, ...remoteTaxon }: ApiTaxon ) => Taxon
-            .mapApiToRealm( remoteTaxon, realm ),
+        const remoteTaxa: ApiTaxon[] | null = await searchTaxa(
+          { q: taxonQuery },
+          { api_token: apiToken, signal },
         );
-        safeRealmWrite( realm, ( ) => {
-          mappedTaxa.forEach( mappedTaxon => {
-            realm.create( "Taxon", Taxon.forUpdate( mappedTaxon ), UpdateMode.Modified );
-          } );
-        }, "updating local species db from search" );
-        const taxa = mappedTaxa
-          .map( mappedTaxon => realm.objectForPrimaryKey<RealmTaxon>( "Taxon", mappedTaxon.id ) )
-          .filter( ( taxon ): taxon is RealmTaxon => !!taxon );
-        if ( isSubscribed ) setRemoteResult( { query: taxonQuery, taxa, exactIds } );
+        return { remoteTaxa, fromCache: wasServedFromCache( signal ) };
+      } finally {
+        clear( );
+      }
+    };
+    const showRemoteTaxa = ( remoteTaxa: ApiTaxon[] | null ) => {
+      if ( !isSubscribed || !remoteTaxa || remoteTaxa.length === 0 ) return;
+      // The API knows official bird codes, which can differ from the one
+      // derived from the common name (e.g. "CANG" for Canada Goose)
+      const exactIds = new Set<number>( remoteTaxa
+        .filter( ( remoteTaxon: ApiTaxon ) => normalize( remoteTaxon.matched_term )
+          === normalize( taxonQuery ) )
+        .map( ( remoteTaxon: ApiTaxon ) => remoteTaxon.id ) );
+      const mappedTaxa = remoteTaxa.map(
+        ( { matched_term: _matchedTerm, ...remoteTaxon }: ApiTaxon ) => Taxon
+          .mapApiToRealm( remoteTaxon, realm ),
+      );
+      safeRealmWrite( realm, ( ) => {
+        mappedTaxa.forEach( mappedTaxon => {
+          realm.create( "Taxon", Taxon.forUpdate( mappedTaxon ), UpdateMode.Modified );
+        } );
+      }, "updating local species db from search" );
+      const taxa = mappedTaxa
+        .map( mappedTaxon => realm.objectForPrimaryKey<RealmTaxon>( "Taxon", mappedTaxon.id ) )
+        .filter( ( taxon ): taxon is RealmTaxon => !!taxon );
+      setRemoteResult( { query: taxonQuery, taxa, exactIds } );
+    };
+    const timer = setTimeout( async ( ) => {
+      let fromCache = false;
+      try {
+        const cached = await fetchRemoteTaxa( true );
+        ( { fromCache } = cached );
+        showRemoteTaxa( cached.remoteTaxa );
       } catch ( error ) {
         console.error( "Online taxon search failed:", error );
       } finally {
         if ( isSubscribed ) setRemoteDoneQuery( taxonQuery );
+      }
+      if ( !fromCache || !isSubscribed ) return;
+      try {
+        const latest = await fetchRemoteTaxa( false );
+        if ( !latest.fromCache ) showRemoteTaxa( latest.remoteTaxa );
+      } catch ( error ) {
+        console.warn( "Couldn't fetch the latest taxon search results:", error );
       }
     }, ONLINE_SEARCH_DEBOUNCE_MS );
     return ( ) => {

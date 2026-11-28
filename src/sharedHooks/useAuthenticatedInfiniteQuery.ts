@@ -10,6 +10,7 @@ import {
 import type { UserPojo } from "realmModels/User";
 import {
   preferCachedResponse,
+  preferNetworkResponse,
   requireNetworkResponse,
   wasServedFromCache,
 } from "sharedHelpers/httpCache";
@@ -32,8 +33,9 @@ import { useCurrentUser } from "sharedHooks";
 // restart.
 //
 // With `cacheFirst` (on by default with `persist`) a page fetched in the last
-// HTTP_CACHE_FRESH_MS comes from the HTTP cache rather than the network.
-// refreshFirstPage always goes to the network.
+// HTTP_CACHE_FRESH_MS comes from the HTTP cache rather than the network, as
+// one of a search always does (see httpCache). refreshFirstPage always goes to
+// the network.
 //
 // Whenever cached results are shown (saved to disk, from the HTTP cache, or
 // kept in memory since an earlier visit), the latest are fetched in the
@@ -143,9 +145,12 @@ const useAuthenticatedInfiniteQuery = (
     // fetching from RNSInfo becomes a performance issue
     const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
     const { signal: timeoutSignal, clear } = createRequestTimeoutSignal( querySignal );
-    const signal = cacheFirst && !fromNetwork
-      ? preferCachedResponse( timeoutSignal )
-      : timeoutSignal;
+    const signal = timeoutSignal;
+    if ( fromNetwork ) {
+      preferNetworkResponse( signal );
+    } else if ( cacheFirst ) {
+      preferCachedResponse( signal );
+    }
     if ( noCache ) requireNetworkResponse( signal );
     try {
       const page = await queryFunction( params, { api_token: apiToken, signal } );

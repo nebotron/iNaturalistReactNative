@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
+import type { GestureLock } from "sharedHelpers/gestureLock";
 import { normalizedCropToImageZoomTransform }
   from "sharedHelpers/normalizedCropToImageZoomTransform";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -58,6 +59,7 @@ interface Props {
   onError?: () => void;
   onScaleChange?: ( scale: number ) => void;
   onSwipeToClose?: () => void;
+  gestureLock?: GestureLock;
 }
 
 const CustomImageZoom = ( {
@@ -84,6 +86,7 @@ const CustomImageZoom = ( {
   onError,
   onScaleChange,
   onSwipeToClose,
+  gestureLock,
 }: Props ): Node => {
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   // Keep an internal ref for programmatic reset/framing regardless of whether
@@ -178,6 +181,7 @@ const CustomImageZoom = ( {
       }}
       cropPanContext={cropPanContext}
       onSwipeToClose={onSwipeToClose}
+      gestureLock={gestureLock}
       brightness={brightness}
       fullResolution={fullResolution}
       onLongPress={onLongPress}

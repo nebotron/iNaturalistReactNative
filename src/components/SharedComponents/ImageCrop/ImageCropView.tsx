@@ -18,6 +18,7 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { log } from "sharedHelpers/logger";
@@ -151,6 +152,8 @@ const ImageCropView = ( {
   const { hasBottomTabBar } = useStackHost( );
   const { width: windowWidth } = useWindowDimensions( );
   const zoomRef = useRef<SharedZoomableImageRef>( null );
+  // One touch either pinches/pans the photo or drags a slider, never both.
+  const gestureLock = useSharedValue( 0 );
   const appliedInitialCropKey = useRef<string | null>( null );
   const [cropAreaHeight, setCropAreaHeight] = useState( 0 );
   const [saving, setSaving] = useState( false );
@@ -345,15 +348,25 @@ const ImageCropView = ( {
     if ( !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
       return;
     }
+    const currentTransform = zoomRef.current.readTransform( );
     const currentCrop = imageZoomTransformToNormalizedCrop(
       imageWidth,
       imageHeight,
       windowWidth,
       cropAreaHeight,
       boxSize,
-      zoomRef.current.readTransform( ),
+      currentTransform,
     );
-    const crop = squareCropOfSide( imageWidth, imageHeight, UPLOAD_MAX_SIDE, currentCrop );
+    // Tapping again while the crop is already at the upload size toggles to
+    // the largest square the image allows (its shorter side); tapping once
+    // more comes back to the upload size.
+    const shorterSide = Math.min( imageWidth, imageHeight );
+    const currentSide = cropSidePxFromScale( currentTransform.scale );
+    const atUploadSize = Math.abs( currentSide - UPLOAD_MAX_SIDE ) <= SNAP_SIDE_TOLERANCE_PX;
+    const targetSide = atUploadSize && shorterSide > DOWNSIZE_THRESHOLD_PX
+      ? shorterSide
+      : UPLOAD_MAX_SIDE;
+    const crop = squareCropOfSide( imageWidth, imageHeight, targetSide, currentCrop );
     const transform = normalizedCropToImageZoomTransform(
       imageWidth,
       imageHeight,
@@ -363,16 +376,18 @@ const ImageCropView = ( {
       crop,
     );
     zoomRef.current.applyTransform( transform );
-    // squareCropOfSide never exceeds UPLOAD_MAX_SIDE by construction, so clear
-    // the warning directly instead of reading the transform back -- that read
-    // can run before the just-applied worklet update reaches JS, and would
-    // otherwise fall inside the hysteresis band and stay stuck on if the crop
-    // was already oversized before this snap (the button's main use case).
-    setWillBeDownsized( false );
+    // Set the warning from the target side directly instead of reading the
+    // transform back -- that read can run before the just-applied worklet
+    // update reaches JS, and would otherwise fall inside the hysteresis band
+    // and stay stuck on if the crop was already oversized before this snap.
+    // An upload-size snap is never downsized; a full-shorter-side one is
+    // whenever it is past the threshold (which is the only time it is chosen).
+    setWillBeDownsized( targetSide > DOWNSIZE_THRESHOLD_PX );
     onCropChange?.( crop );
   }, [
     boxSize,
     cropAreaHeight,
+    cropSidePxFromScale,
     imageHeight,
     imageWidth,
     onCropChange,
@@ -514,6 +529,7 @@ const ImageCropView = ( {
               onLoad={handleImageLoad}
               onError={handleImageError}
               onScaleChange={syncZoomSlider}
+              gestureLock={gestureLock}
             />
           </View>
         )}
@@ -565,6 +581,7 @@ const ImageCropView = ( {
           brightnessAccessibilityLabel={t( "Adjust-brightness" )}
           iconColor={colors.white}
           zoomSnapScale={cropSidePxFromScale( 1 ) / UPLOAD_MAX_SIDE}
+          gestureLock={gestureLock}
         />
 
         <View

@@ -1,7 +1,13 @@
 import type { QueryKey, UseQueryOptions } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
+import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { useEffect, useState } from "react";
+import {
+  preferNetworkResponse,
+  requireNetworkResponse,
+  wasServedFromCache,
+} from "sharedHelpers/httpCache";
+import { log } from "sharedHelpers/logger";
 import {
   createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
 } from "sharedHelpers/logging";
@@ -22,6 +28,8 @@ export type AuthenticatedQueryOptions<Response> = Omit<
   requireLoggedIn?: boolean;
 }
 
+const logger = log.extend( "useAuthenticatedQuery" );
+
 // The cache key useAuthenticatedQuery actually uses. Exported so code that writes to the cache
 // directly (e.g. queryClient.setQueryData) can match it
 export const authenticatedQueryKey = (
@@ -36,12 +44,17 @@ export type QueryFunction<Response>
   = ( options: { api_token: string | null; signal: AbortSignal } ) => Promise<Response>;
 
 // Should work like React Query's useQuery except it calls the queryFunction
-// with an object that includes the JWT
+// with an object that includes the JWT.
+//
+// Results the HTTP cache answers with (a search made recently, or anything
+// when the network fails) are shown at once, while the latest are fetched in
+// the background and replace them when they arrive.
 const useAuthenticatedQuery = <Response>(
   queryKey: QueryKey,
   queryFunction: QueryFunction<Response>,
   queryOptions: AuthenticatedQueryOptions<Response> = {},
 ) => {
+  const queryClient = useQueryClient( );
   const [userLoggedIn, setUserLoggedIn] = useState<boolean | null>( LOGGED_IN_UNKNOWN );
 
   useEffect( ( ) => {
@@ -68,21 +81,35 @@ const useAuthenticatedQuery = <Response>(
 
   return useQuery( {
     queryKey: authQueryKey,
-    queryFn: async ( ) => {
-      // Note, getJWT() takes care of fetching a new token if the existing
-      // one is expired. We *could* store the token in state with useState if
-      // fetching from RNSInfo becomes a performance issue
-      const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
-      const { signal, clear } = createRequestTimeoutSignal( );
-      const options = {
-        api_token: apiToken,
-        signal,
+    queryFn: async ( { queryKey: key } ) => {
+      const fetchResponse = async ( markSignal?: ( signal: AbortSignal ) => AbortSignal ) => {
+        // Note, getJWT() takes care of fetching a new token if the existing
+        // one is expired. We *could* store the token in state with useState if
+        // fetching from RNSInfo becomes a performance issue
+        const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
+        const { signal, clear } = createRequestTimeoutSignal( );
+        markSignal?.( signal );
+        try {
+          const response = await queryFunction( { api_token: apiToken, signal } );
+          return { response, fromCache: wasServedFromCache( signal ) };
+        } finally {
+          clear( );
+        }
       };
-      try {
-        return await queryFunction( options );
-      } finally {
-        clear( );
+      // Results already shown stay while React Query fetches them again
+      const { response, fromCache } = await fetchResponse(
+        queryClient.getQueryData( key ) === undefined
+          ? undefined
+          : preferNetworkResponse,
+      );
+      if ( fromCache && onlineManager.isOnline( ) ) {
+        fetchResponse( requireNetworkResponse )
+          .then( latest => queryClient.setQueryData( key, latest.response ) )
+          .catch( error => {
+            logger.warn( "Couldn't fetch the latest results, showing cached ones", error );
+          } );
       }
+      return response;
     },
     ...queryOptions,
     retry: queryOptions.retry !== false
