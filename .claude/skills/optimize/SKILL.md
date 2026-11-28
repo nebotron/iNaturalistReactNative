@@ -1,10 +1,11 @@
 ---
 name: optimize
-description: Find data-backed ways to cut the app's CPU, memory, battery, latency, disk and network use, adding diagnostics where the data is missing. Presents suggestions as a numbered list.
+description: Find data-backed ways to cut the app's CPU, memory, battery, latency, disk and network use, proposing diagnostics where the data is missing. Proposes changes as a numbered list; makes none of them.
 ---
 
 Find where the shipped app spends the most resources for the least benefit,
-and propose (and, where safe, make) changes that make it lighter. Areas:
+and propose changes that would make it lighter. **This skill only proposes:
+it doesn't edit code, commit or push.** Areas:
 
 - **CPU** and **battery** (overlaps `/battery`; use its notes, don't redo it)
 - **Memory** (peak footprint, memory kills, leaks across screens)
@@ -17,7 +18,7 @@ and propose (and, where safe, make) changes that make it lighter. Areas:
 log, MetricKit, TestFlight), or one taken here (bundle size, a benchmark, a
 test that counts calls). "X looks expensive" from reading code is a
 hypothesis, not a finding. When the data for a likely cost doesn't exist,
-the suggestion is a **new diagnostic** that would produce it, and you add it.
+the proposal is a **new diagnostic** that would produce it.
 
 Never trade away image quality, AI model accuracy, observation location
 accuracy, or user data to save resources.
@@ -86,10 +87,11 @@ nothing, done twice, or done bigger than needed:
 Trace each candidate to `file:line` and read the subsystem's `agent-docs/`
 first.
 
-## 3. Add diagnostics where data is missing
+## 3. Propose diagnostics where data is missing
 
-For each likely cost with no measurement, add the smallest logging that would
-measure it on the next build. Follow existing patterns:
+For each likely cost with no measurement, propose the smallest logging that
+would measure it on the next build: where it goes (`file:line`), what it logs,
+and what question it answers. Follow existing patterns:
 
 - `logger` from `sharedHelpers/logger` (lines go to the Firebase log in
   non-dev builds). Log summaries (counts, durations, bytes), not per-item
@@ -98,30 +100,29 @@ measure it on the next build. Follow existing patterns:
 - `sharedHelpers/uiDelayTracker.ts` for latency, `sharedHelpers/powerProfile.ts`
   signposts for per-screen MetricKit attribution.
 - Give each new line a stable, greppable prefix (e.g. `perf_startup`,
-  `perf_mem`, `perf_net`) and note it in the report so the next run greps it.
+  `perf_mem`, `perf_net`) so the next run can grep it.
 
-## 4. Change
+## 4. Shape each proposal
 
-- Make the changes whose data is clear and whose output is identical; leave
-  the rest as suggestions. Native iOS code can't be built here — keep those
-  changes small and logged.
-- Add or update a test for each JS change and run the affected suites
-  (compare failures against `main` before calling them yours). Run
-  `npx eslint` on touched files and check `tsc` for new errors in them.
-- Commit each change separately with the measurement behind it in the message.
+- Say what the change is concretely enough to implement: the file and
+  function, what it would do instead, and why its output stays identical.
+- Say how risky it is and how it would be tested (which suite, what the
+  test asserts). Flag native iOS changes, which can't be built here.
+- Don't make the changes. Measurements taken here (bundle builds, scratch
+  scripts, a throwaway test run) are fine; leave the working tree clean.
 
 ## 5. Report
 
 A **numbered list**, biggest expected savings first. Each item:
 
 1. **Area** (CPU / memory / battery / latency / disk / network / size) — the
-   measurement (number, source, builds), the cause at `file:line`, the change
-   (made, or suggested), and how to confirm it next time (which log prefix or
+   measurement (number, source, builds), the cause at `file:line`, the
+   proposed change, its risk, and how to confirm it once shipped (which log prefix or
    MetricKit column should move).
 
-Mark items that rest on a single data point, and list new diagnostics
-separately with what each will answer. Then add a dated entry to the notes
-below: data range, findings, changes, and what the new diagnostics are for.
+Mark items that rest on a single data point, and list proposed diagnostics
+separately with what each would answer. Ask which proposals to implement; the
+notes below record earlier runs and are updated only when asked.
 
 ---
 
