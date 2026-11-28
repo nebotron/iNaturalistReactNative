@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { AppState, NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
 
@@ -96,8 +97,66 @@ export const setMemoryContext = ( key: string, value?: MemoryContext ) => {
   }
 };
 
+let queryClient: QueryClient | undefined;
+
+// The React Query cache to count in the snapshots
+export const setMemoryQueryClient = ( client: QueryClient ) => {
+  queryClient = client;
+};
+
+// The three launches that ended past 2.7GB (Nov 26-27) held 2.1-2.3GB in
+// malloc_small, which the native counters don't account for. These say how
+// much of it is the JS heap, and how much the React Query cache holds: queries,
+// how many have a screen observing them, infinite-query pages, and the items
+// in their results arrays.
+const jsHeap = ( ) => {
+  if ( typeof HermesInternal === "undefined" ) return null;
+  // React Native types HermesInternal as {}; getInstrumentedStats is Hermes's
+  const hermes = HermesInternal as {
+    getInstrumentedStats?: ( ) => { js_heapSize?: number; js_allocatedBytes?: number };
+  } | null;
+  const stats = hermes?.getInstrumentedStats?.( );
+  if ( !stats?.js_heapSize ) return null;
+  return {
+    heapMB: Math.round( stats.js_heapSize / 1048576 ),
+    allocatedMB: Math.round( ( stats.js_allocatedBytes ?? 0 ) / 1048576 ),
+  };
+};
+
+const resultsLength = ( value: unknown ): number => {
+  const { results } = ( value ?? {} ) as { results?: unknown };
+  if ( !Array.isArray( results ) ) return 0;
+  return results.length;
+};
+
+const queryCacheCounts = ( ) => {
+  if ( !queryClient ) return null;
+  const queries = queryClient.getQueryCache( ).getAll( );
+  let observed = 0;
+  let pages = 0;
+  let results = 0;
+  queries.forEach( query => {
+    if ( query.getObserversCount( ) > 0 ) observed += 1;
+    const { data } = query.state;
+    const infinitePages = ( data as { pages?: unknown[] } | undefined )?.pages;
+    if ( Array.isArray( infinitePages ) ) {
+      pages += infinitePages.length;
+      infinitePages.forEach( page => { results += resultsLength( page ); } );
+    } else if ( Array.isArray( data ) ) {
+      results += data.length;
+    } else {
+      results += resultsLength( data );
+    }
+  } );
+  return {
+    queries: queries.length, observed, pages, results,
+  };
+};
+
 const currentContext = ( ): MemoryContext => ( {
   ...contexts,
+  js: jsHeap( ),
+  queryCache: queryCacheCounts( ),
   // Audio ID keeps the app running in the background, where nothing else on
   // the trail is on screen
   appState: AppState.currentState,
