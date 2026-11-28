@@ -3,7 +3,6 @@ import { useFocusEffect, useRoute } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ApiTotalBounds } from "api/types";
 import {
-  CAMERA_STATS_TAB,
   HOTSPOTS_TAB,
   IDENTIFICATIONS_TAB,
   IDENTIFIERS_TAB,
@@ -13,7 +12,6 @@ import {
   OBSERVERS_TAB,
   SPECIES_TAB,
 } from "appConstants/tabs";
-import CameraStatsView from "components/Explore/CameraStatsView";
 import ExcludedSpeciesError
   from "components/Explore/components/ExcludedSpeciesError";
 import ExploreConnectionBanner
@@ -122,7 +120,6 @@ const EXPLORE_VIEW_ICONS: Record<ExploreTab, string> = {
   [IDENTIFIERS_TAB]: "identifiers",
   [LIFELIST_TAB]: "list",
   [IDENTIFICATIONS_TAB]: "id-agree",
-  [CAMERA_STATS_TAB]: "camera",
 };
 
 const noop = ( ) => undefined;
@@ -537,13 +534,6 @@ const ExploreResults = ( ) => {
       text: t( "Identifications-people-have-added-to-observations" ),
       value: IDENTIFICATIONS_TAB,
     },
-    [CAMERA_STATS_TAB]: {
-      buttonText: t( "EXPLORE-CAMERA-SETTINGS" ),
-      icon: "camera",
-      label: t( "Camera-settings" ),
-      text: t( "How-often-each-camera-lens-and-setting-appears" ),
-      value: CAMERA_STATS_TAB,
-    },
   };
   const exploreViewA11yLabels: Record<ExploreTab, string> = {
     [OBSERVATIONS_TAB]: t( "Observations-View" ),
@@ -554,7 +544,6 @@ const ExploreResults = ( ) => {
     [IDENTIFIERS_TAB]: t( "Identifiers-View" ),
     [LIFELIST_TAB]: t( "Life-List-View" ),
     [IDENTIFICATIONS_TAB]: t( "Identifications-View" ),
-    [CAMERA_STATS_TAB]: t( "Camera-Settings-View" ),
   };
 
   const renderPermissionPrompt = ( ) => (
@@ -748,8 +737,6 @@ const ExploreResults = ( ) => {
             scrollRestoreKey={scrollRestoreKey( "identifications", baseSearchParams )}
           />
         );
-      case CAMERA_STATS_TAB:
-        return <CameraStatsView queryParams={baseSearchParams} />;
       default: {
         // Exhaustiveness check: ts fails if a new tab is added without a case.
         const _exhaustive: never = state.activeTab;

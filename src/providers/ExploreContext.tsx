@@ -1,9 +1,8 @@
 import type { ApiProjectSummary, ApiTotalBounds, ApiUser } from "api/types";
-import type {
-  CAMERA_STATS_TAB, HOTSPOTS_TAB, IDENTIFICATIONS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB,
-  OBSERVERS_TAB, SPECIES_TAB,
+import {
+  HOTSPOTS_TAB, IDENTIFICATIONS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB,
+  OBSERVATIONS_TAB, OBSERVERS_TAB, SPECIES_TAB,
 } from "appConstants/tabs";
-import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import type { ExploreEntryParams } from "navigation/types";
 import * as React from "react";
@@ -171,8 +170,19 @@ export type ExploreTab =
   | typeof HOTSPOTS_TAB
   | typeof LIFELIST_TAB
   | typeof IDENTIFY_TAB
-  | typeof IDENTIFICATIONS_TAB
-  | typeof CAMERA_STATS_TAB;
+  | typeof IDENTIFICATIONS_TAB;
+
+const EXPLORE_TABS: readonly string[] = [
+  OBSERVATIONS_TAB, SPECIES_TAB, OBSERVERS_TAB, IDENTIFIERS_TAB, HOTSPOTS_TAB, LIFELIST_TAB,
+  IDENTIFY_TAB, IDENTIFICATIONS_TAB,
+];
+
+// Saved and recent searches can hold a view that has since been removed
+const knownTab = ( tab: string | undefined ): ExploreTab | undefined => (
+  tab === undefined || EXPLORE_TABS.includes( tab )
+    ? tab as ExploreTab | undefined
+    : OBSERVATIONS_TAB
+);
 
 export type ExploreSubject =
   | { type: "taxon"; taxon: Taxon }
@@ -399,7 +409,7 @@ export function exploreReducer(
         sortBy,
         speciesSortBy,
         filters,
-        activeTab: action.search.activeTab ?? state.activeTab,
+        activeTab: knownTab( action.search.activeTab ) ?? state.activeTab,
         appliedSearchCount: state.appliedSearchCount + 1,
         backStack: [],
       };
@@ -472,7 +482,11 @@ interface ExploreProviderProps {
 export const ExploreProvider = ( {
   children, initialState, fromHotspot = false,
 }: ExploreProviderProps ) => {
-  const [state, dispatch] = React.useReducer( exploreReducer, initialState );
+  const [state, dispatch] = React.useReducer(
+    exploreReducer,
+    initialState,
+    init => ( { ...init, activeTab: knownTab( init.activeTab ) ?? OBSERVATIONS_TAB } ),
+  );
 
   const value = React.useMemo(
     () => ( { state, dispatch } ),

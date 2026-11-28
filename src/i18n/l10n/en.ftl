@@ -277,14 +277,6 @@ CAMERA-PAIRS = CAMERA PAIRS
 Camera-pairs-explanation = Same species, different camera or lens, similar distance to subject. Max distance difference:
 # Header of the table of a photo's camera metadata
 Camera-settings = Camera settings
-# Header of the Explore view showing how often each camera setting appears
-Camera-settings-of-X-photos-added-on-this-device =
-    Camera settings of { $count ->
-        [one] { $count } photo
-       *[other] { $count } photos
-    } added on this device
-# Accessibility label for the Explore view showing camera setting distributions
-Camera-Settings-View = Camera Settings View
 # Label for a button on the camera that opens tips for taking good photos
 Camera-tips = Camera tips
 # Settings text shown before any photo with a camera or lens was added
@@ -795,7 +787,6 @@ EXPAND-MAP = EXPAND MAP
 Experts-help-verify-and-improve-IDs = Experts help verify and improve IDs
 Explore = Explore
 EXPLORE = EXPLORE
-EXPLORE-CAMERA-SETTINGS = EXPLORE CAMERA SETTINGS
 EXPLORE-HOTSPOTS = EXPLORE HOTSPOTS
 # Button text for the Identifications view in Explore
 EXPLORE-IDENTIFICATIONS = EXPLORE IDENTIFICATIONS
@@ -980,8 +971,6 @@ Hotspot-X-with-Y-observations =
 Hotspots = Hotspots
 # Accessibility label for the wildlife hotspots explore view
 Hotspots-View = Hotspots View
-# Description of the Explore view showing camera setting distributions
-How-often-each-camera-lens-and-setting-appears = How often each camera, lens, and setting appears in your photos
 # Heading in the camera tips sheet above what makes a good observation
 How-to-make-a-good-observation = How to make a good observation
 # Tips how to take good photos
@@ -1457,8 +1446,6 @@ NO = NO
 # Error message when no camera can be found
 No-Camera-Available = No Camera Available
 # Shown when a list or view has no matching results
-# Shown when no matching photos have saved camera settings
-No-camera-settings-for-these-photos = No camera settings found for photos added on this device
 # Shown in Audio ID history when a species has no saved clips
 No-clips-saved-yet = No clips saved yet.
 No-crop-log-entries-yet = No crop log entries yet
