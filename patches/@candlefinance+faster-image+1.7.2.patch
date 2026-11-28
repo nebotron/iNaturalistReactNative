@@ -468,6 +468,37 @@ index 210ca60..afe85d7 100644
      private let destination: Destination
      private var _priority: ImageRequest.Priority = .low
      let queue = OperationQueue() // internal for testing
+diff --git a/node_modules/@candlefinance/faster-image/ios/Nuke/Tasks/TaskLoadImage.swift b/node_modules/@candlefinance/faster-image/ios/Nuke/Tasks/TaskLoadImage.swift
+index 2f4b6b7..8b623a2 100644
+--- a/node_modules/@candlefinance/faster-image/ios/Nuke/Tasks/TaskLoadImage.swift
++++ b/node_modules/@candlefinance/faster-image/ios/Nuke/Tasks/TaskLoadImage.swift
+@@ -18,13 +18,25 @@
+                 return // The final image is loaded
+             }
+         }
+-        if let data = pipeline.cache.cachedData(for: request) {
++        if let data = pipeline.cache.cachedData(for: request) ?? cachedOriginalDataForThumbnail() {
+             decodeCachedData(data)
+         } else {
+             fetchImage()
+         }
+     }
+ 
++    // With `.storeOriginalData` a thumbnail (maxPixelSize) is never stored on
++    // disk, only the original bytes under the plain URL's key, so decode the
++    // thumbnail from those rather than downloading again (or failing offline).
++    private func cachedOriginalDataForThumbnail() -> Data? {
++        guard request.thumbnail != nil, request.processors.isEmpty else {
++            return nil
++        }
++        var original = request
++        original.userInfo[.thumbnailKey] = nil
++        return pipeline.cache.cachedData(for: original)
++    }
++
+     private func decodeCachedData(_ data: Data) {
+         let context = ImageDecodingContext(request: request, data: data, cacheType: .disk)
+         guard let decoder = pipeline.delegate.imageDecoder(for: context, pipeline: pipeline) else {
 diff --git a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts b/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
 index 445d872..fb8eec4 100644
 --- a/node_modules/@candlefinance/faster-image/lib/typescript/index.d.ts
