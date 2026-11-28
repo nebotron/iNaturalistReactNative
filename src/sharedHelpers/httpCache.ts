@@ -2,6 +2,7 @@ import {
   CachesDirectoryPath, mkdir, readFile, unlink, writeFile,
 } from "@dr.pogodin/react-native-fs";
 import { onlineManager } from "@tanstack/react-query";
+import { NativeModules } from "react-native";
 import { MMKV } from "react-native-mmkv";
 
 // A disk cache under fetch: every successful JSON GET is saved, and served
@@ -82,12 +83,89 @@ interface HttpCacheStore {
   clear: ( ) => Promise<void>;
 }
 
+// iOS reads and writes the bodies natively (TextFile.m). react-native-fs
+// passes file contents as base64, so through it every body is converted to
+// UTF-8 and base64 in JavaScript, which cost Explore up to half its JS time.
+// Android has no TextFile module yet and keeps using react-native-fs.
+const { TextFile } = NativeModules as {
+  TextFile?: {
+    readUtf8: ( path: string ) => Promise<string>;
+    writeUtf8: ( path: string, contents: string ) => Promise<void>;
+  };
+};
+
+// Bodies read and written since the last takeHttpCacheStats, for the
+// http_cache_summary log line (httpCacheStats.ts). Lengths are in characters.
+interface Tally { n: number; chars: number; ms: number; maxMs: number }
+export interface HttpCacheStats { native: boolean; read: Tally; write: Tally; failures: number }
+
+const emptyTally = ( ): Tally => ( {
+  n: 0, chars: 0, ms: 0, maxMs: 0,
+} );
+const emptyStats = ( ): HttpCacheStats => ( {
+  native: !!TextFile, read: emptyTally( ), write: emptyTally( ), failures: 0,
+} );
+
+let stats = emptyStats( );
+let statsListener: ( ( ) => void ) | undefined;
+
+export const takeHttpCacheStats = ( ): HttpCacheStats => {
+  const taken = stats;
+  stats = emptyStats( );
+  return taken;
+};
+
+// Called after every body read or written, so the summary can be logged
+// without a timer. Set by httpCacheStats.ts, since this module can't import
+// the logger.
+export const setHttpCacheStatsListener = ( listener: ( ) => void ) => {
+  statsListener = listener;
+};
+
+const timed = async <T>(
+  kind: "read" | "write",
+  operation: ( ) => Promise<T>,
+  chars: ( result: T ) => number,
+): Promise<T> => {
+  const start = Date.now( );
+  try {
+    const result = await operation( );
+    const ms = Date.now( ) - start;
+    const tally = stats[kind];
+    tally.n += 1;
+    tally.chars += chars( result );
+    tally.ms += ms;
+    tally.maxMs = Math.max( tally.maxMs, ms );
+    return result;
+  } catch ( error ) {
+    stats.failures += 1;
+    throw error;
+  } finally {
+    statsListener?.( );
+  }
+};
+
 const fileStore: HttpCacheStore = {
-  read: file => readFile( `${HTTP_CACHE_PATH}/${file}`, "utf8" ),
-  write: async ( file, body ) => {
-    await mkdir( HTTP_CACHE_PATH );
-    await writeFile( `${HTTP_CACHE_PATH}/${file}`, body, "utf8" );
-  },
+  read: file => timed(
+    "read",
+    ( ) => ( TextFile
+      ? TextFile.readUtf8( `${HTTP_CACHE_PATH}/${file}` )
+      : readFile( `${HTTP_CACHE_PATH}/${file}`, "utf8" ) ),
+    body => body.length,
+  ),
+  write: ( file, body ) => timed(
+    "write",
+    async ( ) => {
+      if ( TextFile ) {
+        // Creates the directory itself
+        await TextFile.writeUtf8( `${HTTP_CACHE_PATH}/${file}`, body );
+      } else {
+        await mkdir( HTTP_CACHE_PATH );
+        await writeFile( `${HTTP_CACHE_PATH}/${file}`, body, "utf8" );
+      }
+    },
+    ( ) => body.length,
+  ),
   remove: async file => {
     await unlink( `${HTTP_CACHE_PATH}/${file}` ).catch( ( ) => undefined );
   },

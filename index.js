@@ -37,7 +37,9 @@ import {
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
 import { setHttpCacheErrorHandler } from "sharedHelpers/httpCache";
+import { startHttpCacheStats } from "sharedHelpers/httpCacheStats";
 import { reactQueryRetry } from "sharedHelpers/logging";
+import { setMemoryQueryClient } from "sharedHelpers/memoryWatermark";
 import { persistQueries } from "sharedHelpers/persistedQueries";
 import DeviceInfo from "react-native-device-info";
 import useRozenite, { HaltedLaunch, shouldHaltLaunchForDebug } from "sharedHooks/useRozenite";
@@ -51,6 +53,7 @@ const logger = log.extend( "index.js" );
 setHttpCacheErrorHandler( ( message, error ) => {
   log.extend( "httpCache" ).warn( `HTTP cache ${message} failed`, error );
 } );
+startHttpCacheStats( );
 
 this.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
 
@@ -183,6 +186,7 @@ const queryClient = new QueryClient( {
 } );
 // Explore's results, so they're still there after a restart
 persistQueries( queryClient );
+setMemoryQueryClient( queryClient );
 
 const storageAdapters = [
   createMMKVStorageAdapter( {
