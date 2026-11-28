@@ -59,6 +59,10 @@ if [ -z "$APP" ]; then
     | tail -n 40
   APP="$REPO/ios/build/Build/Products/Release-iphonesimulator/iNaturalistReactNative.app"
 fi
+# Signed on a copy, so a build passed in with --app is left as it was
+rm -rf "$OUT/app" && mkdir -p "$OUT/app" && ditto "$APP" "$OUT/app/$( basename "$APP" )"
+APP="$OUT/app/$( basename "$APP" )"
+python3 appstore/bin/sign_simulator_app.py "$APP" "$( conf 'c["entitlements"]' )" "$( conf 'c["team_id"]' )"
 APP_ID="$( /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" )"
 echo "App $APP_ID at $APP"
 
@@ -109,11 +113,11 @@ run_flow onboarding onboarding.yaml || failed+=( onboarding )
 "$PY" - "$CONFIG" > "$OUT/debug/scenes.tsv" <<'EOF'
 import json, sys
 for s in json.load(open(sys.argv[1]))["scenes"]:
-    print("\t".join([s["id"], s["flow"], s.get("link", ""), s.get("wait_id", ""), s.get("tap_id", "")]))
+    print("\t".join([s["id"], s["flow"], s.get("link", ""), s.get("wait_id", ""), s.get("tap_text", "")]))
 EOF
-while IFS=$'\t' read -r id flow link wait_id tap_id; do
+while IFS=$'\t' read -r id flow link wait_id tap_text; do
   echo "== $id"
-  run_flow "$id" "$flow" -e SHOT="$id" -e LINK="$link" -e WAIT_ID="$wait_id" -e TAP_ID="$tap_id" \
+  run_flow "$id" "$flow" -e SHOT="$id" -e LINK="$link" -e WAIT_ID="$wait_id" -e TAP_TEXT="$tap_text" \
     < /dev/null || failed+=( "$id" )
   xcrun simctl io "$UDID" screenshot "$OUT/debug/$id/final.png" >/dev/null 2>&1 || true
 done < "$OUT/debug/scenes.tsv"

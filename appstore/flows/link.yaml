@@ -1,7 +1,8 @@
-# Opens LINK, optionally taps TAP_ID, waits for WAIT_ID (if given) and for
-# the screen to settle, then saves SHOT.png
+# Opens LINK in a freshly started app, optionally taps TAP_TEXT, waits for
+# WAIT_ID (if given) and for the screen to settle, then saves SHOT.png
 appId: ${APP_ID}
 ---
+- runFlow: start.yaml
 - openLink: ${LINK}
 # iOS asks before a link opens an app
 - extendedWaitUntil:
@@ -15,11 +16,12 @@ appId: ${APP_ID}
       - tapOn: Open
 - runFlow:
     when:
-      true: ${TAP_ID != ''}
+      true: ${TAP_TEXT != ''}
     commands:
-      - tapOn:
-          id: ${TAP_ID}
-          retryTapIfNoChange: false
+      - extendedWaitUntil:
+          visible: ${TAP_TEXT}
+          timeout: 30000
+      - tapOn: ${TAP_TEXT}
 - runFlow:
     when:
       true: ${WAIT_ID != ''}

@@ -2,7 +2,9 @@
 # then zooms in a little and turns the exposure down before the shot
 appId: ${APP_ID}
 ---
-- tapOn:
+- runFlow: start.yaml
+# A tap opens the camera; a long press offers the other ways to add one
+- longPressOn:
     id: add-obs-button
 - tapOn:
     id: import-media-button

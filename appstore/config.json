@@ -1,10 +1,15 @@
 {
   "app_store_app_id": "6811262182",
   "version": "1.0",
+  "team_id": "DVURLJZFH6",
+  "entitlements": "ios/iNaturalistReactNative/iNaturalistReactNativeFork.entitlements",
   "locale": "en-US",
   "device": "iPhone 17 Pro Max",
   "display_type": "APP_IPHONE_67",
-  "screenshot_size": [1320, 2868],
+  "screenshot_size": [
+    1320,
+    2868
+  ],
   "status_bar": {
     "time": "9:41",
     "dataNetwork": "wifi",
@@ -15,7 +20,10 @@
     "batteryState": "charged",
     "batteryLevel": "100"
   },
-  "location": [47.656, -122.296],
+  "location": [
+    47.656,
+    -122.296
+  ],
   "library_photos": [
     {
       "observation_id": 387745480,
@@ -38,9 +46,9 @@
       "id": "02-multi-taxon",
       "flow": "link.yaml",
       "link": "inaturalistmobile://www.inaturalist.org/observations?user_id=ben142&taxon_ids=12727,7576,18236,8234&d1=2026-01-01&d2=2026-11-27&view=observations",
-      "tap_id": "SegmentedButton.grid",
       "wait_id": "ExploreObservationsList",
-      "caption": "Search for several species at once"
+      "caption": "Search for several species at once",
+      "tap_text": "Grid"
     },
     {
       "id": "03-hotspots",

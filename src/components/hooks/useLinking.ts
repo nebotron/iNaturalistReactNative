@@ -1,4 +1,4 @@
-import { useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 import {
   searchObservations,
 } from "api/observations";
@@ -65,27 +65,38 @@ const useLinking = ( currentUser: UserPojo | null ) => {
         point,
       } ) ) );
     }
-    navigation.navigate( "TabNavigator", {
-      screen: "ExploreTab",
-      params: {
-        screen: "Explore",
-        params: {
-          ...( user && { subject: resultToSubject( { type: "user", user } ) } ),
-          ...( link.view && { activeTab: link.view } ),
-          filters: {
-            taxonFilters: normalizeTaxonFilters( ( taxa || [] ).map( taxon => ( {
-              taxon,
-              exclude: false,
-            } ) ) ),
-            ...( ( link.d1 || link.d2 ) && {
-              dateObserved: DATE_OBSERVED.DATE_RANGE,
-              d1: link.d1,
-              d2: link.d2,
-            } ),
-          },
-        },
+    const params = {
+      ...( user && { subject: resultToSubject( { type: "user", user } ) } ),
+      ...( link.view && { activeTab: link.view } ),
+      filters: {
+        taxonFilters: normalizeTaxonFilters( ( taxa || [] ).map( taxon => ( {
+          taxon,
+          exclude: false,
+        } ) ) ),
+        ...( ( link.d1 || link.d2 ) && {
+          dateObserved: DATE_OBSERVED.DATE_RANGE,
+          d1: link.d1,
+          d2: link.d2,
+        } ),
       },
-    } );
+    };
+    // A reset rather than a navigate: Explore reads its search only when it
+    // mounts, so a second link would otherwise land on the first one's search
+    navigation.dispatch( CommonActions.reset( {
+      index: 0,
+      routes: [{
+        name: "TabNavigator",
+        state: {
+          routes: [{
+            name: "ExploreTab",
+            state: {
+              index: 1,
+              routes: [{ name: "RootExplore" }, { name: "Explore", params }],
+            },
+          }],
+        },
+      }],
+    } ) );
   }, [navigation] );
 
   const checkAllowedHosts = useCallback( ( url: string | null ) => {

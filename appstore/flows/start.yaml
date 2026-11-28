@@ -1,0 +1,12 @@
+# Starts the app afresh at the tab bar, so each scene begins from the same
+# place and a link arrives at a running app
+appId: ${APP_ID}
+---
+- launchApp:
+    appId: ${APP_ID}
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: CustomTabBar
+    timeout: 60000
+- waitForAnimationToEnd
