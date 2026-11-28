@@ -13,6 +13,18 @@ jest.mock( "sharedHooks/useCurrentUser", ( ) => ( {
   default: ( ) => null,
 } ) );
 
+// Stands in for the HTTP cache, which isn't under the mocked inatjs
+const mockCacheFirst = new WeakSet( );
+const mockServedFromCache = new WeakSet( );
+jest.mock( "sharedHelpers/httpCache", ( ) => ( {
+  preferCachedResponse: signal => {
+    mockCacheFirst.add( signal );
+    return signal;
+  },
+  requireNetworkResponse: signal => signal,
+  wasServedFromCache: signal => mockServedFromCache.has( signal ),
+} ) );
+
 jest.mock( "components/LoginSignUp/AuthenticationService", ( ) => ( {
   getJWT: jest.fn( ( ) => Promise.resolve( null ) ),
 } ) );
@@ -74,47 +86,36 @@ describe( "useInfiniteExploreScroll", ( ) => {
     queryClient.clear( );
   } );
 
-  it( "shows the results it fetched before a restart, then the latest", async ( ) => {
-    inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
-    const { result: firstResult, unmount } = renderExploreScroll( );
-    await waitFor( ( ) => expect( uuidsOf( firstResult ) ).toEqual( ["a", "b"] ) );
-    await flushPersistence( );
-    unmount( );
-    rendered = [];
-    queryClient.clear( );
+  // The search asked to prefer the cache is answered from it
+  const answerFromCache = uuids => ( params, { signal } ) => {
+    if ( !mockCacheFirst.has( signal ) ) return null;
+    mockServedFromCache.add( signal );
+    return Promise.resolve( response( uuids ) );
+  };
 
-    startApp( );
-    inatjs.observations.search.mockClear( );
+  it( "shows results from the HTTP cache, then the latest", async ( ) => {
     let resolveLatest;
-    inatjs.observations.search.mockReturnValue( new Promise( resolve => {
-      resolveLatest = resolve;
-    } ) );
+    const fromCache = answerFromCache( ["a", "b"] );
+    inatjs.observations.search.mockImplementation( ( ...args ) => fromCache( ...args )
+      ?? new Promise( resolve => { resolveLatest = resolve; } ) );
     const { result } = renderExploreScroll( );
-    // The saved results right away, while the latest load in the background
-    expect( uuidsOf( result ) ).toEqual( ["a", "b"] );
+    await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["a", "b"] ) );
     expect( result.current.totalResults ).toEqual( 2 );
-    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 1 ) );
+    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 2 ) );
 
     await act( async ( ) => { resolveLatest( response( ["c", "a", "b"] ) ); } );
     await waitFor( ( ) => expect( uuidsOf( result ) ).toEqual( ["c", "a", "b"] ) );
     expect( result.current.totalResults ).toEqual( 3 );
   } );
 
-  it( "keeps the saved results when the latest can't be fetched", async ( ) => {
-    inatjs.observations.search.mockResolvedValue( response( ["a", "b"] ) );
-    const { result: firstResult, unmount } = renderExploreScroll( );
-    await waitFor( ( ) => expect( uuidsOf( firstResult ) ).toEqual( ["a", "b"] ) );
-    await flushPersistence( );
-    unmount( );
-    rendered = [];
-    queryClient.clear( );
-
-    startApp( );
-    inatjs.observations.search.mockReset( );
-    inatjs.observations.search.mockRejectedValue( new Error( "Network request failed" ) );
-    const { result } = renderExploreScroll( );
-    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalled( ) );
-    await flushPersistence( );
+  it( "keeps the cached results when the latest can't be fetched", async ( ) => {
+    const fromCache = answerFromCache( ["a", "b"] );
+    inatjs.observations.search.mockImplementation( ( ...args ) => fromCache( ...args )
+      ?? Promise.reject( new Error( "Network request failed" ) ) );
+    // Another search, as the one above was fetched again from the network
+    const { result } = renderExploreScroll( { ...PARAMS, taxon_id: 3 } );
+    await waitFor( ( ) => expect( inatjs.observations.search ).toHaveBeenCalledTimes( 2 ) );
+    await waitFor( ( ) => expect( result.current.refreshFailed ).toBe( true ) );
     expect( uuidsOf( result ) ).toEqual( ["a", "b"] );
     expect( result.current.status ).toEqual( "success" );
   } );

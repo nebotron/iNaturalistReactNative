@@ -51,6 +51,8 @@ const LifeListView = ( {
     } ),
     {
       enabled: !!canFetch,
+      // Has its own cache, which the sync brings up to date
+      cacheFirst: false,
       initialData: ( ) => {
         const cached = readCachedLifeList( cacheKey );
         return cached.length

@@ -96,6 +96,8 @@ const useServerOrderedObservations = ( {
           : null;
       },
       enabled: enabled && !!currentUser,
+      // Written to Realm, which a cached copy shouldn't overwrite
+      cacheFirst: false,
     },
   );
 

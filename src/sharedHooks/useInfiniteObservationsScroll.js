@@ -65,6 +65,8 @@ const useInfiniteObservationsScroll = ( {
       // wait for user to scroll, since we're already using syncRemoteObservations
       // to fetch 50 observations on mount
       refetchOnMount: false,
+      // Written to Realm, which a cached copy shouldn't overwrite
+      cacheFirst: false,
     },
   );
 

@@ -8,35 +8,35 @@ jest.mock( "components/LoginSignUp/AuthenticationService", ( ) => ( {
   isLoggedIn: jest.fn( ( ) => Promise.resolve( false ) ),
 } ) );
 
-// Like a search made recently, every request not marked to go to the network
-// is answered from the cache
+// Like a request made recently, every one marked to prefer the cache is
+// answered from it
 let mockCached = true;
-const mockNetworkOnly = new WeakSet( );
+const mockCacheFirst = new WeakSet( );
 jest.mock( "sharedHelpers/httpCache", ( ) => ( {
-  preferNetworkResponse: signal => signal,
-  requireNetworkResponse: signal => {
-    mockNetworkOnly.add( signal );
+  preferCachedResponse: signal => {
+    mockCacheFirst.add( signal );
     return signal;
   },
-  wasServedFromCache: signal => mockCached && !mockNetworkOnly.has( signal ),
+  requireNetworkResponse: signal => signal,
+  wasServedFromCache: signal => mockCached && mockCacheFirst.has( signal ),
 } ) );
 
 // The network answers once the test lets it
 let answerFromNetwork = ( ) => undefined;
 const queryFunction = jest.fn( ( { signal } ) => ( mockCached
-  && !mockNetworkOnly.has( signal )
+  && mockCacheFirst.has( signal )
   ? Promise.resolve( "cached" )
   : new Promise( resolve => {
     answerFromNetwork = ( ) => resolve( "latest" );
   } ) ) );
 
-const renderQuery = ( ) => {
+const renderQuery = ( options = {} ) => {
   const client = new QueryClient( { defaultOptions: { queries: { retry: false } } } );
   const wrapper = ( { children } ) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return renderHook(
-    ( ) => useAuthenticatedQuery( ["test"], queryFunction, { enabled: true } ),
+    ( ) => useAuthenticatedQuery( ["test"], queryFunction, { enabled: true, ...options } ),
     { wrapper },
   );
 };
@@ -58,6 +58,14 @@ describe( "useAuthenticatedQuery", ( ) => {
   it( "fetches once when the network answers", async ( ) => {
     mockCached = false;
     const { result } = renderQuery( );
+    await waitFor( ( ) => expect( queryFunction ).toHaveBeenCalledTimes( 1 ) );
+    answerFromNetwork( );
+    await waitFor( ( ) => expect( result.current.data ).toEqual( "latest" ) );
+    expect( queryFunction ).toHaveBeenCalledTimes( 1 );
+  } );
+
+  it( "goes to the network first without cacheFirst", async ( ) => {
+    const { result } = renderQuery( { cacheFirst: false } );
     await waitFor( ( ) => expect( queryFunction ).toHaveBeenCalledTimes( 1 ) );
     answerFromNetwork( );
     await waitFor( ( ) => expect( result.current.data ).toEqual( "latest" ) );

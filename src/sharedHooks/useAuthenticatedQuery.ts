@@ -3,7 +3,7 @@ import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { useEffect, useState } from "react";
 import {
-  preferNetworkResponse,
+  preferCachedResponse,
   requireNetworkResponse,
   wasServedFromCache,
 } from "sharedHelpers/httpCache";
@@ -26,6 +26,9 @@ export type AuthenticatedQueryOptions<Response> = Omit<
   // exists). Without this a query can fire with a null JWT — e.g. a stale
   // Realm currentUser but no stored credentials — and 401 on every poll.
   requireLoggedIn?: boolean;
+  // False to go to the network first, as for a query whose results are
+  // written somewhere a cached copy shouldn't be
+  cacheFirst?: boolean;
 }
 
 const logger = log.extend( "useAuthenticatedQuery" );
@@ -46,9 +49,9 @@ export type QueryFunction<Response>
 // Should work like React Query's useQuery except it calls the queryFunction
 // with an object that includes the JWT.
 //
-// Results the HTTP cache answers with (a search made recently, or anything
-// when the network fails) are shown at once, while the latest are fetched in
-// the background and replace them when they arrive.
+// Results fetched in the last HTTP_CACHE_FRESH_MS come from the HTTP cache,
+// as they do when the network fails, and are shown at once while the latest
+// are fetched in the background and replace them when they arrive.
 const useAuthenticatedQuery = <Response>(
   queryKey: QueryKey,
   queryFunction: QueryFunction<Response>,
@@ -56,6 +59,7 @@ const useAuthenticatedQuery = <Response>(
 ) => {
   const queryClient = useQueryClient( );
   const [userLoggedIn, setUserLoggedIn] = useState<boolean | null>( LOGGED_IN_UNKNOWN );
+  const { cacheFirst = true, ...useQueryOptions } = queryOptions;
 
   useEffect( ( ) => {
     const checkAuth = async ( ) => {
@@ -80,6 +84,8 @@ const useAuthenticatedQuery = <Response>(
   } );
 
   return useQuery( {
+    // cacheFirst only changes where the same results come from
+    // eslint-disable-next-line @tanstack/query/exhaustive-deps
     queryKey: authQueryKey,
     queryFn: async ( { queryKey: key } ) => {
       const fetchResponse = async ( markSignal?: ( signal: AbortSignal ) => AbortSignal ) => {
@@ -98,9 +104,9 @@ const useAuthenticatedQuery = <Response>(
       };
       // Results already shown stay while React Query fetches them again
       const { response, fromCache } = await fetchResponse(
-        queryClient.getQueryData( key ) === undefined
-          ? undefined
-          : preferNetworkResponse,
+        cacheFirst && queryClient.getQueryData( key ) === undefined
+          ? preferCachedResponse
+          : undefined,
       );
       if ( fromCache && onlineManager.isOnline( ) ) {
         fetchResponse( requireNetworkResponse )
@@ -111,7 +117,7 @@ const useAuthenticatedQuery = <Response>(
       }
       return response;
     },
-    ...queryOptions,
+    ...useQueryOptions,
     retry: queryOptions.retry !== false
       ? ( failureCount, error ) => reactQueryRetry( failureCount, error, {
         queryKey,
