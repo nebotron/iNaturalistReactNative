@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react-native";
+import { act, renderHook, waitFor } from "@testing-library/react-native";
 import React from "react";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 
@@ -11,6 +11,8 @@ jest.mock( "components/LoginSignUp/AuthenticationService", ( ) => ( {
 // Like a request made recently, every one marked to prefer the cache is
 // answered from it
 let mockCached = true;
+// Whether the cached response was fetched too recently to fetch again
+let mockCachedRecently = false;
 const mockCacheFirst = new WeakSet( );
 jest.mock( "sharedHelpers/httpCache", ( ) => ( {
   preferCachedResponse: signal => {
@@ -18,7 +20,8 @@ jest.mock( "sharedHelpers/httpCache", ( ) => ( {
     return signal;
   },
   requireNetworkResponse: signal => signal,
-  wasServedFromCache: signal => mockCached && mockCacheFirst.has( signal ),
+  RECENT_RESULTS_MS: 10 * 60 * 1000,
+  shouldFetchLatest: signal => mockCached && !mockCachedRecently && mockCacheFirst.has( signal ),
 } ) );
 
 // The network answers once the test lets it
@@ -45,11 +48,30 @@ describe( "useAuthenticatedQuery", ( ) => {
   beforeEach( ( ) => {
     queryFunction.mockClear( );
     mockCached = true;
+    mockCachedRecently = false;
   } );
 
   it( "shows cached results first, then replaces them with the latest", async ( ) => {
     const { result } = renderQuery( );
     await waitFor( ( ) => expect( result.current.data ).toEqual( "cached" ) );
+    await waitFor( ( ) => expect( queryFunction ).toHaveBeenCalledTimes( 2 ) );
+    answerFromNetwork( );
+    await waitFor( ( ) => expect( result.current.data ).toEqual( "latest" ) );
+  } );
+
+  it( "doesn't fetch the latest when the cached results are recent", async ( ) => {
+    mockCachedRecently = true;
+    const { result } = renderQuery( );
+    await waitFor( ( ) => expect( result.current.data ).toEqual( "cached" ) );
+    await act( async ( ) => { await new Promise( resolve => { setTimeout( resolve, 50 ); } ); } );
+    expect( queryFunction ).toHaveBeenCalledTimes( 1 );
+  } );
+
+  it( "goes to the network when refetching results already shown", async ( ) => {
+    mockCachedRecently = true;
+    const { result } = renderQuery( );
+    await waitFor( ( ) => expect( result.current.data ).toEqual( "cached" ) );
+    act( ( ) => { result.current.refetch( ); } );
     await waitFor( ( ) => expect( queryFunction ).toHaveBeenCalledTimes( 2 ) );
     answerFromNetwork( );
     await waitFor( ( ) => expect( result.current.data ).toEqual( "latest" ) );

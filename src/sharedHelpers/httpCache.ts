@@ -55,11 +55,24 @@ export const requireNetworkResponse = ( signal: AbortSignal ) => {
 };
 
 // Signals of requests that were answered from the cache, so a caller can show
-// the cached results and fetch the latest in the background
-const servedFromCacheSignals = new WeakSet<AbortSignal>( );
+// the cached results and fetch the latest in the background, with when they
+// were fetched
+const servedFromCacheSignals = new WeakMap<AbortSignal, number>( );
 export const wasServedFromCache = ( signal: AbortSignal | undefined ) => (
   !!signal && servedFromCacheSignals.has( signal )
 );
+
+// Results fetched this recently aren't fetched again in the background
+export const RECENT_RESULTS_MS = 10 * 60 * 1000;
+
+// Whether a request was answered from the cache with a response old enough
+// that the latest should be fetched in the background
+export const shouldFetchLatest = ( signal: AbortSignal | undefined ) => {
+  const fetchedAt = signal
+    ? servedFromCacheSignals.get( signal )
+    : undefined;
+  return fetchedAt !== undefined && Date.now( ) - fetchedAt >= RECENT_RESULTS_MS;
+};
 
 interface IndexEntry {
   // Name of the file holding the body
@@ -443,7 +456,12 @@ export const createHttpCache = ( {
     const signal = init?.signal ?? undefined;
     const networkOnly = !!signal && networkOnlySignals.has( signal );
     const served = ( cached: Response | null ) => {
-      if ( cached && signal ) servedFromCacheSignals.add( signal );
+      if ( cached && signal ) {
+        servedFromCacheSignals.set(
+          signal,
+          Number( cached.headers.get( CACHED_AT_HEADER ) ) || 0,
+        );
+      }
       return cached;
     };
 

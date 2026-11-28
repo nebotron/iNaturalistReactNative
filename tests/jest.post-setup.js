@@ -1,5 +1,6 @@
 import { act } from "@testing-library/react-native";
 import { clearSuggestionsCache } from "sharedHelpers/suggestionsCache";
+import queryClient from "tests/helpers/queryClient";
 
 import * as mockZustand from "../__mocks__/zustand";
 
@@ -22,4 +23,10 @@ afterEach( () => {
 // cached by an earlier test.
 afterEach( () => {
   clearSuggestionsCache();
+} );
+
+// Queries stay fresh for minutes (see RECENT_RESULTS_MS), so a test would
+// otherwise be shown an earlier test's results instead of fetching its own
+afterEach( () => {
+  queryClient.clear( );
 } );

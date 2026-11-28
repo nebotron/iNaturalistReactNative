@@ -4,8 +4,10 @@ import {
   createHttpCache,
   HTTP_CACHE_TTL_MS,
   preferCachedResponse,
+  RECENT_RESULTS_MS,
   requesterOf,
   requireNetworkResponse,
+  shouldFetchLatest,
   wasServedFromCache,
 } from "sharedHelpers/httpCache";
 
@@ -320,6 +322,32 @@ describe( "httpCache", ( ) => {
       network.mockRejectedValueOnce( new TypeError( "Network request failed" ) );
       await cache.fetch( URL, { signal: fallbackSignal } );
       expect( wasServedFromCache( fallbackSignal ) ).toBe( true );
+    } );
+  } );
+
+  describe( "shouldFetchLatest", ( ) => {
+    afterEach( ( ) => {
+      jest.useRealTimers( );
+    } );
+
+    it( "is true only for a cached response older than RECENT_RESULTS_MS", async ( ) => {
+      jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
+      const cache = makeCache( );
+      const networkSignal = new AbortController( ).signal;
+      network.mockResolvedValueOnce( jsonResponse( { results: [1] } ) );
+      await ( await cache.fetch( URL, { signal: networkSignal } ) ).text( );
+      await settle( );
+      expect( shouldFetchLatest( networkSignal ) ).toBe( false );
+
+      jest.setSystemTime( RECENT_RESULTS_MS - 1 );
+      const recentSignal = preferCachedResponse( new AbortController( ).signal );
+      await cache.fetch( URL, { signal: recentSignal } );
+      expect( shouldFetchLatest( recentSignal ) ).toBe( false );
+
+      jest.setSystemTime( RECENT_RESULTS_MS );
+      const oldSignal = preferCachedResponse( new AbortController( ).signal );
+      await cache.fetch( URL, { signal: oldSignal } );
+      expect( shouldFetchLatest( oldSignal ) ).toBe( true );
     } );
   } );
 

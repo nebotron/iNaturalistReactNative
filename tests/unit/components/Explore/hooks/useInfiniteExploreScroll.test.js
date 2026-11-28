@@ -23,6 +23,9 @@ jest.mock( "sharedHelpers/httpCache", ( ) => ( {
   },
   requireNetworkResponse: signal => signal,
   wasServedFromCache: signal => mockServedFromCache.has( signal ),
+  RECENT_RESULTS_MS: 10 * 60 * 1000,
+  // As if cached long enough ago
+  shouldFetchLatest: signal => mockServedFromCache.has( signal ),
 } ) );
 
 jest.mock( "components/LoginSignUp/AuthenticationService", ( ) => ( {

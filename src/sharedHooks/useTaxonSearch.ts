@@ -13,7 +13,7 @@ import type { RealmTaxon } from "realmModels/types";
 import {
   preferCachedResponse,
   requireNetworkResponse,
-  wasServedFromCache,
+  shouldFetchLatest,
 } from "sharedHelpers/httpCache";
 import { createRequestTimeoutSignal } from "sharedHelpers/logging";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
@@ -116,15 +116,16 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
 
   // When online, fetch taxa matching the query from the API and save them to
   // Realm, so they show up now and in future offline searches. Local results
-  // are shown until the online results arrive. A query searched recently is
-  // answered from the HTTP cache first, then replaced by the latest results.
+  // are shown until the online results arrive. A query searched before is
+  // answered from the HTTP cache first, then replaced by the latest results
+  // unless it was searched in the last RECENT_RESULTS_MS.
   useEffect( ( ) => {
     if ( taxonQuery.length === 0 || !isConnected ) return ( ) => undefined;
     let isSubscribed = true;
-    const fetchRemoteTaxa = async ( fromCacheIfRecent: boolean ) => {
+    const fetchRemoteTaxa = async ( fromCacheIfAny: boolean ) => {
       const apiToken = await getJWT( );
       const { signal, clear } = createRequestTimeoutSignal( );
-      if ( fromCacheIfRecent ) {
+      if ( fromCacheIfAny ) {
         preferCachedResponse( signal );
       } else {
         requireNetworkResponse( signal );
@@ -134,7 +135,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
           { q: taxonQuery },
           { api_token: apiToken, signal },
         );
-        return { remoteTaxa, fromCache: wasServedFromCache( signal ) };
+        return { remoteTaxa, fetchLatest: shouldFetchLatest( signal ) };
       } finally {
         clear( );
       }
@@ -162,20 +163,20 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       setRemoteResult( { query: taxonQuery, taxa, exactIds } );
     };
     const timer = setTimeout( async ( ) => {
-      let fromCache = false;
+      let fetchLatest = false;
       try {
         const cached = await fetchRemoteTaxa( true );
-        ( { fromCache } = cached );
+        ( { fetchLatest } = cached );
         showRemoteTaxa( cached.remoteTaxa );
       } catch ( error ) {
         console.error( "Online taxon search failed:", error );
       } finally {
         if ( isSubscribed ) setRemoteDoneQuery( taxonQuery );
       }
-      if ( !fromCache || !isSubscribed ) return;
+      if ( !fetchLatest || !isSubscribed ) return;
       try {
         const latest = await fetchRemoteTaxa( false );
-        if ( !latest.fromCache ) showRemoteTaxa( latest.remoteTaxa );
+        showRemoteTaxa( latest.remoteTaxa );
       } catch ( error ) {
         console.warn( "Couldn't fetch the latest taxon search results:", error );
       }
