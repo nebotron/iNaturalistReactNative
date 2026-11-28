@@ -89,7 +89,7 @@ const ExploreSpeciesView = ( {
         taxon: LIMITED_TAXON_FIELDS,
       },
     },
-    { enabled, persist: true },
+    { enabled },
   );
 
   const speciesCounts = data as SpeciesCountResult[];

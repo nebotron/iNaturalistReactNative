@@ -56,25 +56,6 @@ export function normalizeTaxonFilters(
     .filter( filter => filter.taxon?.id );
 }
 
-export function migrateTaxonFilters(
-  storedState: {
-    taxon?: ExploreTaxonFilter["taxon"] | null;
-    taxon_id?: number | null;
-    taxonFilters?: ExploreTaxonFilter[];
-  },
-): ExploreTaxonFilter[] {
-  if ( storedState.taxonFilters?.length ) {
-    return normalizeTaxonFilters( storedState.taxonFilters );
-  }
-  if ( storedState.taxon?.id ) {
-    return [{
-      taxon: toExploreTaxonFilterTaxon( storedState.taxon ),
-      exclude: false,
-    }];
-  }
-  return [];
-}
-
 export function taxonFiltersToApiParams(
   taxonFilters: ExploreTaxonFilter[] | undefined,
 ): {

@@ -181,9 +181,6 @@ const useInfiniteExploreScroll = (
     {
       getNextPageParam,
       enabled,
-      // Shown again after leaving Explore or restarting the app, while the
-      // latest are fetched in the background
-      persist: !noCache,
       noCache,
       // A search replaced by a newer one stops loading
       abortWhenUnused: true,

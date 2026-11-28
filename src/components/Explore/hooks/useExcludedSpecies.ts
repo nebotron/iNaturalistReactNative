@@ -45,7 +45,7 @@ interface ExcludedSpecies {
   error: Error | null;
 }
 
-export const fetchNearbyCoords = async ( ): Promise<NearbyCoords | undefined> => {
+const fetchNearbyCoords = async ( ): Promise<NearbyCoords | undefined> => {
   const location = await getLatestTrackedLocation( ) ?? await fetchCoarseUserLocation( );
   return typeof location?.latitude === "number"
     ? { lat: location.latitude, lng: location.longitude }

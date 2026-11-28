@@ -20,8 +20,10 @@ const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 // A response larger than this isn't worth a slot
 const MAX_ENTRY_BYTES = 4 * 1024 * 1024;
 // How old a cached response may be and still be used instead of the network,
-// for requests marked with preferCachedResponse, unless they say otherwise
-export const HTTP_CACHE_FRESH_MS = 2 * 60 * 60 * 1000;
+// for requests marked with preferCachedResponse, unless they say otherwise.
+// useAuthenticatedQuery and useAuthenticatedInfiniteQuery mark theirs, show
+// what comes back and fetch the latest in the background.
+export const HTTP_CACHE_FRESH_MS = 48 * 60 * 60 * 1000;
 // Reads and writes arriving together save the index once
 const INDEX_WRITE_DELAY_MS = 1000;
 

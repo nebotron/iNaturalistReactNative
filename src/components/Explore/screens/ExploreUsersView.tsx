@@ -66,7 +66,7 @@ const ExploreUsersView = ( {
       ...params,
       ...extraParams,
     },
-    { enabled, persist: true },
+    { enabled },
   );
 
   useEffect( ( ) => {

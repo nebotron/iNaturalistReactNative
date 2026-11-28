@@ -18,6 +18,7 @@ import type {
 } from "react-native-reanimated";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
+import type { GestureLock } from "sharedHelpers/gestureLock";
 
 export type OnPinchStartCallback = (
   event: GestureStateChangeEvent<PinchGestureHandlerEventPayload>
@@ -37,7 +38,7 @@ export type OnPanEndCallback = (
   success: boolean
 ) => void;
 
-export type OnSingleTapCallback = (
+type OnSingleTapCallback = (
   event: GestureStateChangeEvent<TapGestureHandlerEventPayload>
 ) => void;
 
@@ -52,8 +53,8 @@ export type ProgrammaticZoomCallback = ( event: {
   y: number;
 } ) => void;
 
-export type OnDoubleTapCallback = ( zoomType: ZOOM_TYPE ) => void;
-export type OnProgrammaticZoomCallback = ( zoomType: ZOOM_TYPE ) => void;
+type OnDoubleTapCallback = ( zoomType: ZOOM_TYPE ) => void;
+type OnProgrammaticZoomCallback = ( zoomType: ZOOM_TYPE ) => void;
 
 export enum ANIMATION_VALUE {
   SCALE = "SCALE",
@@ -75,7 +76,7 @@ export type OnResetAnimationEndCallback = (
   >
 ) => void;
 
-export interface ZoomProps {
+interface ZoomProps {
   /**
    * The minimum scale allowed for zooming.
    * @default 1
@@ -192,9 +193,15 @@ export interface ZoomProps {
    * eliminates cross-detector coordination overhead that causes lag and jitter.
    */
   onSwipeToClose?: () => void;
+  /**
+   * Shared with gestures outside this view (e.g. sliders) so a touch drives
+   * only one of them: while another gesture holds it, pinch, pan and double
+   * tap ignore their touches, and vice versa.
+   */
+  gestureLock?: GestureLock;
 }
 
-export type ZoomableProps = AnimateProps<ViewProps> & ZoomProps;
+type ZoomableProps = AnimateProps<ViewProps> & ZoomProps;
 
 export type UseZoomableProps = ZoomProps & {
   ref: ForwardedRef<ZoomableRef>;
@@ -267,6 +274,7 @@ export type ZoomableUseGesturesProps = Pick<
     | "cropPanContext"
     | "onSwipeToClose"
     | "allowLetterboxPan"
+    | "gestureLock"
   >;
 
 export interface ZoomableRef {

@@ -1,5 +1,4 @@
 import {
-  migrateTaxonFilters,
   normalizeTaxonFilters,
   taxonFiltersToApiParams,
   toExploreTaxonFilterTaxon,
@@ -50,19 +49,6 @@ describe( "taxonFilters helpers", () => {
             default_photo: undefined,
           },
         },
-      ] );
-    } );
-  } );
-
-  describe( "migrateTaxonFilters", () => {
-    it( "returns existing taxonFilters when present", () => {
-      const taxonFilters = [{ taxon: homo, exclude: false }];
-      expect( migrateTaxonFilters( { taxonFilters } ) ).toEqual( taxonFilters );
-    } );
-
-    it( "migrates a legacy single taxon filter", () => {
-      expect( migrateTaxonFilters( { taxon: homo, taxon_id: 1 } ) ).toEqual( [
-        { taxon: homo, exclude: false },
       ] );
     } );
   } );

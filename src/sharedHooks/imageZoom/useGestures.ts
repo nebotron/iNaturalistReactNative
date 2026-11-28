@@ -13,6 +13,12 @@ import {
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
 import {
+  claimGestureLock,
+  isGestureLockHeldByOther,
+  releaseGestureLock,
+  useGestureLockOwner,
+} from "sharedHelpers/gestureLock";
+import {
   computeCropMinScale,
   computeCropPanTranslateLimits,
 } from "sharedHelpers/cropPanTranslateLimits";
@@ -63,6 +69,7 @@ export const useGestures = ( {
   cropPanContext,
   onSwipeToClose,
   allowLetterboxPan = false,
+  gestureLock,
 }: ZoomableUseGesturesProps ) => {
   const isInteracting = useRef( false );
   const isPinching = useRef( false );
@@ -78,6 +85,20 @@ export const useGestures = ( {
   const focal = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
   const savedTranslate = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
   const translate = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
+  // With a gestureLock, pan and pinch each claim it when they activate and
+  // ignore their touches when something else (a slider) holds it. They race
+  // in one detector, so separate owners keep a cancelled sibling's finalize
+  // from releasing the winner's claim.
+  const panLockOwner = useGestureLockOwner( gestureLock );
+  const pinchLockOwner = useGestureLockOwner( gestureLock );
+  const panOwnsTouch = useSharedValue( false );
+  const pinchOwnsTouch = useSharedValue( false );
+  const isLockHeldOutside = ( ) => {
+    "worklet";
+
+    return isGestureLockHeldByOther( gestureLock, panLockOwner )
+      && isGestureLockHeldByOther( gestureLock, pinchLockOwner );
+  };
 
   const { getInteractionId, updateInteractionId } = useInteractionId();
   const { onAnimationEnd } = useAnimationEnd( onResetAnimationEnd );
@@ -363,11 +384,14 @@ export const useGestures = ( {
       }
     } )
     .onStart( event => {
+      panOwnsTouch.value = claimGestureLock( gestureLock, panLockOwner );
+      if ( !panOwnsTouch.value ) return;
       runOnJS( onPanStarted )( event );
       savedTranslate.x.value = translate.x.value;
       savedTranslate.y.value = translate.y.value;
     } )
     .onUpdate( event => {
+      if ( !panOwnsTouch.value ) return;
       const desiredX = savedTranslate.x.value + event.translationX;
       const desiredY = savedTranslate.y.value + event.translationY;
       if ( cropPanContext ) {
@@ -394,6 +418,7 @@ export const useGestures = ( {
       }
     } )
     .onEnd( ( event, success ) => {
+      if ( !panOwnsTouch.value ) return;
       const {
         leftLimit,
         rightLimit,
@@ -412,6 +437,11 @@ export const useGestures = ( {
         }
       }
       runOnJS( onPanEnded )( event, success );
+    } )
+    .onFinalize( ( ) => {
+      if ( !panOwnsTouch.value ) return;
+      panOwnsTouch.value = false;
+      releaseGestureLock( gestureLock, panLockOwner );
     } );
 
   // A single pinch gesture handles both zooming and two-finger panning by
@@ -425,6 +455,8 @@ export const useGestures = ( {
   const pinchGesture = Gesture.Pinch()
     .enabled( isPinchEnabled )
     .onStart( event => {
+      pinchOwnsTouch.value = claimGestureLock( gestureLock, pinchLockOwner );
+      if ( !pinchOwnsTouch.value ) return;
       runOnJS( onPinchStarted )( event );
       savedScale.value = scale.value;
       savedFocal.x.value = focal.x.value;
@@ -437,6 +469,7 @@ export const useGestures = ( {
       pinchBaseEventScale.value = 1;
     } )
     .onUpdate( event => {
+      if ( !pinchOwnsTouch.value ) return;
       if ( event.numberOfPointers !== pinchPointers.value ) {
         // When a finger is added or lifted the reported centroid jumps to the
         // centroid of the new finger set, so re-anchor the pinch at the
@@ -505,13 +538,22 @@ export const useGestures = ( {
       }
     } )
     .onEnd( ( ...args ) => {
+      if ( !pinchOwnsTouch.value ) return;
       runOnJS( onPinchEnded )( ...args );
+    } )
+    .onFinalize( ( ) => {
+      if ( !pinchOwnsTouch.value ) return;
+      pinchOwnsTouch.value = false;
+      releaseGestureLock( gestureLock, pinchLockOwner );
     } );
 
   const doubleTapGesture = Gesture.Tap()
     .enabled( isDoubleTapEnabled )
     .numberOfTaps( 2 )
     .maxDuration( 250 )
+    .onTouchesDown( ( _, manager ) => {
+      if ( isLockHeldOutside( ) ) manager.fail();
+    } )
     .onStart( event => {
       if ( scale.value === 1 ) {
         runOnJS( onDoubleTap )( ZOOM_TYPE.ZOOM_IN );

@@ -18,6 +18,7 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { log } from "sharedHelpers/logger";
@@ -151,6 +152,8 @@ const ImageCropView = ( {
   const { hasBottomTabBar } = useStackHost( );
   const { width: windowWidth } = useWindowDimensions( );
   const zoomRef = useRef<SharedZoomableImageRef>( null );
+  // One touch either pinches/pans the photo or drags a slider, never both.
+  const gestureLock = useSharedValue( 0 );
   const appliedInitialCropKey = useRef<string | null>( null );
   const [cropAreaHeight, setCropAreaHeight] = useState( 0 );
   const [saving, setSaving] = useState( false );
@@ -526,6 +529,7 @@ const ImageCropView = ( {
               onLoad={handleImageLoad}
               onError={handleImageError}
               onScaleChange={syncZoomSlider}
+              gestureLock={gestureLock}
             />
           </View>
         )}
@@ -577,6 +581,7 @@ const ImageCropView = ( {
           brightnessAccessibilityLabel={t( "Adjust-brightness" )}
           iconColor={colors.white}
           zoomSnapScale={cropSidePxFromScale( 1 ) / UPLOAD_MAX_SIDE}
+          gestureLock={gestureLock}
         />
 
         <View

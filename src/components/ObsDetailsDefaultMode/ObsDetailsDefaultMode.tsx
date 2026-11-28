@@ -103,7 +103,7 @@ const ObsDetailsDefaultMode = ( {
             isConnected={isConnected}
             observation={observation}
           />
-          <View className="relative">
+          <View>
             <ObsMediaDisplayContainer observation={observation} />
           </View>
           <CommunityTaxon
