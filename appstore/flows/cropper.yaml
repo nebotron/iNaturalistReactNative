@@ -3,6 +3,10 @@
 appId: ${APP_ID}
 ---
 - runFlow: start.yaml
+# From Explore: the empty Me tab has a second, larger add-obs-button with no
+# long press, and Maestro picks that one
+- tapOn: Explore
+- waitForAnimationToEnd
 # A tap opens the camera; a long press offers the other ways to add one
 - longPressOn:
     id: add-obs-button
