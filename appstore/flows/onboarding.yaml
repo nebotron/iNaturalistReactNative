@@ -14,16 +14,20 @@ appId: ${APP_ID}
     optional: true
 
 # Carousel: its close button resets to the tabs with Login on top, whose own
-# close button dismisses it
+# close button dismisses it. Tapped until the carousel goes: on a cold start
+# the first tap can land before the app responds to it
 - runFlow:
     when:
       visible: DISCOVER NATURE AROUND YOU
     commands:
-      - tapOn: Close
       - waitForAnimationToEnd
-      - extendedWaitUntil:
-          notVisible: DISCOVER NATURE AROUND YOU
-          timeout: 15000
+      - repeat:
+          while:
+            visible: DISCOVER NATURE AROUND YOU
+          times: 5
+          commands:
+            - tapOn: Close
+            - waitForAnimationToEnd
       - extendedWaitUntil:
           visible: Close
           timeout: 15000
