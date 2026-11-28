@@ -26,10 +26,12 @@ appId: ${APP_ID}
     when:
       true: ${WAIT_ID != ''}
     commands:
+      # Optional, so a screen whose marker isn't exposed is still shot for review
       - extendedWaitUntil:
           visible:
             id: ${WAIT_ID}
           timeout: 60000
+          optional: true
 - waitForAnimationToEnd:
     timeout: 20000
 - takeScreenshot: ${SHOT}

@@ -6,23 +6,23 @@ appId: ${APP_ID}
 ---
 - launchApp:
     appId: ${APP_ID}
+# Waits on text: React Native exposes a testID to Maestro only on elements
+# that are accessible, which the carousel's container and the tab bar aren't
 - extendedWaitUntil:
-    visible:
-      id: "OnboardingCarousel|Onboarding\\.welcome"
+    visible: DISCOVER NATURE AROUND YOU
     timeout: 60000
+    optional: true
 
 # Carousel: its close button resets to the tabs with Login on top, whose own
 # close button dismisses it
 - runFlow:
     when:
-      visible:
-        id: OnboardingCarousel
+      visible: DISCOVER NATURE AROUND YOU
     commands:
       - tapOn: Close
       - waitForAnimationToEnd
       - extendedWaitUntil:
-          notVisible:
-            id: OnboardingCarousel
+          notVisible: DISCOVER NATURE AROUND YOU
           timeout: 15000
       - extendedWaitUntil:
           visible: Close
@@ -67,6 +67,5 @@ appId: ${APP_ID}
     commands:
       - tapOn: Allow While Using App
 - extendedWaitUntil:
-    visible:
-      id: CustomTabBar
+    visible: Explore
     timeout: 30000

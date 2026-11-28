@@ -5,8 +5,8 @@ appId: ${APP_ID}
 - launchApp:
     appId: ${APP_ID}
     stopApp: true
+# The tab bar's Explore label: its testID isn't exposed to Maestro
 - extendedWaitUntil:
-    visible:
-      id: CustomTabBar
+    visible: Explore
     timeout: 60000
 - waitForAnimationToEnd
