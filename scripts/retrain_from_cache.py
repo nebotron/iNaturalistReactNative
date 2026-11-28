@@ -234,7 +234,8 @@ def main() -> None:
     export_path = trained.export(
         format="onnx",
         imgsz=640,
-        dynamic=False,
+        # ImageCropper.m runs views on canvases smaller than 640×640.
+        dynamic=True,
         simplify=True,
         opset=12,
     )

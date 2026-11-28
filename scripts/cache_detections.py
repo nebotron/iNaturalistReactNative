@@ -15,8 +15,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import json
+import math
+import os
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -31,16 +33,23 @@ from evaluate_subject_detector import resolve_image, get_image_size
 REPO_ROOT = Path( __file__ ).parent.parent
 CACHE_DIR = Path( "/tmp/inat_eval_cache" )
 
-YOLO_INPUT_SIZE = int( os.environ.get( "YOLO_INPUT_SIZE", 640 ) )
 YOLO_CONF_THRESH = 0.05
 YOLO_IOU_THRESH = 0.45
 MAX_DETS = 16
-# Test-time augmentation, mirroring ImageCropper.m: the photo as is, mirrored,
-# zoomed out (drawn at 1/2 scale in the middle of the letterbox), and zoomed in
-# (drawn at 1/0.7 scale, so the letterbox shows the middle 70% of its longer
-# edge). Boxes from all four are fused by weighted box fusion, and a box found
-# in only one view ends up with a quarter of its confidence.
-VIEWS = ( ( False, 1.0 ), ( True, 1.0 ), ( False, 2.0 ), ( False, 0.7 ) )
+# Test-time augmentation, mirroring ImageCropper.m. A view is named
+# [o|h]<L><sq|t><S>: the photo, as is (o) or mirrored (h), drawn with its longer
+# edge at L px and centred on a canvas that is either a fixed S×S square (sq)
+# or tight (t): each side the drawn photo's side rounded up to a multiple of 32
+# and capped at S, so most of the grey letterbox is never computed. L > S zooms
+# in (the canvas clips the photo), L < S zooms out. The model takes any H×W.
+#   h640t640   the mirrored photo, its longer edge at 640
+#   o914t576   zoomed in 1/0.7×, the middle 576×576 of that (centre 63%)
+#   o320sq384  zoomed out 2×, with a grey margin on a 384×384 square
+# Together they cost ~1.9 640×640 inferences per photo, against 4.0 for the
+# four 640×640 views they replaced, for the same score on unseen photos
+# (scripts/sweep_views.py). Boxes from all of them are fused by weighted box
+# fusion, so a box found in only one view keeps a third of its confidence.
+VIEWS = ( "h640t640", "o914t576", "o320sq384" )
 FUSION_IOU = 0.40
 
 _sess = None
@@ -55,17 +64,43 @@ def _init( model_path: str ) -> None:
     _model_path = model_path
 
 
-def _letterbox( img_arr: np.ndarray, size: int = YOLO_INPUT_SIZE, zoom: float = 1.0 ):
-    img = PILImage.fromarray( img_arr )
+def parse_view( name: str ):
+    m = re.fullmatch( r"([oh])(\d+)(sq|t)(\d+)", name )
+    if not m:
+        raise ValueError( f"bad view name {name!r}" )
+    return m.group( 1 ) == "h", int( m.group( 2 ) ), m.group( 3 ), int( m.group( 4 ) )
+
+
+def view_canvas( name: str, w: int, h: int ):
+    """(canvas W, canvas H, drawn w, drawn h) for a w×h photo."""
+    _, L, mode, S = parse_view( name )
+    s = L / max( w, h )
+    dw, dh = w * s, h * s
+    if mode == "sq":
+        return S, S, dw, dh
+    return ( min( S, 32 * math.ceil( dw / 32 - 1e-4 ) ),
+             min( S, 32 * math.ceil( dh / 32 - 1e-4 ) ), dw, dh )
+
+
+def view_cost( name: str, w: int, h: int ) -> float:
+    """Compute relative to one 640×640 inference (conv FLOPs scale with pixels)."""
+    cw, ch, _, _ = view_canvas( name, w, h )
+    return cw * ch / ( 640.0 * 640.0 )
+
+
+def _letterbox( img: PILImage.Image, name: str ):
+    flip = parse_view( name )[0]
     w, h = img.size
-    scale = size / max( w, h ) / zoom
-    nw, nh = int( w * scale ), int( h * scale )
+    cw, ch, dw, dh = view_canvas( name, w, h )
+    nw, nh = int( dw ), int( dh )
+    if flip:
+        img = img.transpose( PILImage.FLIP_LEFT_RIGHT )
     resized = img.resize( ( nw, nh ), PILImage.BILINEAR )
-    pad_left = ( size - nw ) // 2
-    pad_top = ( size - nh ) // 2
-    canvas = PILImage.new( "RGB", ( size, size ), ( 114, 114, 114 ) )
-    canvas.paste( resized, ( pad_left, pad_top ) )
-    return np.array( canvas ).astype( np.float32 ) / 255.0, pad_left, pad_top, scale
+    pad_left = ( cw - nw ) // 2
+    pad_top = ( ch - nh ) // 2
+    canvas = PILImage.new( "RGB", ( cw, ch ), ( 114, 114, 114 ) )
+    canvas.paste( resized, ( pad_left, pad_top ) )  # a negative offset clips a zoom-in
+    return np.array( canvas ).astype( np.float32 ) / 255.0, pad_left, pad_top, nw / w
 
 
 def _nms( boxes_xyxy: np.ndarray, scores: np.ndarray, iou_thresh: float ):
@@ -94,10 +129,9 @@ def _detect( args ):
     idx, image_path, orig_w, orig_h = args
     try:
         img = PILImage.open( image_path ).convert( "RGB" )
-        img_arr = np.array( img )
     except Exception:
         return idx, np.zeros( ( 0, 5 ), dtype=np.float32 )
-    return idx, _detect_array( img_arr, orig_w, orig_h )
+    return idx, _detect_image( img )
 
 
 def _box_iou( a, b ) -> float:
@@ -130,46 +164,43 @@ def fuse_views( views: list ) -> np.ndarray:
 
 
 def _detect_array( img_arr: np.ndarray, orig_w: int, orig_h: int ) -> np.ndarray:
-    """Fused boxes over VIEWS (x, y, w, h, conf) normalised to (orig_w, orig_h), best first."""
+    """_detect_image for an RGB array (orig_w, orig_h are its size)."""
+    return _detect_image( PILImage.fromarray( img_arr ) )
+
+
+def _detect_image( img: PILImage.Image ) -> np.ndarray:
+    """Fused boxes over VIEWS (x, y, w, h, conf), normalised, best first."""
     if os.environ.get( "SINGLE_VIEW" ):
-        return _detect_view( img_arr, orig_w, orig_h )
-    views = []
-    for flip, zoom in VIEWS:
-        d = _detect_view( np.ascontiguousarray( img_arr[:, ::-1] ) if flip else img_arr, orig_w, orig_h, zoom )
-        if flip and len( d ):
-            d[:, 0] = 1.0 - d[:, 0] - d[:, 2]
-        views.append( d )
-    return fuse_views( views )
+        return detect_view( img, "o640sq640" )
+    return fuse_views( [detect_view( img, v ) for v in VIEWS] )
 
 
-def _detect_view( img_arr: np.ndarray, orig_w: int, orig_h: int, zoom: float = 1.0 ) -> np.ndarray:
-    """Post-NMS boxes (x, y, w, h, conf) normalised to (orig_w, orig_h), best first."""
-    lb, pad_left, pad_top, scale = _letterbox( img_arr, zoom=zoom )
-    x = lb.transpose( 2, 0, 1 )[None]
-    out = _sess.run( None, { _sess.get_inputs()[0].name: x } )[0][0]
-
-    if out.shape[0] == 5:
-        cx, cy, w, h, conf_raw = out[0], out[1], out[2], out[3], out[4]
-    else:
-        cx, cy, w, h = out[0], out[1], out[2], out[3]
-        conf_raw = out[4:].max( axis=0 )
-
-    mask = conf_raw >= YOLO_CONF_THRESH
+def detect_view( img: PILImage.Image, name: str, sess=None ) -> np.ndarray:
+    """One view's post-NMS boxes (x, y, w, h, conf) normalised to the unmirrored
+    photo, best first."""
+    sess = sess or _sess
+    flip = parse_view( name )[0]
+    w, h = img.size
+    lb, pad_left, pad_top, scale = _letterbox( img, name )
+    out = sess.run( None, { sess.get_inputs()[0].name: lb.transpose( 2, 0, 1 )[None] } )[0][0]
+    cx, cy, bw, bh, conf = out[0], out[1], out[2], out[3], out[4]
+    mask = conf >= YOLO_CONF_THRESH
     if not mask.any():
-        return np.zeros( ( 0, 5 ), dtype=np.float32 )
-    cx, cy, w, h, conf_raw = cx[mask], cy[mask], w[mask], h[mask], conf_raw[mask]
-    boxes = np.stack( [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], axis=1 )
-    kept = _nms( boxes, conf_raw, YOLO_IOU_THRESH )[:MAX_DETS]
-
+        return np.zeros( ( 0, 5 ), np.float32 )
+    cx, cy, bw, bh, conf = cx[mask], cy[mask], bw[mask], bh[mask], conf[mask]
+    boxes = np.stack( [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], axis=1 )
     rows = []
-    for i in kept:
-        # Trim to the image: the zoomed-out view sees past its edges, and the
+    for i in _nms( boxes, conf, YOLO_IOU_THRESH )[:MAX_DETS]:
+        # Trim to the image: a zoomed-out view sees past its edges, and a
         # zoomed-in view's boxes can run off the canvas.
-        x1, x2 = np.clip( ( boxes[i, [0, 2]] - pad_left ) / scale / orig_w, 0.0, 1.0 )
-        y1, y2 = np.clip( ( boxes[i, [1, 3]] - pad_top ) / scale / orig_h, 0.0, 1.0 )
-        rows.append( ( x1, y1, max( 0.01, x2 - x1 ), max( 0.01, y2 - y1 ), float( conf_raw[i] ) ) )
+        x1, x2 = np.clip( ( boxes[i, [0, 2]] - pad_left ) / scale / w, 0.0, 1.0 )
+        y1, y2 = np.clip( ( boxes[i, [1, 3]] - pad_top ) / scale / h, 0.0, 1.0 )
+        bwn, bhn = max( 0.01, x2 - x1 ), max( 0.01, y2 - y1 )
+        if flip:
+            x1 = 1.0 - x1 - bwn
+        rows.append( ( x1, y1, bwn, bhn, float( conf[i] ) ) )
     rows.sort( key=lambda r: r[4], reverse=True )
-    return np.array( rows, dtype=np.float32 ).reshape( -1, 5 )
+    return np.array( rows, np.float32 ).reshape( -1, 5 )
 
 
 def load_entries( json_path: Path ):

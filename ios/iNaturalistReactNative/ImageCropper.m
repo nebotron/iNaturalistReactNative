@@ -381,21 +381,35 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 
 // ─── YOLO / ONNX Runtime detection ──────────────────────────────────────────
 
-#define YOLO_INPUT_SIZE  640
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
 #define YOLO_MAX_DETS    16
-// Test-time augmentation: the detector runs on the photo as is, mirrored,
-// zoomed out (drawn at 1/2 scale in the middle of the letterbox), and zoomed in
-// (drawn at 1/0.7 scale, so the canvas clips it to the middle 70% of its longer
-// edge), and its boxes are fused. A box found in every view outranks one found
-// in only one, averaging the views steadies the box's edges, and the zoomed-in
-// view sees small subjects at a scale the detector handles better. Mirrored in
+// Test-time augmentation: the detector runs on three views of the photo and
+// their boxes are fused. A box found in every view outranks one found in only
+// one, averaging the views steadies the box's edges, the zoomed-in view sees
+// small subjects at a scale the detector handles better, and the zoomed-out
+// view sees large ones whole. The model takes any input size, so each view is
+// drawn on the smallest canvas that holds it: most of a square letterbox's
+// grey is never computed. Together they cost ~1.9 640×640 inferences, where
+// the four 640×640 views they replaced cost 4, for the same score on photos
+// the model never trained on (scripts/sweep_views.py). Mirrored in
 // scripts/cache_detections.py (VIEWS, fuse_views).
-#define YOLO_NUM_VIEWS   4
+//   mirrored, longer edge at 640, tight canvas            (h640t640)
+//   zoomed in: longer edge at 914, middle 576×576 of it    (o914t576)
+//   zoomed out: longer edge at 320 on a 384×384 grey square (o320sq384)
+#define YOLO_NUM_VIEWS   3
 #define YOLO_FUSION_IOU  0.40f
-static const BOOL  kYOLOViewFlip[YOLO_NUM_VIEWS] = { NO, YES, NO, NO };
-static const float kYOLOViewZoom[YOLO_NUM_VIEWS] = { 1.0f, 1.0f, 2.0f, 0.7f };
+typedef struct {
+  BOOL  flip;
+  float drawnLongEdge;  // the photo's longer edge on the canvas, in px
+  int   canvasMax;      // canvas sides: the drawn photo's, rounded up to 32, capped here
+  BOOL  square;         // or a fixed canvasMax × canvasMax square
+} YOLOView;
+static const YOLOView kYOLOViews[YOLO_NUM_VIEWS] = {
+  { YES, 640.0f, 640, NO },
+  { NO,  914.0f, 576, NO },
+  { NO,  320.0f, 384, YES },
+};
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
@@ -427,31 +441,38 @@ static void initYOLOSession( void )
   } );
 }
 
-// Returns a [3 × N × N] float32 tensor (CHW, normalized 0-1) from a letterboxed
-// image, optionally mirrored and drawn at 1/zoom of its letterbox size.
-static float *preprocessForYOLO( UIImage *image, BOOL flip, float zoom,
+// Returns a [3 × H × W] float32 tensor (CHW, normalized 0-1) of the photo,
+// optionally mirrored, drawn with its longer edge at view.drawnLongEdge and
+// centred on the view's canvas, which clips it when it is zoomed in.
+static float *preprocessForYOLO( UIImage *image, YOLOView view, int *outW, int *outH,
                                   float *outPadLeft, float *outPadTop, float *outScale )
 {
-  const int N  = YOLO_INPUT_SIZE;
-  float     iW = (float)image.size.width;
-  float     iH = (float)image.size.height;
-  float     s  = MIN( (float)N / iW, (float)N / iH ) / zoom;
-  float     nW = iW * s, nH = iH * s;
-  float     pL = ( N - nW ) / 2.0f;
-  float     pT = ( N - nH ) / 2.0f;
+  float iW = (float)image.size.width;
+  float iH = (float)image.size.height;
+  float s  = view.drawnLongEdge / MAX( iW, iH );
+  float nW = iW * s, nH = iH * s;
+  int   W  = view.canvasMax, H = view.canvasMax;
+  if ( !view.square ) {
+    W = MIN( view.canvasMax, 32 * (int)ceilf( nW / 32.0f - 1e-4f ) );
+    H = MIN( view.canvasMax, 32 * (int)ceilf( nH / 32.0f - 1e-4f ) );
+  }
+  float pL = ( W - nW ) / 2.0f;
+  float pT = ( H - nH ) / 2.0f;
 
+  *outW       = W;
+  *outH       = H;
   *outScale   = s;
   *outPadLeft = pL;
   *outPadTop  = pT;
 
-  // Draw letterboxed image onto a gray 640×640 canvas
-  UIGraphicsBeginImageContextWithOptions( CGSizeMake( N, N ), YES, 1.0 );
+  // Draw the photo onto a grey W×H canvas
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( W, H ), YES, 1.0 );
   CGContextRef gc = UIGraphicsGetCurrentContext();
   CGContextSetFillColorWithColor( gc, [UIColor colorWithWhite:127.0 / 255.0 alpha:1.0].CGColor );
-  CGContextFillRect( gc, CGRectMake( 0, 0, N, N ) );
-  if ( flip ) {
+  CGContextFillRect( gc, CGRectMake( 0, 0, W, H ) );
+  if ( view.flip ) {
     // The image is centred, so mirroring the canvas keeps it in place.
-    CGContextTranslateCTM( gc, N, 0 );
+    CGContextTranslateCTM( gc, W, 0 );
     CGContextScaleCTM( gc, -1, 1 );
   }
   [image drawInRect:CGRectMake( pL, pT, nW, nH )];
@@ -460,16 +481,16 @@ static float *preprocessForYOLO( UIImage *image, BOOL flip, float zoom,
 
   // Render into RGBA byte buffer
   CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB();
-  unsigned char  *raw = (unsigned char *)calloc( (size_t)N * N * 4, 1 );
+  unsigned char  *raw = (unsigned char *)calloc( (size_t)W * H * 4, 1 );
   CGContextRef    bmp = CGBitmapContextCreate(
-    raw, N, N, 8, (size_t)4 * N, cs,
+    raw, W, H, 8, (size_t)4 * W, cs,
     kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
-  CGContextDrawImage( bmp, CGRectMake( 0, 0, N, N ), lb.CGImage );
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), lb.CGImage );
   CGContextRelease( bmp );
   CGColorSpaceRelease( cs );
 
   // RGBA → normalized float32 CHW
-  int     plane  = N * N;
+  int     plane  = W * H;
   float  *tensor = (float *)malloc( (size_t)3 * plane * sizeof( float ) );
   for ( int i = 0; i < plane; i++ ) {
     tensor[0 * plane + i] = raw[i * 4 + 0] / 255.0f;
@@ -500,21 +521,21 @@ static int compareBoxByConf( const void *a, const void *b )
 
 // Runs one view and writes up to YOLO_MAX_DETS post-NMS boxes, best first, in
 // normalised top-left coordinates of the unmirrored image. Returns the count.
-static int detectYOLOView( UIImage *image, BOOL flip, float zoom, YOLOBox *outBoxes )
+static int detectYOLOView( UIImage *image, YOLOView view, YOLOBox *outBoxes )
 {
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
-  const int     N   = YOLO_INPUT_SIZE;
 
+  int   W, H;
   float padLeft, padTop, scale;
-  float *inputData = preprocessForYOLO( image, flip, zoom, &padLeft, &padTop, &scale );
+  float *inputData = preprocessForYOLO( image, view, &W, &H, &padLeft, &padTop, &scale );
 
   OrtMemoryInfo *memInfo;
   ort->CreateCpuMemoryInfo( OrtArenaAllocator, OrtMemTypeDefault, &memInfo );
 
-  int64_t   inputShape[] = { 1, 3, N, N };
+  int64_t   inputShape[] = { 1, 3, H, W };
   OrtValue *inputTensor  = NULL;
   OrtStatus *status = ort->CreateTensorWithDataAsOrtValue(
-    memInfo, inputData, (size_t)3 * N * N * sizeof( float ),
+    memInfo, inputData, (size_t)3 * W * H * sizeof( float ),
     inputShape, 4, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &inputTensor );
   ort->ReleaseMemoryInfo( memInfo );
 
@@ -541,11 +562,12 @@ static int detectYOLOView( UIImage *image, BOOL flip, float zoom, YOLOBox *outBo
 
   OrtValue *outputTensor = outputs[0];
 
-  // output0: [1, 5, 8400] — rows 0-3 = cx,cy,w,h; row 4 = objectness score (1 class)
+  // output0: [1, 5, anchors] — rows 0-3 = cx,cy,w,h; row 4 = objectness score
+  // (1 class). One anchor per cell at strides 8, 16 and 32: 8400 at 640×640.
+  const int numPreds = ( W / 8 ) * ( H / 8 ) + ( W / 16 ) * ( H / 16 ) + ( W / 32 ) * ( H / 32 );
+
   float *out;
   ort->GetTensorMutableData( outputTensor, (void **)&out );
-
-  const int numPreds  = 8400;
 
   YOLOBox *dets  = (YOLOBox *)malloc( (size_t)numPreds * sizeof( YOLOBox ) );
   int      nDets = 0;
@@ -575,8 +597,8 @@ static int detectYOLOView( UIImage *image, BOOL flip, float zoom, YOLOBox *outBo
       if ( !suppressed[k] && boxIOU( dets[i], dets[k] ) > YOLO_IOU_THRESH )
         suppressed[k] = YES;
     }
-    // Map back to normalised image coordinates, trimmed to the image: the
-    // zoomed-out view sees past its edges, and the zoomed-in view's boxes can
+    // Map back to normalised image coordinates, trimmed to the image: a
+    // zoomed-out view sees past its edges, and a zoomed-in view's boxes can
     // run off the canvas.
     float x1 = MAX( 0.0f, MIN( 1.0f, ( dets[i].x1 - padLeft ) / scale / imgW ) );
     float x2 = MAX( 0.0f, MIN( 1.0f, ( dets[i].x2 - padLeft ) / scale / imgW ) );
@@ -584,7 +606,7 @@ static int detectYOLOView( UIImage *image, BOOL flip, float zoom, YOLOBox *outBo
     float y2 = MAX( 0.0f, MIN( 1.0f, ( dets[i].y2 - padTop  ) / scale / imgH ) );
     x2 = x1 + MAX( 0.01f, x2 - x1 );
     y2 = y1 + MAX( 0.01f, y2 - y1 );
-    outBoxes[kept++] = flip
+    outBoxes[kept++] = view.flip
       ? (YOLOBox){ 1.0f - x2, y1, 1.0f - x1, y2, dets[i].conf }
       : (YOLOBox){ x1, y1, x2, y2, dets[i].conf };
   }
@@ -604,7 +626,7 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, NSMutableArray<NSN
   int     nBoxes = 0;
   for ( int v = 0; v < YOLO_NUM_VIEWS; v++ ) {
     NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
-    nBoxes += detectYOLOView( image, kYOLOViewFlip[v], kYOLOViewZoom[v], boxes + nBoxes );
+    nBoxes += detectYOLOView( image, kYOLOViews[v], boxes + nBoxes );
     [viewMs addObject:@( (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) )];
   }
   if ( nBoxes == 0 ) return nil;
