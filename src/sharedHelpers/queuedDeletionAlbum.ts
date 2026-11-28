@@ -298,7 +298,7 @@ export const requestQueuedDeletionAlbumSync = ( ) => {
 
 // Applies the observations Realm reports created or changed. Realm's first
 // notification reports none.
-export type AlbumObservation = Realm.Object<FavoritableObservation> & FavoritableObservation;
+type AlbumObservation = Realm.Object<FavoritableObservation> & FavoritableObservation;
 
 export const onObservationsChanged: Realm.CollectionChangeCallback<
   AlbumObservation,

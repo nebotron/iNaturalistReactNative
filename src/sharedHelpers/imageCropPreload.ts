@@ -1,6 +1,6 @@
-import { exists } from "@dr.pogodin/react-native-fs";
 import { cropSourcesPath } from "appConstants/paths";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
+import fileExists from "sharedHelpers/fileExists";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import {
   clearPersistedPreloads,
@@ -92,8 +92,6 @@ let cropSourceGeneration = 0;
 // Writes the file a preload decodes, where the default export
 // (ensureLocalImageForCrop) isn't the one wanted.
 type PreloadExport = ( ) => Promise<string>;
-
-const fileExists = ( uri: string ) => exists( stripFilePrefix( uri ) ).catch( ( ) => false );
 
 // Last launch's preloads, back in the cache once their files are confirmed
 // still there. One that has gone unused too long is dropped with its files.

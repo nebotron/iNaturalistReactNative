@@ -1,7 +1,7 @@
 import { MMKV } from "react-native-mmkv";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
-export const USER_OBSERVATIONS_MMKV_ID = "user-observations";
+const USER_OBSERVATIONS_MMKV_ID = "user-observations";
 export const AUDIO_ID_CLIPS_MMKV_ID = "audio-id-clips";
 export const AUDIO_ID_HEARD_MMKV_ID = "audio-id-heard";
 // Deleted Audio ID clips whose label Firebase doesn't have yet

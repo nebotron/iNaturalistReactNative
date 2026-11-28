@@ -1,4 +1,3 @@
-import { exists } from "@dr.pogodin/react-native-fs";
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import type Realm from "realm";
@@ -8,6 +7,7 @@ import type {
 } from "realmModels/types";
 import { cropOriginalUriFromPath, savedNormalizedCrop } from "sharedHelpers/cropPhotoMetadata";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
+import fileExists from "sharedHelpers/fileExists";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
@@ -61,10 +61,6 @@ const findObsPhoto = (
   return observation?.observationPhotos
     ?.find( op => uris.includes( op.originalDevicePhotoUri ?? "" ) );
 };
-
-const fileExists = async ( uri: string | null | undefined ): Promise<boolean> => (
-  !!uri && exists( stripFilePrefix( uri ) ).catch( ( ) => false )
-);
 
 // What to save for a missing photo, and the crop to apply over it. Synced
 // observations have their photoUploads files swept (clearSyncedMediaForUpload)

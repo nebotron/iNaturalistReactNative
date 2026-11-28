@@ -11,7 +11,7 @@ import {
 import type { OnResetAnimationEndCallback } from "./types";
 import { ANIMATION_VALUE } from "./types";
 
-export type OnAnimationEndCallback = AnimationCallback extends (
+type OnAnimationEndCallback = AnimationCallback extends (
   ...a: infer I
 ) => infer O
   ? (

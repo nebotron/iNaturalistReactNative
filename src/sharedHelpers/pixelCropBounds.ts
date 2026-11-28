@@ -1,3 +1,5 @@
+import { clamp } from "sharedHooks/imageZoom/utils/clamp";
+
 interface PixelCrop {
   originX: number;
   originY: number;
@@ -11,10 +13,6 @@ const SQUARE_TOLERANCE_PX = 2;
 // Zoom math drifts a few pixels either way of the slider tick, and a crop even
 // one pixel over the upload size is resampled -- softened -- on upload.
 export const SNAP_SIDE_TOLERANCE_PX = 8;
-
-const clamp = ( value: number, min: number, max: number ) => (
-  Math.max( min, Math.min( value, max ) )
-);
 
 // Sets a side within SNAP_SIDE_TOLERANCE_PX of target to exactly target,
 // moving the origin back if that would run past the image edge.
