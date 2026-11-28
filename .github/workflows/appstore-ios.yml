@@ -42,13 +42,23 @@ jobs:
     - uses: actions/checkout@v6
 
     # The simulator app only changes with the app's own sources, so a run that
-    # only changes appstore/ reuses the last build of them
+    # only changes appstore/ reuses the last build of them. Keyed on git's
+    # hashes of those sources, worked out once: hashFiles() is evaluated
+    # again when the cache saves, by when ios/ holds Pods and the build, and
+    # it times out.
+    - name: Key the simulator app on its sources
+      id: key
+      run: |
+        echo "key=simulator-app-$( git ls-tree -r HEAD -- appstore/bin/build_simulator_app.sh \
+          src ios assets index.js app.json babel.config.js metro.config.js \
+          package-lock.json patches | shasum | cut -c1-40 )" >> "$GITHUB_OUTPUT"
+
     - name: Restore the simulator app
       id: app
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/app.zip
-        key: simulator-app-${{ hashFiles( 'appstore/bin/build_simulator_app.sh', 'src/**', 'ios/**', 'assets/**', 'index.js', 'app.json', 'babel.config.js', 'metro.config.js', 'package-lock.json', 'patches/**' ) }}
+        key: ${{ steps.key.outputs.key }}
 
     - name: Check that every secret is present
       if: steps.app.outputs.cache-hit != 'true'
