@@ -1,0 +1,42 @@
+# Takes a freshly installed app through first-run onboarding to the tab bar,
+# skipping sign-up. Location is granted with simctl beforehand.
+appId: ${APP_ID}
+---
+- launchApp:
+    appId: ${APP_ID}
+- extendedWaitUntil:
+    visible:
+      id: Onboarding.welcome.next
+    timeout: 60000
+- tapOn:
+    id: Onboarding.welcome.next
+# The demo steps' close button offers to skip them
+- extendedWaitUntil:
+    visible:
+      id: Onboarding.obs_story.close
+    timeout: 30000
+- tapOn:
+    id: Onboarding.obs_story.close
+- tapOn: YES, EXIT
+- extendedWaitUntil:
+    visible:
+      id: Onboarding.signup_email.close
+    timeout: 30000
+- tapOn:
+    id: Onboarding.signup_email.close
+- tapOn: EXIT
+- extendedWaitUntil:
+    visible:
+      id: Onboarding.location_explainer.next
+    timeout: 30000
+- tapOn:
+    id: Onboarding.location_explainer.next
+- runFlow:
+    when:
+      visible: Allow While Using App
+    commands:
+      - tapOn: Allow While Using App
+- extendedWaitUntil:
+    visible:
+      id: CustomTabBar
+    timeout: 30000

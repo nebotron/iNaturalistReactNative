@@ -1,0 +1,23 @@
+# Opens LINK, optionally taps TAP_ID, waits for WAIT_ID (if given) and for
+# the screen to settle, then saves SHOT.png
+appId: ${APP_ID}
+---
+- openLink: ${LINK}
+- runFlow:
+    when:
+      true: ${TAP_ID != ''}
+    commands:
+      - tapOn:
+          id: ${TAP_ID}
+          retryTapIfNoChange: false
+- runFlow:
+    when:
+      true: ${WAIT_ID != ''}
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: ${WAIT_ID}
+          timeout: 60000
+- waitForAnimationToEnd:
+    timeout: 20000
+- takeScreenshot: ${SHOT}

@@ -1,0 +1,33 @@
+# Imports the library photo into a new observation, which opens the cropper,
+# then zooms in a little and turns the exposure down before the shot
+appId: ${APP_ID}
+---
+- tapOn:
+    id: add-obs-button
+- tapOn:
+    id: import-media-button
+- extendedWaitUntil:
+    visible:
+      id: PhotoGallery.done
+    timeout: 30000
+# The one photo in the library; the other PhotoGallery.* ids are controls
+- tapOn:
+    id: "PhotoGallery\\.(?!section|imported|hideImported|delete|markAsSaved|done|fillingIndicator|importingOverlay).+"
+    index: 0
+- tapOn:
+    id: PhotoGallery.done
+- extendedWaitUntil:
+    visible:
+      id: "ImageCropView\\..+"
+    timeout: 60000
+- swipe:
+    from: Adjust zoom
+    direction: RIGHT
+    duration: 1500
+- swipe:
+    from: Adjust brightness
+    direction: LEFT
+    duration: 1500
+- waitForAnimationToEnd:
+    timeout: 10000
+- takeScreenshot: ${SHOT}

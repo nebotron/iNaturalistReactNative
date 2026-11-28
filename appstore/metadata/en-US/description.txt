@@ -1,0 +1,15 @@
+Photograph plants, animals and fungi, get instant identification suggestions, and share your sightings with a worldwide community of naturalists.
+
+This is an independent build of the open-source iNaturalist app with extra tools for active observers. It works with your existing iNaturalist account.
+
+WHAT'S NEW
+• Identify view: review observations one at a time, swipe through their photos, and agree or move on with a tap.
+• Multi-species search: search Explore for several taxa at once, and exclude the ones you don't want.
+• Hotspots: enter a route and see clusters of observations along it, with the species found at each stop.
+• Cropper and brightness editor: crop each photo to its subject and brighten or darken it before you get suggestions.
+
+EVERYTHING ELSE YOU EXPECT
+• Identification suggestions from an on-device model, even offline
+• Record sounds and add multiple photos to an observation
+• Explore observations by place, species, person or date
+• Keep track of every species you have seen

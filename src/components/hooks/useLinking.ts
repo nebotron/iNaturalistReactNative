@@ -2,11 +2,19 @@ import { useNavigation } from "@react-navigation/native";
 import {
   searchObservations,
 } from "api/observations";
+import { fetchTaxaBasics } from "api/taxa";
+import { fetchRemoteUser } from "api/users";
+import { normalizeTaxonFilters } from "components/Explore/helpers/taxonFilters";
+import { resultToSubject } from "components/Explore/helpers/universalSearchSubject";
+import type { ExploreLink } from "components/hooks/exploreLink";
+import { parseExploreLink } from "components/hooks/exploreLink";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
+import { DATE_OBSERVED } from "providers/ExploreContext";
 import { useCallback, useEffect, useState } from "react";
 import { Linking } from "react-native";
 import type { UserPojo } from "realmModels/User";
+import useStore from "stores/useStore";
 
 const newAccountConfirmedUrl = "https://www.inaturalist.org/users/sign_in?confirmed=true";
 const existingAccountConfirmedUrl = "https://www.inaturalist.org/home?confirmed=true";
@@ -39,19 +47,63 @@ const useLinking = ( currentUser: UserPojo | null ) => {
     }
   }, [navigation, observationId] );
 
+  // Opens Explore on the link's search. Waits for the user and taxa so the
+  // search's header shows their names, as when they're picked in the app
+  const navigateToExplore = useCallback( async ( link: ExploreLink ) => {
+    const [user, taxa] = await Promise.all( [
+      link.userLogin
+        ? fetchRemoteUser( link.userLogin )
+        : null,
+      link.taxonIds.length > 0
+        ? fetchTaxaBasics( link.taxonIds )
+        : [],
+    ] );
+    if ( link.route.length >= 2 ) {
+      useStore.getState( ).layout.setHotspotStops( link.route.map( ( point, index ) => ( {
+        id: `link-${index}`,
+        text: `${point.latitude}, ${point.longitude}`,
+        point,
+      } ) ) );
+    }
+    navigation.navigate( "TabNavigator", {
+      screen: "ExploreTab",
+      params: {
+        screen: "Explore",
+        params: {
+          ...( user && { subject: resultToSubject( { type: "user", user } ) } ),
+          ...( link.view && { activeTab: link.view } ),
+          filters: {
+            taxonFilters: normalizeTaxonFilters( ( taxa || [] ).map( taxon => ( {
+              taxon,
+              exclude: false,
+            } ) ) ),
+            ...( ( link.d1 || link.d2 ) && {
+              dateObserved: DATE_OBSERVED.DATE_RANGE,
+              d1: link.d1,
+              d2: link.d2,
+            } ),
+          },
+        },
+      },
+    } );
+  }, [navigation] );
+
   const checkAllowedHosts = useCallback( ( url: string | null ) => {
     if ( typeof url !== "string" ) { return; }
-    const { host, pathname } = new URL( url );
+    const { host, pathname, search } = new URL( url );
 
     const allowedHosts = [
       "www.inaturalist.org",
     ];
-    if ( allowedHosts?.includes( host )
+    const exploreLink = allowedHosts.includes( host ) && parseExploreLink( pathname, search );
+    if ( exploreLink ) {
+      navigateToExplore( exploreLink );
+    } else if ( allowedHosts?.includes( host )
       && pathname.includes( "/observations" ) ) {
       const id = pathname.split( "/" )[2];
       setObservationId( id );
     }
-  }, [] );
+  }, [navigateToExplore] );
 
   const handleUrl = useCallback( ( url: string | null ) => {
     if ( url === newAccountConfirmedUrl

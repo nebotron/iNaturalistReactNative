@@ -109,6 +109,7 @@ const { lastScreen, uuid } = params || {};
 Manual implementation via React Native's `Linking` API (no React Navigation linking config):
 - Allowed host: `www.inaturalist.org` only
 - `/observations/{id}` → ObsDetails screen. Not deferred during onboarding: the reset to TabNavigator removes the carousel without setting `onboardingShown`, so the carousel returns on next launch
+- `/observations?…` (no id) → Explore, from the web search's `user_id`, `taxon_ids`, `d1`/`d2` and `view`, plus `route=lat,lng|lat,lng` for the Hotspots view's stops (`components/hooks/exploreLink.ts`). The App Store screenshots (`appstore/`) reach their screens this way
 - Email confirmed URLs → LoginStackNavigator with `emailConfirmed: true`
 - Fetches observation data from API before navigating
 

@@ -1,0 +1,74 @@
+{
+  "app_store_app_id": "6811262182",
+  "version": "1.0",
+  "locale": "en-US",
+  "device": "iPhone 17 Pro Max",
+  "display_type": "APP_IPHONE_67",
+  "screenshot_size": [1320, 2868],
+  "status_bar": {
+    "time": "9:41",
+    "dataNetwork": "wifi",
+    "wifiMode": "active",
+    "wifiBars": "3",
+    "cellularMode": "active",
+    "cellularBars": "4",
+    "batteryState": "charged",
+    "batteryLevel": "100"
+  },
+  "location": [47.656, -122.296],
+  "library_photos": [
+    {
+      "observation_id": 387745480,
+      "photo_id": 710058595,
+      "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/710058595/original.jpg",
+      "sha256": "4d3607928af735b18da2eaea2589145c6cf1e4b64437a4857f32ae4935286d76",
+      "license": "CC0",
+      "credit": "ben142"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "01-identify",
+      "flow": "link.yaml",
+      "link": "inaturalistmobile://www.inaturalist.org/observations?user_id=ben142&taxon_ids=43130&d1=2026-07-31&d2=2026-07-31&view=identify",
+      "wait_id": "IdentifyView.agree",
+      "caption": "Identify observations, one at a time"
+    },
+    {
+      "id": "02-multi-taxon",
+      "flow": "link.yaml",
+      "link": "inaturalistmobile://www.inaturalist.org/observations?user_id=ben142&taxon_ids=12727,7576,18236,8234&d1=2026-01-01&d2=2026-11-27&view=observations",
+      "tap_id": "SegmentedButton.grid",
+      "wait_id": "ExploreObservationsList",
+      "caption": "Search for several species at once"
+    },
+    {
+      "id": "03-hotspots",
+      "flow": "link.yaml",
+      "link": "inaturalistmobile://www.inaturalist.org/observations?user_id=ben142&d1=2026-01-01&d2=2026-11-27&view=hotspots&route=47.6560,-122.2960|47.6573,-122.4055",
+      "wait_id": "WildlifeHotspotsScreen.carousel",
+      "caption": "Find wildlife hotspots along your route"
+    },
+    {
+      "id": "04-cropper",
+      "flow": "cropper.yaml",
+      "caption": "Crop and brighten your photos"
+    },
+    {
+      "id": "05-observation",
+      "flow": "link.yaml",
+      "link": "inaturalistmobile://www.inaturalist.org/observations/387561919",
+      "caption": "Every sighting, in detail"
+    }
+  ],
+  "frame": {
+    "background_top": "#1e5631",
+    "background_bottom": "#74ac00",
+    "caption_color": "#ffffff",
+    "font": "assets/fonts/Lato-Bold.ttf",
+    "caption_size": 96,
+    "caption_top": 150,
+    "screen_scale": 0.82,
+    "screen_corner_radius": 90
+  }
+}
