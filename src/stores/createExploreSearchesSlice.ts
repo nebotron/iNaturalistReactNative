@@ -75,6 +75,9 @@ export interface ExploreSearchesSlice {
     saveSearch: ( _search: SavedSearchInput ) => void;
     updateSearch: ( _key: string, _search: ExploreV2SearchWithTab ) => void;
     removeSearch: ( _key: string ) => void;
+    // Puts the searches in the order of these keys; a search missing from them keeps its
+    // place after the ordered ones, so a search saved mid-drag isn't lost
+    reorderSearches: ( _keys: string[] ) => void;
     clearSavedSearches: ( ) => void;
     // Users who've been given the starter saved searches, so each gets them once
     defaultsAddedForUserIds: number[];
@@ -116,6 +119,18 @@ const createExploreSearchesSlice: StateCreator<ExploreSearchesSlice> = set => ( 
         searches: state.exploreSavedSearches.searches.filter( saved => saved.key !== key ),
       },
     } ) ),
+    reorderSearches: keys => set( state => {
+      const { searches } = state.exploreSavedSearches;
+      const byKey = new Map( searches.map( search => [search.key, search] ) );
+      const ordered = keys.flatMap( key => byKey.get( key ) ?? [] );
+      const rest = searches.filter( search => !keys.includes( search.key ) );
+      return {
+        exploreSavedSearches: {
+          ...state.exploreSavedSearches,
+          searches: [...ordered, ...rest],
+        },
+      };
+    } ),
     clearSavedSearches: ( ) => set( state => ( {
       exploreSavedSearches: { ...state.exploreSavedSearches, searches: [] },
     } ) ),

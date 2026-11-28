@@ -16,6 +16,8 @@ import { Pressable, View } from "components/styledComponents";
 import type { ExploreV2SearchWithTab } from "providers/ExploreContext";
 import React from "react";
 import { Alert } from "react-native";
+import type { RenderItemParams } from "react-native-draggable-flatlist";
+import { NestableDraggableFlatList, ScaleDecorator } from "react-native-draggable-flatlist";
 import useTranslation from "sharedHooks/useTranslation";
 import type { SavedSearch } from "stores/createExploreSearchesSlice";
 import useStore from "stores/useStore";
@@ -109,7 +111,54 @@ const SavedSearches = ( {
   const { t } = useTranslation( );
   const searches = useStore( state => state.exploreSavedSearches.searches );
   const updateSearch = useStore( state => state.exploreSavedSearches.updateSearch );
+  const reorderSearches = useStore( state => state.exploreSavedSearches.reorderSearches );
   const currentKey = savedSearchKey( currentSearch );
+
+  const renderSearch = ( { item: search, drag, isActive }: RenderItemParams<SavedSearch> ) => {
+    const isCurrent = savedSearchKey( relativeSavedSearch( search ) ) === currentKey;
+    return (
+      <ScaleDecorator>
+        <View
+          className={classnames(
+            "flex-row items-center bg-white rounded-lg",
+            isActive && "opacity-70",
+          )}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t( "Load-saved-filter" )}
+            accessibilityState={{ selected: isCurrent }}
+            className={classnames(
+              "flex-1 py-1 px-3 rounded-lg border-[2px]",
+              isCurrent
+                ? "border-inatGreen bg-inatGreen/10"
+                : "border-transparent",
+            )}
+            disabled={isActive}
+            onPress={( ) => onSelect( search )}
+            onLongPress={drag}
+            testID={`SavedSearches.load.${search.key}`}
+          >
+            <Body1>{searchName( search, t )}</Body1>
+          </Pressable>
+          <INatIconButton
+            icon="pencil-outline"
+            onPress={( ) => updateSearch( search.key, currentSearch )}
+            size={20}
+            accessibilityLabel={t( "Overwrite-saved-filter" )}
+            testID={`SavedSearches.overwrite.${search.key}`}
+          />
+          <INatIconButton
+            icon="trash-outline"
+            onPress={( ) => onDelete( search )}
+            size={20}
+            accessibilityLabel={t( "Delete-saved-filter" )}
+            testID={`SavedSearches.delete.${search.key}`}
+          />
+        </View>
+      </ScaleDecorator>
+    );
+  };
 
   return (
     <View className="mb-5 px-4" testID="SavedSearches">
@@ -124,42 +173,16 @@ const SavedSearches = ( {
       />
       {searches.length === 0
         ? <Body3 className="text-darkGray">{t( "No-saved-filters-yet" )}</Body3>
-        : searches.map( search => {
-          const isActive = savedSearchKey( relativeSavedSearch( search ) ) === currentKey;
-          return (
-            <View key={search.key} className="flex-row items-center">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t( "Load-saved-filter" )}
-                accessibilityState={{ selected: isActive }}
-                className={classnames(
-                  "flex-1 py-1 px-3 rounded-lg border-[2px]",
-                  isActive
-                    ? "border-inatGreen bg-inatGreen/10"
-                    : "border-transparent",
-                )}
-                onPress={( ) => onSelect( search )}
-                testID={`SavedSearches.load.${search.key}`}
-              >
-                <Body1>{searchName( search, t )}</Body1>
-              </Pressable>
-              <INatIconButton
-                icon="pencil-outline"
-                onPress={( ) => updateSearch( search.key, currentSearch )}
-                size={20}
-                accessibilityLabel={t( "Overwrite-saved-filter" )}
-                testID={`SavedSearches.overwrite.${search.key}`}
-              />
-              <INatIconButton
-                icon="trash-outline"
-                onPress={( ) => onDelete( search )}
-                size={20}
-                accessibilityLabel={t( "Delete-saved-filter" )}
-                testID={`SavedSearches.delete.${search.key}`}
-              />
-            </View>
-          );
-        } )}
+        : (
+          // Long press a search and drag it to reorder. The screen's scroll view is a
+          // NestableScrollContainer, which this list needs to drag inside it.
+          <NestableDraggableFlatList
+            data={searches}
+            keyExtractor={search => search.key}
+            renderItem={renderSearch}
+            onDragEnd={( { data } ) => reorderSearches( data.map( search => search.key ) )}
+          />
+        )}
     </View>
   );
 };

@@ -16,7 +16,9 @@ import {
   TextInput as UntyledTextInput,
   View as UnstyledView,
 } from "react-native";
-import UnstyledDraggableFlatList from "react-native-draggable-flatlist";
+import UnstyledDraggableFlatList, {
+  NestableScrollContainer as UnstyledNestableScrollContainer,
+} from "react-native-draggable-flatlist";
 import UnstyledLinearGradient from "react-native-linear-gradient";
 import {
   ActivityIndicator as UnstyledPaperActivityIndicator,
@@ -64,6 +66,11 @@ const WebView = cssInterop( UnstyledWebView, { className: "style" } );
 
 const DraggableFlatList = cssInterop( UnstyledDraggableFlatList, { className: "style" } );
 
+const NestableScrollContainer = cssInterop(
+  UnstyledNestableScrollContainer,
+  { className: "style" },
+);
+
 const Carousel = cssInterop( UnstyledCarousel, { className: "style" } );
 
 export {
@@ -77,6 +84,7 @@ export {
   KeyboardAvoidingView,
   LinearGradient,
   Modal,
+  NestableScrollContainer,
   PaperActivityIndicator,
   PaperTextInput,
   Pressable,

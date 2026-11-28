@@ -59,7 +59,7 @@ import {
 import SearchHeader from "components/SharedComponents/SearchHeader";
 import WarningSheet from "components/SharedComponents/Sheets/WarningSheet";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { ScrollView, View } from "components/styledComponents";
+import { NestableScrollContainer, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
 import isEqual from "lodash/isEqual";
 import type { ExploreStackScreenProps } from "navigation/types";
@@ -355,7 +355,8 @@ const AdvancedSearch = ( ) => {
         testID="AdvancedSearch.back"
       />
 
-      <ScrollView className="py-4">
+      {/* Nestable so the saved searches list can be dragged to reorder inside it */}
+      <NestableScrollContainer className="py-4">
         <SavedSearches
           currentSearch={currentSavedSearch}
           onDelete={setSearchToDelete}
@@ -727,7 +728,7 @@ const AdvancedSearch = ( ) => {
           </View>
 
         </View>
-      </ScrollView>
+      </NestableScrollContainer>
       <ButtonBar containerClass="bg-white border-t border-lightGray">
         <Button
           disabled={hasError}
