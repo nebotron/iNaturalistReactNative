@@ -1,4 +1,5 @@
-import { faker } from "@faker-js/faker";
+// eslint-disable-next-line import/no-unresolved -- the plugin ignores package exports
+import { faker } from "@faker-js/faker/locale/en";
 import {
   Heading1,
   ScrollViewWrapper,
