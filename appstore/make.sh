@@ -91,12 +91,21 @@ if ! xcrun simctl launch "$UDID" "$APP_ID" > "$OUT/debug/launch.txt" 2>&1; then
 fi
 xcrun simctl terminate "$UDID" "$APP_ID" || true
 
+# Up to three attempts: Maestro's driver in the simulator sometimes drops its
+# connection mid-flow, and every flow is safe to rerun (scenes relaunch the
+# app, and onboarding skips what's already done)
 run_flow() {
-  local name="$1" flow="$2"; shift 2
-  ( cd "$OUT/raw" && maestro --device "$UDID" test \
-      -e APP_ID="$APP_ID" "$@" \
-      --debug-output "$OUT/debug/$name" \
-      "$REPO/appstore/flows/$flow" )
+  local name="$1" flow="$2" attempt; shift 2
+  for attempt in 1 2 3; do
+    if ( cd "$OUT/raw" && maestro --device "$UDID" test \
+        -e APP_ID="$APP_ID" "$@" \
+        --debug-output "$OUT/debug/$name/attempt-$attempt" \
+        "$REPO/appstore/flows/$flow" ); then
+      return 0
+    fi
+    echo "$name: attempt $attempt failed" >&2
+  done
+  return 1
 }
 failed=()
 
