@@ -47,6 +47,8 @@ const ExploreProjectSearch = ( { closeModal, updateProject }: Props ) => {
         project: PROJECT_SUMMARY_FIELDS,
       },
     },
+    // A project searched before shows at once while the latest loads
+    { cacheFirst: true },
   );
 
   const projects = data.map( ( r: { project: ApiProjectSummary } ) => r.project );

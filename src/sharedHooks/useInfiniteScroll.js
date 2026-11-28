@@ -10,7 +10,10 @@ const useInfiniteScroll = (
   options?: {
     enabled: boolean,
     // Keep the results on disk, as Explore does; see useAuthenticatedInfiniteQuery
-    persist?: boolean
+    persist?: boolean,
+    // Show results from the HTTP cache at once and fetch the latest in the
+    // background; see useAuthenticatedInfiniteQuery
+    cacheFirst?: boolean
   },
 ): Object => {
   const baseParams = {
@@ -56,6 +59,7 @@ const useInfiniteScroll = (
 
       enabled: options?.enabled,
       persist: options?.persist,
+      cacheFirst: options?.cacheFirst,
     },
     /* eslint-enable consistent-return */
   );

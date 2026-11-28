@@ -92,6 +92,8 @@ const ExploreLocationSearch = ( {
     ),
     {
       enabled: locationName.length > 0,
+      // A place searched before shows at once while the latest loads
+      cacheFirst: true,
     },
   );
 
