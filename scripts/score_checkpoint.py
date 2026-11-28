@@ -30,7 +30,7 @@ REPO_ROOT = Path( __file__ ).parent.parent
 
 def export( weights: Path, dest: Path ) -> Path:
     from ultralytics import YOLO
-    out = Path( YOLO( str( weights ) ).export( format="onnx", imgsz=640, dynamic=False,
+    out = Path( YOLO( str( weights ) ).export( format="onnx", imgsz=640, dynamic=True,
                                                simplify=True, opset=12 ) )
     if out.resolve() != dest.resolve():
         shutil.copy2( out, dest )

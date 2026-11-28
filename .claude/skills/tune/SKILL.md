@@ -11,12 +11,12 @@ There is a script scripts/eval_onnx_variants.py for evaluating crop quality. Rep
 
 ### Setup
 
-- Model: `ios/iNaturalistReactNative/yolov8n.onnx` — single-class YOLOv8n, output `[1, 5, 8400]`. Its weights are stored as fp16 (`scripts/onnx_weights.py`; ORT casts them back to fp32 at load) to halve its size: the crop score on the newest 991 log images was identical (int8 lost 0.013). `retrain_from_cache.py` installs new exports that way and `onnx_to_pt.py` reads them back.
+- Model: `ios/iNaturalistReactNative/yolov8n.onnx` — single-class YOLOv8n with a **dynamic input shape** (`[batch, 3, height, width]` → `[batch, 5, anchors]`; 8400 anchors at 640×640), so views run on canvases smaller than 640². Any H, W that are multiples of 32 work. Export with `dynamic=True` (`retrain_from_cache.py` and `score_checkpoint.py` do). Its weights are stored as fp16 (`scripts/onnx_weights.py`; ORT casts them back to fp32 at load) to halve its size: the crop score on the newest 991 log images was identical (int8 lost 0.013). `retrain_from_cache.py` installs new exports that way and `onnx_to_pt.py` reads them back.
 - **Metric (since the IoU session): score = IoU of the predicted square crop with the human's crop.** It replaced `(4·recall + 1·precision) / 5`, which hid the small-subject problem. Every score in the sessions below that one is on the old metric and is not comparable.
 - **Since the zoom-in session the IoU counts only pixels inside the image.** The human crop is logged clipped to the image, so the predicted square is clipped the same way before IoU (`crop_score` / `clip_to_image`, and `sweep_crop.score`), and `bounds_to_crop` now letterboxes around the image centre exactly as the TS does (it used to centre on the subject). Scores before that session are about 0.015 lower than they would be now; the zoom-in session's numbers are given both ways.
-- Post-processing (since the zoom-in session): the detector runs on 4 views — as is, mirrored, zoomed out 2× (photo drawn at 1/2 scale in the letterbox), zoomed in (drawn at 1/0.7 scale, clipped by the canvas) — each NMS'd (IoU=0.45, conf=0.05, top 16), then the views' boxes are merged by weighted box fusion (IoU 0.40, conf = sum / 4) and the top fused box is the subject (no confidence gate; Vision saliency only when nothing clears 0.05) → square crop circumscribing the box. No widening, no padding. `cache_detections.py` (`VIEWS`, `fuse_views`) mirrors `ImageCropper.m`; change both together. `SINGLE_VIEW=1` caches the old one-view detections.
+- Post-processing (since the fewer-views session): the detector runs on 3 views, named `[o|h]<L><sq|t><S>` (photo as is / mirrored, its longer edge drawn at L px, on a fixed S×S square or a *tight* canvas whose sides are the drawn photo's rounded up to 32 and capped at S): `h640t640`, `o914t576` (1/0.7× zoom-in, centre 576²), `o320sq384` (2× zoom-out on a 384² grey square). Each is NMS'd (IoU=0.45, conf=0.05, top 16), the views' boxes are merged by weighted box fusion (IoU 0.40, conf = sum / 3) and the top fused box is the subject (no confidence gate; Vision saliency only when nothing clears 0.05) → square crop circumscribing the box. No widening, no padding. `cache_detections.py` (`VIEWS`, `parse_view`, `detect_view`, `fuse_views`) mirrors `ImageCropper.m` (`kYOLOViews`); change both together. `SINGLE_VIEW=1` caches the old one-view (`o640sq640`) detections.
 - **The squaring is TypeScript, not ObjC.** `ImageCropper.m` returns *bounds*; `src/sharedHelpers/subjectBoundsToNormalizedCrop.ts` turns them into the crop (padding 0, set in `detectSubjectInImage.ts`). Geometry changes belong there — cross-platform, unit-testable, and they apply to the saliency fallback too. `scripts/evaluate_subject_detector.py:bounds_to_crop` mirrors it; a 4-case node-vs-python diff keeps them honest.
-- Eval: `scripts/cache_detections.py MODEL.onnx OUT.npz` (~45 min for 11k images with 4 views, 4 procs) then
+- Eval: `scripts/cache_detections.py MODEL.onnx OUT.npz` (~20 min for 11.7k images with the 3 shipped views, 4 procs) then
   `scripts/sweep_crop.py OUT.npz [--full]` (seconds). Inference is the only slow
   part, so cache the raw post-NMS boxes once and every gate/union/padding
   variant after that is arithmetic. `sweep_crop` is verified to reproduce
@@ -198,3 +198,35 @@ Total +0.021 (bootstrap CI [+0.013, +0.029]); whole log (memorization-inflated) 
 **Ops**
 - Running anything CPU-heavy alongside training slows it 4–6× (2.2 → 13 s/it). Total CPU is conserved, so it is fine for short jobs, but budget it.
 - Epoch checkpoints are 0-indexed: `epoch4.pt` is the end of the 5th epoch.
+
+### Session: fewer, cheaper views — 4.0 → 1.9 inferences per photo, score tied on unseen photos
+
+**Prompt:** improve the score and, if possible, run the model fewer times per photo to save CPU and battery. Log: 13,981 entries / **11,669** evaluable. The deployed weights trained on evaluable indices `[0, 9187)` (the previous session's 11,187 minus its 2,000-photo tail; 11,190 of today's evaluable photos were in that session's log, so this boundary is right to within a few photos), so `9187:` (2,482 photos) is the unseen pool. No retrain this session: same weights, re-exported with a dynamic input shape.
+
+| | runs | cost (640² = 1) | whole log | unseen 2,482 | unseen truth <0.10 (n=313) |
+|---|---|---|---|---|---|
+| previous: o, h, z2, z0.7, all on 640² | 4 | 4.00 | **0.6678** | 0.5807 | 0.410 |
+| **shipped: `h640t640`, `o914t576`, `o320sq384`** | **3** | **1.90** | 0.6565 | **0.5820** | 0.400 |
+
+Unseen delta +0.0013, 95% CI [−0.005, +0.007]: a tie at 48% of the compute. Every bucket from 0.2 up gains a little, and the two smallest lose a little (−0.010 and −0.006, CIs include 0). The whole-log drop (−0.011) is all on photos the model trained on (−0.015 there): it learned them through exactly the 640² square letterbox it was trained on, so anything else scores lower on them. Single `o640sq640` vs `o640t640` shows the same pattern: +0.001 unseen, −0.0075 trained-on. Do not read the whole-log number as a regression. `scripts/cache_detections.py` with the installed fp16 file reproduces the per-view sweep exactly (0.6565 / 0.5820).
+
+**What worked**
+- **A per-view cache** (`scripts/cache_views.py`, promoted from last session's scratch script): every candidate view is run once and its NMS'd boxes stored separately. Then `scripts/sweep_views.py` scores any subset, fusion or cascade in seconds, charging each photo its real canvas cost. 16 views × 11.7k photos took 62 min on 4 cores, and a second batch of 11 took 45.
+- **A dynamic-shape export plus tight canvases.** Re-export with `dynamic=True` (`onnx_to_pt.py` → `YOLO(pt).export(…, dynamic=True, opset=12)` → `store_fp16`). It matches the old file to 2.4e-4 at 640², and torch at 384², 512², 480×640. Then draw each view on the smallest canvas that holds it. For 1× views the grey letterbox was pure waste: `o640t640` (0.73 cost on 4:3 photos) scores the same as `o640sq640` on unseen photos.
+- **Smaller views carry the TTA.** On the cost/score Pareto front, every set near the old score was one plain view + a cropped zoom-in + a small zoom-out. The zoom-in only needs the centre of the photo (subjects are rarely at the edge), so `o914t576` costs 0.80, not 0.97, and the zoom-out only needs a little grey around it, so `o320sq384` costs 0.36, not 1.0.
+- **Pick on unseen photos, then sanity-check by mirror pairs.** Swapping o ↔ h on one view moved unseen scores by up to 0.0075, which is the selection noise floor at n=2,482. Picking the best ≤2.0-cost subset on a random half and scoring it on the other half lost 0.000–0.012 against the old set. So treat any 3-view set within ±0.006 of the old one as a tie, and choose by cost and by the small-subject bucket. `o914t576` was picked over the cheaper `o800t512` (1.73 cost, same overall score) for that reason: small subjects scored −0.010 against −0.021.
+
+**What did not work**
+- **Tight canvas for the zoom-out view.** `o320t640` (the photo at 320 on a 320×256 canvas, 0.19 cost) scores 0.447 against 0.513 for the same photo on a 640² grey square. The model needs grey context around a small drawn photo. 384² recovers it (0.510–0.517), 448² adds nothing more.
+- **Early-exit cascades.** Running one view, stopping if the top confidence is ≥ t, and otherwise running the rest saves at most ~0.1 cost at equal score. At t = 0.5 it stops on 44% of photos but loses 0.004. One view's confidence does not say whether the other views would have changed the box.
+- **Two views.** The best pairs (`o640t640 + o800t512`, 1.36) lose 0.014 on unseen photos. One view (`o640t640`, 0.73) loses 0.021. Three is the minimum for no loss.
+- **Fusion knobs for the 3-view set** (WBF IoU 0.3–0.6, per-view weights 0.7–1.3): within ±0.003, as in every earlier session. Left at IoU 0.40 and equal weights.
+- **Heavier zoom-ins** (`o1024t576`, 0.502 alone) and **heavier zoom-in crops** (`o914t512`, 0.511) are worse than `o914t576` (0.531) and `o800t512` (0.538). 512² clips too much of a 1/0.7 zoom.
+
+**Next ideas**
+- The views are fixed, so a retrain could now be aimed at them: fine-tune with `rect=True` or random-canvas letterboxing so the model stops depending on the 640² square. That should also close the trained-on gap above. With only ~4% more labelled photos than last time, a plain retrain is not worth 6 h of CPU.
+- `subject_detection_timing` in the app log records `viewMs` per view. After this ships, check that the three views take ~0.7 / 0.8 / 0.4 of an old 640² view (~37 ms). If preprocessing (the UIKit draw) dominates rather than ORT, the saving will be smaller than the pixel count says.
+
+**Ops**
+- `sweep_crop.saliency_for` writes `/tmp/inat_saliency_cache.npz` without locking. Two sweeps started at once corrupt it (`BadZipFile`). Fill it once before running sweeps in parallel.
+- `prefetch_images.py` over 14k entries took ~30 min. Re-running `load_entries` retries the ~56 photos that 404 every time, which is slow and noisy but harmless.
