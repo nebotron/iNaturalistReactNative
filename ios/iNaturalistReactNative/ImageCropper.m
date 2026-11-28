@@ -11,7 +11,6 @@
 #import <React/RCTBridgeModule.h>
 #import <React/RCTViewManager.h>
 #import <UIKit/UIKit.h>
-#import <Vision/Vision.h>
 #include <mach/mach.h>
 #include <malloc/malloc.h>
 #include <stddef.h>
@@ -320,65 +319,6 @@ static NSString *inatAssetDeletabilitySummary( id<NSFastEnumeration> assets )
 
 RCT_EXPORT_MODULE( );
 
-// ─── Orientation helpers ────────────────────────────────────────────────────
-
-static CGImagePropertyOrientation orientationFromUIImage( UIImage *image )
-{
-  switch ( image.imageOrientation ) {
-    case UIImageOrientationUp:            return kCGImagePropertyOrientationUp;
-    case UIImageOrientationDown:          return kCGImagePropertyOrientationDown;
-    case UIImageOrientationLeft:          return kCGImagePropertyOrientationLeft;
-    case UIImageOrientationRight:         return kCGImagePropertyOrientationRight;
-    case UIImageOrientationUpMirrored:    return kCGImagePropertyOrientationUpMirrored;
-    case UIImageOrientationDownMirrored:  return kCGImagePropertyOrientationDownMirrored;
-    case UIImageOrientationLeftMirrored:  return kCGImagePropertyOrientationLeftMirrored;
-    case UIImageOrientationRightMirrored: return kCGImagePropertyOrientationRightMirrored;
-    default:                              return kCGImagePropertyOrientationUp;
-  }
-}
-
-// ─── Vision helpers (saliency fallback) ─────────────────────────────────────
-
-static NSDictionary *normalizedBoundsFromVisionRect( CGRect rect )
-{
-  if ( rect.size.width <= 0 || rect.size.height <= 0 ) return nil;
-  return @{
-    @"x":      @( rect.origin.x ),
-    @"y":      @( 1.0 - rect.origin.y - rect.size.height ),
-    @"width":  @( rect.size.width ),
-    @"height": @( rect.size.height ),
-  };
-}
-
-static CGRect unionVisionRect( CGRect existing, CGRect next, BOOL hasExisting )
-{
-  if ( !hasExisting ) return next;
-  CGFloat minX = MIN( existing.origin.x, next.origin.x );
-  CGFloat minY = MIN( existing.origin.y, next.origin.y );
-  CGFloat maxX = MAX( existing.origin.x + existing.size.width,  next.origin.x + next.size.width );
-  CGFloat maxY = MAX( existing.origin.y + existing.size.height, next.origin.y + next.size.height );
-  return CGRectMake( minX, minY, maxX - minX, maxY - minY );
-}
-
-// Attention-based saliency — used only when YOLO finds no subject
-static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler )
-{
-  VNGenerateAttentionBasedSaliencyImageRequest *req =
-    [[VNGenerateAttentionBasedSaliencyImageRequest alloc] init];
-  NSError *error = nil;
-  if ( ![handler performRequests:@[req] error:&error] ) return nil;
-
-  CGRect unionRect = CGRectZero;
-  BOOL   hasUnion  = NO;
-  for ( VNSaliencyImageObservation *obs in req.results ) {
-    for ( VNRectangleObservation *salientObj in obs.salientObjects ) {
-      unionRect = unionVisionRect( unionRect, salientObj.boundingBox, hasUnion );
-      hasUnion  = YES;
-    }
-  }
-  return hasUnion ? normalizedBoundsFromVisionRect( unionRect ) : nil;
-}
-
 // ─── YOLO / ONNX Runtime detection ──────────────────────────────────────────
 
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
@@ -635,8 +575,7 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, NSMutableArray<NSN
   // cluster whose fused box it overlaps by YOLO_FUSION_IOU. A cluster's box is
   // the confidence-weighted mean of its members; the cluster with the largest
   // confidence sum is the subject. No confidence gate: scored by IoU against
-  // the crops people choose, even a weak detection beats the saliency
-  // fallback, so saliency only runs when nothing clears YOLO_CONF_THRESH.
+  // the crops people choose, even a weak detection beats having none.
   qsort( boxes, (size_t)nBoxes, sizeof( YOLOBox ), compareBoxByConf );
   YOLOBox fused[YOLO_NUM_VIEWS * YOLO_MAX_DETS];  // .conf holds the cluster's conf sum
   YOLOBox sums[YOLO_NUM_VIEWS * YOLO_MAX_DETS];   // conf-weighted coordinate sums
@@ -714,9 +653,9 @@ static void applyBrightnessMultiplyBuffer( unsigned char *raw, int pixelCount, f
 // the detector's bounds were tuned against.
 static const CGFloat kSubjectDetectionMaxPixel = 1024;
 
-// Try YOLO; fall back to Vision attention saliency when nothing is detected.
-// The bounds carry how long detection took (detectMs, viewMs, saliency) for
-// JS to log; nothing found means no timing.
+// The subject YOLO finds, or nil when it finds none (JS then shows the whole
+// photo). The bounds carry how long detection took (detectMs, viewMs) for JS
+// to log; nothing found means no timing.
 static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
 {
   if ( image.CGImage == NULL ) return nil;
@@ -724,22 +663,11 @@ static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
   NSTimeInterval            started = [NSDate timeIntervalSinceReferenceDate];
   NSMutableArray<NSNumber *> *viewMs = [NSMutableArray array];
   NSDictionary *bounds = detectSubjectBoundsYOLO( image, viewMs );
-  BOOL          saliency = !bounds;
-
-  if ( !bounds ) {
-    CGImagePropertyOrientation orientation = orientationFromUIImage( image );
-    VNImageRequestHandler *handler =
-      [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
-                                         orientation:orientation
-                                             options:@{}];
-    bounds = detectSubjectBoundsSaliency( handler );
-  }
   if ( !bounds ) return nil;
 
   NSMutableDictionary *timed = [bounds mutableCopy];
   timed[@"detectMs"] = @( (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) );
   timed[@"viewMs"]   = viewMs;
-  timed[@"saliency"] = @( saliency );
   return timed;
 }
 

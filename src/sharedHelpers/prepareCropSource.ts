@@ -12,13 +12,6 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 
 const logger = log.extend( "prepareCropSource" );
 
-// When the detector finds no subject, the cropper opens with the whole photo
-// inside the crop square. Saliency only stands in when the subject detector
-// itself found nothing, so its guess counts as no subject here too.
-const WHOLE_IMAGE: NormalizedCrop = {
-  x: 0, y: 0, w: 1, h: 1,
-};
-
 // Longest side of the file the cropper displays. Large enough to never
 // downscale, so the cropper draws the photo at full resolution.
 // DESIGN REQUIREMENT: the cropper always shows a full-resolution image (see
@@ -171,9 +164,7 @@ const prepareCropSource = async (
     return {
       displayUri: prepared.displayUri,
       size,
-      crop: knownCrop ?? ( prepared.bounds?.saliency
-        ? { ...WHOLE_IMAGE }
-        : subjectCropFromBounds( prepared.bounds, size.w, size.h ) ),
+      crop: knownCrop ?? subjectCropFromBounds( prepared.bounds, size.w, size.h ),
       stageMs: prepared.stageMs && {
         ...prepared.stageMs,
         ...( prepared.bounds?.detectMs !== undefined && { detect: prepared.bounds.detectMs } ),
@@ -189,8 +180,9 @@ const prepareCropSource = async (
   return {
     displayUri: sourceUri,
     size,
-    // No detector without the native call.
-    crop: knownCrop ?? { ...WHOLE_IMAGE },
+    // No detector without the native call, so the whole photo, as when the
+    // detector finds no subject.
+    crop: knownCrop ?? subjectCropFromBounds( null, size.w, size.h ),
   };
 };
 
