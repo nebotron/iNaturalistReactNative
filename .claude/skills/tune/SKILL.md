@@ -201,7 +201,7 @@ Total +0.021 (bootstrap CI [+0.013, +0.029]); whole log (memorization-inflated) 
 
 ### Session: fewer, cheaper views — 4.0 → 1.9 inferences per photo, score tied on unseen photos
 
-**Prompt:** improve the score and, if possible, run the model fewer times per photo to save CPU and battery. Log: 13,981 entries / **11,669** evaluable. The deployed weights trained on evaluable indices `[0, 9187)` (the previous session's 11,187 minus its 2,000-photo tail; 11,190 of today's evaluable photos were in that session's log, so this boundary is right to within a few photos), so `9187:` (2,482 photos) is the unseen pool. No retrain this session: same weights, re-exported with a dynamic input shape.
+**Prompt:** improve the score and, if possible, run the model fewer times per photo to save CPU and battery. Log: 13,981 entries / **11,669** evaluable. The deployed weights trained on evaluable indices `[0, 9187)` (the previous session's 11,187 minus its 2,000-photo tail; 11,190 of today's evaluable photos were in that session's log, so this boundary is right to within a few photos), so `9187:` (2,482 photos) is the unseen pool. The first commit kept the weights and only re-exported them with a dynamic input shape. A retrain followed; see the end of this section.
 
 | | runs | cost (640² = 1) | whole log | unseen 2,482 | unseen truth <0.10 (n=313) |
 |---|---|---|---|---|---|
@@ -224,9 +224,19 @@ Unseen delta +0.0013, 95% CI [−0.005, +0.007]: a tie at 48% of the compute. Ev
 - **Heavier zoom-ins** (`o1024t576`, 0.502 alone) and **heavier zoom-in crops** (`o914t512`, 0.511) are worse than `o914t576` (0.531) and `o800t512` (0.538). 512² clips too much of a 1/0.7 zoom.
 
 **Next ideas**
-- The views are fixed, so a retrain could now be aimed at them: fine-tune with `rect=True` or random-canvas letterboxing so the model stops depending on the 640² square. That should also close the trained-on gap above. With only ~4% more labelled photos than last time, a plain retrain is not worth 6 h of CPU.
+- The views are fixed, so a retrain could be aimed at them: fine-tune with `rect=True` or random-canvas letterboxing so the model stops depending on the 640² square. That might also close the trained-on gap above.
 - `subject_detection_timing` in the app log records `viewMs` per view. After this ships, check that the three views take ~0.7 / 0.8 / 0.4 of an old 640² view (~37 ms). If preprocessing (the UIKit draw) dominates rather than ORT, the saving will be smaller than the pixel count says.
 
 **Ops**
 - `sweep_crop.saliency_for` writes `/tmp/inat_saliency_cache.npz` without locking. Two sweeps started at once corrupt it (`BadZipFile`). Fill it once before running sweeps in parallel.
 - `prefetch_images.py` over 14k entries took ~30 min. Re-running `load_entries` retries the ~56 photos that 404 every time, which is slow and noisy but harmless.
+
+**Retrain (same session, second commit): held-out tail 0.5840 → 0.5885**
+
+Recipe: warm start from the shipped weights; 8 epochs; AdamW lr 1e-4 → 5e-6; `--scale 0.5` (was 0.4, now also covering the 2× zoomed-out view); `--small-oversample 1 --batch 16 --no-val --heldout-tail 2000`. That is 12,076 training images (2,407 small-subject duplicates) at about 27 min per epoch, 3.6 h in total. The log said "Transferred 355/355". The held-out URLs were identical to `--slice=-2000:`, and the previous weights never trained on those photos either, because the tail starts at 9669 and they trained on `[0, 9187)`.
+
+Tail score by epoch, with the 3 shipped views: 1 0.5731, 3 0.5777, 5 0.5834, 7 0.5868, **8 0.5884** (0.5885 after the fp16 install), against 0.5840 for the previous weights. That is +0.0044, 95% CI [−0.002, +0.011], P(better) 0.90. Same shape as every warm-started run so far: below baseline until the learning rate anneals, then a small gain. The largest gain is on small subjects: truth <0.10, 0.393 → 0.412 (n = 247, CI [−0.006, +0.045]). Truth ≥0.5 gains 0.683 → 0.694. The middle buckets are within ±0.006.
+
+- **The 3 shipped views stay right for the new weights.** Pareto front on the tail: the best ≤1.9-cost set is still `h640t640 + o914t576 + o320sq384` (0.5884). The old four 640² views get 0.5917 at 4.0 cost, the same small 4-vs-3 gap as with the previous weights (0.5852 vs 0.5840).
+- **Whole log** (memorisation-inflated): 0.6678 (old weights, 4 views) → 0.6565 (old weights, 3 views) → 0.6614 (new weights, 3 views).
+- **fp16 rounding is larger on a freshly trained export:** max abs output difference 0.55 on random input, but under 1 px on box coordinates and 1e-3 on confidence for a real photo. The score was unchanged (0.5884 → 0.5885). Comparing one fp16 file with another (as at the start of this session) gives ~2e-4; fp32 against fp16 does not, so don't panic at it.
