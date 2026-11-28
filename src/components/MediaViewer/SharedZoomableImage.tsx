@@ -107,6 +107,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     cropPanContext,
     onSwipeToClose,
     allowLetterboxPan,
+    gestureLock,
     brightness = 1,
     fullResolution,
     maxPixelSize,
@@ -165,6 +166,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     cropPanContext,
     onSwipeToClose,
     allowLetterboxPan,
+    gestureLock,
   } );
 
   useEffect( ( ) => {

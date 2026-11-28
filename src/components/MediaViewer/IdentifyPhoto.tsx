@@ -13,6 +13,7 @@ import React, {
 } from "react";
 import { StyleSheet } from "react-native";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import type { GestureLock } from "sharedHelpers/gestureLock";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -227,6 +228,7 @@ interface BrightnessSliderProps {
   maximumValue?: number;
   iconColor?: string;
   disabled?: boolean;
+  gestureLock?: GestureLock;
 }
 
 // The sun icon + exposure slider (in stops) used for every brightness control.
@@ -239,6 +241,7 @@ const BrightnessSlider = ( {
   maximumValue = EXPOSURE_STOPS_MAX,
   iconColor = colors.darkGray,
   disabled = false,
+  gestureLock,
 }: BrightnessSliderProps ) => (
   <View className="flex-row items-center">
     <INatIcon name="brightness" size={18} color={iconColor} />
@@ -252,6 +255,7 @@ const BrightnessSlider = ( {
       onChange={onChange}
       onComplete={onComplete}
       accessibilityLabel={accessibilityLabel}
+      gestureLock={gestureLock}
     />
   </View>
 );
@@ -273,6 +277,9 @@ interface ZoomBrightnessSlidersProps {
   // Nothing to zoom or brighten (e.g. a sound-only observation), so the sliders
   // stay in the layout but don't respond.
   disabled?: boolean;
+  // Shared with the photo's zoom gestures so a touch either drags a slider or
+  // pinches the photo, never both.
+  gestureLock?: GestureLock;
 }
 
 // The zoom + brightness sliders shown below a photo (not covering it).
@@ -290,6 +297,7 @@ export const ZoomBrightnessSliders = ( {
   iconColor = colors.darkGray,
   zoomSnapScale,
   disabled = false,
+  gestureLock,
 }: ZoomBrightnessSlidersProps ) => (
   <View className="px-4 pt-1">
     <View className="flex-row items-center">
@@ -306,6 +314,7 @@ export const ZoomBrightnessSliders = ( {
         onChange={onZoomChange}
         onComplete={onZoomComplete}
         accessibilityLabel={zoomAccessibilityLabel}
+        gestureLock={gestureLock}
       />
     </View>
     <BrightnessSlider
@@ -317,6 +326,7 @@ export const ZoomBrightnessSliders = ( {
       onComplete={onBrightnessComplete}
       accessibilityLabel={brightnessAccessibilityLabel}
       iconColor={iconColor}
+      gestureLock={gestureLock}
     />
   </View>
 );
