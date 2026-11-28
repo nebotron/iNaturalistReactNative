@@ -13,11 +13,10 @@ const logger = log.extend( "detectSubjectInImage" );
 const SUBJECT_DETECTION_PADDING = 0;
 
 // Bounds as the native detector returns them, with how long it took: in all,
-// per detector view (preprocessing included), and whether saliency stood in.
+// per detector view (preprocessing included).
 export interface DetectedBounds extends NormalizedBounds {
   detectMs?: number;
   viewMs?: number[];
-  saliency?: boolean;
 }
 
 interface ImageCropperModule {
@@ -54,7 +53,6 @@ export const logSubjectDetectionTiming = ( bounds: DetectedBounds | null ) => {
         ? []
         : [b.viewMs[i]] ) ),
     ) ),
-    saliency: batch.filter( b => b.saliency ).length,
   } );
 };
 

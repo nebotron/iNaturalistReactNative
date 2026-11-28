@@ -31,7 +31,9 @@ import {
 import locationLabel from "components/Explore/helpers/locationLabel";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
-import useApplySavedSearch from "components/Explore/hooks/useApplySavedSearch";
+import useApplySavedSearch, {
+  useReplaceHotspotExplore,
+} from "components/Explore/hooks/useApplySavedSearch";
 import {
   useExploreGridOverlays, useExploreLayoutKey,
 } from "components/Explore/hooks/useExploreDisplaySettings";
@@ -57,7 +59,7 @@ import {
 import SearchHeader from "components/SharedComponents/SearchHeader";
 import WarningSheet from "components/SharedComponents/Sheets/WarningSheet";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { ScrollView, View } from "components/styledComponents";
+import { NestableScrollContainer, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
 import isEqual from "lodash/isEqual";
 import type { ExploreStackScreenProps } from "navigation/types";
@@ -93,6 +95,7 @@ const AdvancedSearch = ( ) => {
 
   const { state: v2State, dispatch: dispatchV2 } = useExplore();
   const applySavedSearch = useApplySavedSearch( );
+  const replaceHotspotExplore = useReplaceHotspotExplore( );
   const [initialDraft] = useState( ( ) => draftFromV2State( v2State ) );
   const [draft, dispatch] = useReducer( advancedSearchReducer, initialDraft );
   const {
@@ -198,6 +201,17 @@ const AdvancedSearch = ( ) => {
   } );
 
   const handleSearch = () => {
+    // A reset search from a hotspot's Explore replaces the Hotspots view
+    // underneath it too, rather than leaving a way back to the hotspot
+    if ( viewReset && replaceHotspotExplore( {
+      ...currentSearch,
+      activeTab: OBSERVATIONS_TAB,
+      observationsLayout: "map",
+      key: "",
+      savedAt: Date.now( ),
+    } ) ) {
+      return;
+    }
     if ( viewReset ) {
       writeObservationsLayout( "map" );
     }
@@ -341,7 +355,8 @@ const AdvancedSearch = ( ) => {
         testID="AdvancedSearch.back"
       />
 
-      <ScrollView className="py-4">
+      {/* Nestable so the saved searches list can be dragged to reorder inside it */}
+      <NestableScrollContainer className="py-4">
         <SavedSearches
           currentSearch={currentSavedSearch}
           onDelete={setSearchToDelete}
@@ -713,7 +728,7 @@ const AdvancedSearch = ( ) => {
           </View>
 
         </View>
-      </ScrollView>
+      </NestableScrollContainer>
       <ButtonBar containerClass="bg-white border-t border-lightGray">
         <Button
           disabled={hasError}

@@ -614,6 +614,21 @@ const WildlifeHotspotsScreen = ( {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedHotspotId, stops] );
 
+  // Each newly loaded set of hotspots opens with hotspot 1 selected. Keyed on
+  // the array itself, so deselecting doesn't immediately reselect it.
+  const handleHotspotPressRef = useRef( handleHotspotPress );
+  handleHotspotPressRef.current = handleHotspotPress;
+  const autoSelectedHotspotsRef = useRef<Hotspot[] | null>( null );
+  useEffect( () => {
+    if ( loading || hotspots.length === 0 ) return;
+    if ( autoSelectedHotspotsRef.current === hotspots ) return;
+    autoSelectedHotspotsRef.current = hotspots;
+    // handleHotspotPress toggles, so it isn't called if 1 is already selected
+    if ( selectedHotspotId === hotspots[0].id ) return;
+    handleHotspotPressRef.current( hotspots[0] );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, hotspots] );
+
   const handleAddHotspotToRoute = useCallback( ( hotspot: Hotspot ) => {
     if ( confirmedStopPoints.length < 2 ) return;
     const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };

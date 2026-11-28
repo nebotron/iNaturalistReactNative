@@ -10,7 +10,9 @@ import {
 import type { UserPojo } from "realmModels/User";
 import {
   preferCachedResponse,
+  RECENT_RESULTS_MS,
   requireNetworkResponse,
+  shouldFetchLatest,
   wasServedFromCache,
 } from "sharedHelpers/httpCache";
 import { log } from "sharedHelpers/logger";
@@ -31,13 +33,15 @@ import { useCurrentUser } from "sharedHooks";
 // With `persist: true` the results are saved to disk and shown again after a
 // restart.
 //
-// A page fetched in the last HTTP_CACHE_FRESH_MS comes from the HTTP cache
-// rather than the network, unless `cacheFirst` is false. refreshFirstPage
+// A page in the HTTP cache comes from there rather than the network, unless
+// `cacheFirst` is false. refreshFirstPage
 // always goes to the network.
 //
 // Whenever cached results are shown (saved to disk, from the HTTP cache, or
-// kept in memory since an earlier visit), the latest are fetched in the
-// background and replace them when they arrive.
+// kept in memory since an earlier visit) that were fetched more than
+// RECENT_RESULTS_MS ago, the latest are fetched in the background and replace
+// them when they arrive. Pulling to refresh (refreshFirstPage) always goes to
+// the network.
 //
 // With `noCache` nothing cached is ever shown: results come only from the
 // network, and are dropped from memory once nothing shows them.
@@ -58,10 +62,6 @@ interface AuthenticatedInfiniteQueryOptions {
 }
 
 const logger = log.extend( "useAuthenticatedInfiniteQuery" );
-
-// Results kept in memory this long, by a persisted query whose results React
-// Query itself won't fetch again, are fetched again when shown
-const REVALIDATE_AFTER_MS = 60 * 1000;
 
 // Backoff for fetching the latest results again after that failed
 const RETRY_REVALIDATION_MIN_MS = 5 * 1000;
@@ -149,7 +149,11 @@ const useAuthenticatedInfiniteQuery = (
     if ( noCache ) requireNetworkResponse( signal );
     try {
       const page = await queryFunction( params, { api_token: apiToken, signal } );
-      return { page, fromCache: wasServedFromCache( signal ) };
+      return {
+        page,
+        fromCache: wasServedFromCache( signal ),
+        fetchLatest: shouldFetchLatest( signal ),
+      };
     } finally {
       clear( );
     }
@@ -159,10 +163,10 @@ const useAuthenticatedInfiniteQuery = (
     const hash = Array.isArray( params?.queryKey )
       ? hashKey( params.queryKey )
       : queryHash;
-    const { page, fromCache } = await fetchPage( params, {
+    const { page, fetchLatest } = await fetchPage( params, {
       fromNetwork: revalidated.has( hash ),
     } );
-    if ( fromCache ) needsRevalidation.add( hash );
+    if ( fetchLatest ) needsRevalidation.add( hash );
     return page;
   };
 
@@ -174,11 +178,19 @@ const useAuthenticatedInfiniteQuery = (
       gcTime: PERSISTED_QUERY_TTL_MS,
       initialData: ( ) => {
         const saved = readPersistedQuery( fullQueryKey );
-        if ( saved !== undefined ) needsRevalidation.add( queryHash );
+        const savedAt = readPersistedQueryUpdatedAt( fullQueryKey ) ?? 0;
+        if ( saved !== undefined && Date.now( ) - savedAt >= RECENT_RESULTS_MS ) {
+          needsRevalidation.add( queryHash );
+        }
         return saved;
       },
       initialDataUpdatedAt: ( ) => readPersistedQueryUpdatedAt( fullQueryKey ),
     }
+    : {};
+  // Results fetched in the last RECENT_RESULTS_MS aren't fetched again when
+  // shown again
+  const cacheFirstOptions = cacheFirst && !persist
+    ? { staleTime: RECENT_RESULTS_MS }
     : {};
   const noCacheOptions = noCache
     ? { staleTime: 0, gcTime: 0, refetchOnMount: "always" as const }
@@ -194,6 +206,7 @@ const useAuthenticatedInfiniteQuery = (
     } ),
     retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
     ...persistOptions,
+    ...cacheFirstOptions,
     ...infiniteQueryOptions,
     ...noCacheOptions,
   } );
@@ -279,7 +292,7 @@ const useAuthenticatedInfiniteQuery = (
   useEffect( ( ) => {
     if ( !persist || !enabled ) return;
     const { dataUpdatedAt, data } = queryClient.getQueryState( fullQueryKey ) ?? {};
-    if ( data !== undefined && Date.now( ) - ( dataUpdatedAt ?? 0 ) >= REVALIDATE_AFTER_MS ) {
+    if ( data !== undefined && Date.now( ) - ( dataUpdatedAt ?? 0 ) >= RECENT_RESULTS_MS ) {
       needsRevalidation.add( queryHash );
     }
   // Only when the query is first shown

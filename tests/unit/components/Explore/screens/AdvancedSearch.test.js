@@ -20,6 +20,17 @@ import { renderComponent } from "tests/helpers/render";
 import { savedSearch, setSavedSearches } from "tests/helpers/savedSearch";
 
 const mockGoBack = jest.fn( );
+const mockTabStack = {
+  getState: ( ) => ( {
+    index: 1,
+    routes: [
+      { key: "root-explore", name: "RootExplore" },
+      { key: "hotspot-explore", name: "Explore" },
+    ],
+  } ),
+  dispatch: jest.fn( ),
+  goBack: jest.fn( ),
+};
 const mockPopTo = jest.fn( );
 jest.mock( "@react-navigation/native", ( ) => {
   const actualNav = jest.requireActual( "@react-navigation/native" );
@@ -31,16 +42,19 @@ jest.mock( "@react-navigation/native", ( ) => {
       popTo: mockPopTo,
       push: jest.fn( ),
       canGoBack: ( ) => true,
+      getParent: ( ) => mockTabStack,
     } ),
   };
 } );
 
 const mockDispatch = jest.fn( );
+let mockFromHotspot = false;
 jest.mock( "providers/ExploreContext", ( ) => {
   const actual = jest.requireActual( "providers/ExploreContext" );
   return {
     ...actual,
     useExplore: jest.fn( ),
+    useExploreFromHotspot: ( ) => mockFromHotspot,
   };
 } );
 const { useExplore } = require( "providers/ExploreContext" );
@@ -143,6 +157,9 @@ beforeEach( ( ) => {
   mockGoBack.mockClear( );
   mockPopTo.mockClear( );
   mockDispatch.mockClear( );
+  mockTabStack.dispatch.mockClear( );
+  mockTabStack.goBack.mockClear( );
+  mockFromHotspot = false;
   useCurrentUser.mockReturnValue( CURRENT_USER );
   useIconicTaxa.mockReturnValue( iconicTaxaCollection( [BIRDS, PLANTS] ) );
   setExploreState( );
@@ -494,6 +511,35 @@ describe( "AdvancedSearch screen", ( ) => {
 
       expect( committedSearch( ).activeTab ).toEqual( OBSERVATIONS_TAB );
       expect( zustandStorage.getItem( EXPLORE_LAYOUT_KEY ) ).toEqual( "map" );
+    } );
+
+    it( "replaces the Hotspots view when run from a hotspot's Explore", async ( ) => {
+      mockFromHotspot = true;
+      setExploreState( {
+        subject: { type: "taxon", taxon: TAXON },
+        activeTab: SPECIES_TAB,
+      } );
+      renderComponent( <AdvancedSearch /> );
+
+      await actor.press( screen.getByTestId( "AdvancedSearch.back.reset" ) );
+      await pressSearch( );
+
+      expect( mockDispatch ).not.toHaveBeenCalled( );
+      expect( mockTabStack.dispatch ).toHaveBeenCalledWith( expect.objectContaining( {
+        source: "root-explore",
+        payload: {
+          params: {
+            loadSavedSearch: expect.objectContaining( {
+              subject: null,
+              filters: defaultExploreFilters,
+              activeTab: OBSERVATIONS_TAB,
+              observationsLayout: "map",
+            } ),
+          },
+        },
+      } ) );
+      expect( mockTabStack.goBack ).toHaveBeenCalled( );
+      expect( mockPopTo ).not.toHaveBeenCalled( );
     } );
   } );
 

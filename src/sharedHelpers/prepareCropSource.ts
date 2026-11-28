@@ -6,7 +6,6 @@ import {
   logSubjectDetectionTiming,
   subjectCropFromBounds,
 } from "sharedHelpers/detectSubjectInImage";
-import getCropForUri from "sharedHelpers/getCropForUri";
 import imageFileSize from "sharedHelpers/imageFileSize";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -181,7 +180,9 @@ const prepareCropSource = async (
   return {
     displayUri: sourceUri,
     size,
-    crop: knownCrop ?? await getCropForUri( imageUri, sourceUri, size.w, size.h ),
+    // No detector without the native call, so the whole photo, as when the
+    // detector finds no subject.
+    crop: knownCrop ?? subjectCropFromBounds( null, size.w, size.h ),
   };
 };
 

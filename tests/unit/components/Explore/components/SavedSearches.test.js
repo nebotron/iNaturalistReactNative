@@ -1,4 +1,4 @@
-import { screen, userEvent } from "@testing-library/react-native";
+import { act, screen, userEvent } from "@testing-library/react-native";
 import SavedSearches, { SavedSearchSheets }
   from "components/Explore/components/SavedSearches";
 import initI18next from "i18n/initI18next";
@@ -80,6 +80,18 @@ describe( "SavedSearches", ( ) => {
     expect( searches( ) ).toHaveLength( 1 );
     expect( searches( )[0] ).toMatchObject( { key: search.key, name: "Cup plants" } );
     expect( searches( )[0].subject.taxon.id ).toEqual( 2 );
+  } );
+
+  it( "saves the order a search is dragged into", async ( ) => {
+    setSavedSearches( [savedSearch( 1, "First" ), savedSearch( 2, "Second" )] );
+
+    renderSection( searchFields( savedSearch( 3 ) ) );
+    await screen.findByText( "First" );
+    // The draggable list is a plain FlatList in tests, so finish the drag by hand
+    const [list] = screen.UNSAFE_root.findAll( node => !!node.props.onDragEnd );
+    act( ( ) => list.props.onDragEnd( { data: [...searches( )].reverse( ) } ) );
+
+    expect( searches( ).map( search => search.name ) ).toEqual( ["Second", "First"] );
   } );
 } );
 

@@ -2,11 +2,12 @@ import { MMKV } from "react-native-mmkv";
 import {
   CACHED_AT_HEADER,
   createHttpCache,
-  HTTP_CACHE_FRESH_MS,
   HTTP_CACHE_TTL_MS,
   preferCachedResponse,
+  RECENT_RESULTS_MS,
   requesterOf,
   requireNetworkResponse,
+  shouldFetchLatest,
   wasServedFromCache,
 } from "sharedHelpers/httpCache";
 
@@ -281,42 +282,26 @@ describe( "httpCache", ( ) => {
       expect( await read( await cache.fetch( URL ) ) ).toEqual( { v: 2 } );
     } );
 
-    it( "goes to the network once the cached response is too old", async ( ) => {
+    it( "serves a cached response however old", async ( ) => {
       jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
       const cache = makeCache( );
       await cacheResponse( cache, { v: 1 } );
-      jest.setSystemTime( HTTP_CACHE_FRESH_MS );
-      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
-      expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 2 } );
+      jest.setSystemTime( HTTP_CACHE_TTL_MS - 1 );
+      expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 1 } );
+      expect( network ).toHaveBeenCalledTimes( 1 );
     } );
 
-    it( "serves a cached response as old as the request allows", async ( ) => {
-      jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
-      const cache = makeCache( );
-      await cacheResponse( cache, { v: 1 } );
-      jest.setSystemTime( HTTP_CACHE_FRESH_MS );
-      const maxAge = ( ms: number ) => ( {
-        signal: preferCachedResponse( new AbortController( ).signal, ms ),
-      } );
-      expect( await read( await cache.fetch( URL, maxAge( HTTP_CACHE_FRESH_MS + 1 ) ) ) )
-        .toEqual( { v: 1 } );
-      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
-      expect( await read( await cache.fetch( URL, maxAge( HTTP_CACHE_FRESH_MS ) ) ) )
-        .toEqual( { v: 2 } );
-    } );
-
-    it( "goes to the network after the app changes something", async ( ) => {
+    it( "serves a cached response only as old as the request allows", async ( ) => {
       jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
       const cache = makeCache( );
       await cacheResponse( cache, { v: 1 } );
       jest.setSystemTime( 1000 );
-      network.mockResolvedValueOnce( jsonResponse( { id: 1 } ) );
-      await cache.fetch( "https://api.inaturalist.org/v2/identifications", {
-        method: "POST",
-        body: "{}",
+      const maxAge = ( ms: number ) => ( {
+        signal: preferCachedResponse( new AbortController( ).signal, ms ),
       } );
+      expect( await read( await cache.fetch( URL, maxAge( 1001 ) ) ) ).toEqual( { v: 1 } );
       network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
-      expect( await read( await cache.fetch( URL, cacheFirst( ) ) ) ).toEqual( { v: 2 } );
+      expect( await read( await cache.fetch( URL, maxAge( 1000 ) ) ) ).toEqual( { v: 2 } );
     } );
   } );
 
@@ -337,6 +322,32 @@ describe( "httpCache", ( ) => {
       network.mockRejectedValueOnce( new TypeError( "Network request failed" ) );
       await cache.fetch( URL, { signal: fallbackSignal } );
       expect( wasServedFromCache( fallbackSignal ) ).toBe( true );
+    } );
+  } );
+
+  describe( "shouldFetchLatest", ( ) => {
+    afterEach( ( ) => {
+      jest.useRealTimers( );
+    } );
+
+    it( "is true only for a cached response older than RECENT_RESULTS_MS", async ( ) => {
+      jest.useFakeTimers( { now: 0, doNotFake: ["setTimeout"] } );
+      const cache = makeCache( );
+      const networkSignal = new AbortController( ).signal;
+      network.mockResolvedValueOnce( jsonResponse( { results: [1] } ) );
+      await ( await cache.fetch( URL, { signal: networkSignal } ) ).text( );
+      await settle( );
+      expect( shouldFetchLatest( networkSignal ) ).toBe( false );
+
+      jest.setSystemTime( RECENT_RESULTS_MS - 1 );
+      const recentSignal = preferCachedResponse( new AbortController( ).signal );
+      await cache.fetch( URL, { signal: recentSignal } );
+      expect( shouldFetchLatest( recentSignal ) ).toBe( false );
+
+      jest.setSystemTime( RECENT_RESULTS_MS );
+      const oldSignal = preferCachedResponse( new AbortController( ).signal );
+      await cache.fetch( URL, { signal: oldSignal } );
+      expect( shouldFetchLatest( oldSignal ) ).toBe( true );
     } );
   } );
 

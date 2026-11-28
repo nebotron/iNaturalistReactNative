@@ -2,6 +2,7 @@ import {
   CachesDirectoryPath, mkdir, readFile, unlink, writeFile,
 } from "@dr.pogodin/react-native-fs";
 import { onlineManager } from "@tanstack/react-query";
+import { NativeModules } from "react-native";
 import { MMKV } from "react-native-mmkv";
 
 // A disk cache under fetch: every successful JSON GET is saved, and served
@@ -19,11 +20,6 @@ const MAX_ENTRIES = 500;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 // A response larger than this isn't worth a slot
 const MAX_ENTRY_BYTES = 4 * 1024 * 1024;
-// How old a cached response may be and still be used instead of the network,
-// for requests marked with preferCachedResponse, unless they say otherwise.
-// useAuthenticatedQuery and useAuthenticatedInfiniteQuery mark theirs, show
-// what comes back and fetch the latest in the background.
-export const HTTP_CACHE_FRESH_MS = 48 * 60 * 60 * 1000;
 // Reads and writes arriving together save the index once
 const INDEX_WRITE_DELAY_MS = 1000;
 
@@ -35,13 +31,16 @@ const HTTP_CACHE_PATH = `${CachesDirectoryPath}/inatHttpCache`;
 // Header set on responses served from the cache, holding when they were fetched
 export const CACHED_AT_HEADER = "x-inat-cached-at";
 
-// Signals of requests that take a cached response over the network, with how
-// old it may be. Marking the signal rather than the request lets callers opt
-// in through inatjs, which passes the signal on but not custom headers.
+// Signals of requests that take any cached response over the network, or one
+// no older than maxAgeMs. useAuthenticatedQuery and
+// useAuthenticatedInfiniteQuery mark theirs, show what comes back and fetch
+// the latest in the background. Marking the signal rather than the request
+// lets callers opt in through inatjs, which passes the signal on but not
+// custom headers.
 const cacheFirstSignals = new WeakMap<AbortSignal, number>( );
 export const preferCachedResponse = (
   signal: AbortSignal,
-  maxAgeMs = HTTP_CACHE_FRESH_MS,
+  maxAgeMs = Infinity,
 ) => {
   cacheFirstSignals.set( signal, maxAgeMs );
   return signal;
@@ -56,11 +55,24 @@ export const requireNetworkResponse = ( signal: AbortSignal ) => {
 };
 
 // Signals of requests that were answered from the cache, so a caller can show
-// the cached results and fetch the latest in the background
-const servedFromCacheSignals = new WeakSet<AbortSignal>( );
+// the cached results and fetch the latest in the background, with when they
+// were fetched
+const servedFromCacheSignals = new WeakMap<AbortSignal, number>( );
 export const wasServedFromCache = ( signal: AbortSignal | undefined ) => (
   !!signal && servedFromCacheSignals.has( signal )
 );
+
+// Results fetched this recently aren't fetched again in the background
+export const RECENT_RESULTS_MS = 10 * 60 * 1000;
+
+// Whether a request was answered from the cache with a response old enough
+// that the latest should be fetched in the background
+export const shouldFetchLatest = ( signal: AbortSignal | undefined ) => {
+  const fetchedAt = signal
+    ? servedFromCacheSignals.get( signal )
+    : undefined;
+  return fetchedAt !== undefined && Date.now( ) - fetchedAt >= RECENT_RESULTS_MS;
+};
 
 interface IndexEntry {
   // Name of the file holding the body
@@ -82,12 +94,89 @@ interface HttpCacheStore {
   clear: ( ) => Promise<void>;
 }
 
+// iOS reads and writes the bodies natively (TextFile.m). react-native-fs
+// passes file contents as base64, so through it every body is converted to
+// UTF-8 and base64 in JavaScript, which cost Explore up to half its JS time.
+// Android has no TextFile module yet and keeps using react-native-fs.
+const { TextFile } = NativeModules as {
+  TextFile?: {
+    readUtf8: ( path: string ) => Promise<string>;
+    writeUtf8: ( path: string, contents: string ) => Promise<void>;
+  };
+};
+
+// Bodies read and written since the last takeHttpCacheStats, for the
+// http_cache_summary log line (httpCacheStats.ts). Lengths are in characters.
+interface Tally { n: number; chars: number; ms: number; maxMs: number }
+export interface HttpCacheStats { native: boolean; read: Tally; write: Tally; failures: number }
+
+const emptyTally = ( ): Tally => ( {
+  n: 0, chars: 0, ms: 0, maxMs: 0,
+} );
+const emptyStats = ( ): HttpCacheStats => ( {
+  native: !!TextFile, read: emptyTally( ), write: emptyTally( ), failures: 0,
+} );
+
+let stats = emptyStats( );
+let statsListener: ( ( ) => void ) | undefined;
+
+export const takeHttpCacheStats = ( ): HttpCacheStats => {
+  const taken = stats;
+  stats = emptyStats( );
+  return taken;
+};
+
+// Called after every body read or written, so the summary can be logged
+// without a timer. Set by httpCacheStats.ts, since this module can't import
+// the logger.
+export const setHttpCacheStatsListener = ( listener: ( ) => void ) => {
+  statsListener = listener;
+};
+
+const timed = async <T>(
+  kind: "read" | "write",
+  operation: ( ) => Promise<T>,
+  chars: ( result: T ) => number,
+): Promise<T> => {
+  const start = Date.now( );
+  try {
+    const result = await operation( );
+    const ms = Date.now( ) - start;
+    const tally = stats[kind];
+    tally.n += 1;
+    tally.chars += chars( result );
+    tally.ms += ms;
+    tally.maxMs = Math.max( tally.maxMs, ms );
+    return result;
+  } catch ( error ) {
+    stats.failures += 1;
+    throw error;
+  } finally {
+    statsListener?.( );
+  }
+};
+
 const fileStore: HttpCacheStore = {
-  read: file => readFile( `${HTTP_CACHE_PATH}/${file}`, "utf8" ),
-  write: async ( file, body ) => {
-    await mkdir( HTTP_CACHE_PATH );
-    await writeFile( `${HTTP_CACHE_PATH}/${file}`, body, "utf8" );
-  },
+  read: file => timed(
+    "read",
+    ( ) => ( TextFile
+      ? TextFile.readUtf8( `${HTTP_CACHE_PATH}/${file}` )
+      : readFile( `${HTTP_CACHE_PATH}/${file}`, "utf8" ) ),
+    body => body.length,
+  ),
+  write: ( file, body ) => timed(
+    "write",
+    async ( ) => {
+      if ( TextFile ) {
+        // Creates the directory itself
+        await TextFile.writeUtf8( `${HTTP_CACHE_PATH}/${file}`, body );
+      } else {
+        await mkdir( HTTP_CACHE_PATH );
+        await writeFile( `${HTTP_CACHE_PATH}/${file}`, body, "utf8" );
+      }
+    },
+    ( ) => body.length,
+  ),
   remove: async file => {
     await unlink( `${HTTP_CACHE_PATH}/${file}` ).catch( ( ) => undefined );
   },
@@ -282,10 +371,6 @@ export const createHttpCache = ( {
     scheduleIndexWrite( );
   };
 
-  // When the app last changed something on the server; responses fetched
-  // before then may be out of date, so they aren't used ahead of the network
-  let lastWriteAt = 0;
-
   // When an anonymous request misses, the key of the latest response to the
   // same request made as someone. A signed-in user's requests go out without
   // a token once it expires and can't be refreshed, as when they've been
@@ -310,7 +395,7 @@ export const createHttpCache = ( {
   };
 
   // The cached response, if there is one. With maxAgeMs, only one fetched
-  // within it and since the last write. With anyRequester, an anonymous
+  // within it. With anyRequester, an anonymous
   // request can be answered with a response fetched as the user.
   const serve = async (
     requestKey: string,
@@ -326,9 +411,7 @@ export const createHttpCache = ( {
       scheduleIndexWrite( );
       return null;
     }
-    if ( maxAgeMs !== undefined && ( age >= maxAgeMs || entry.fetchedAt < lastWriteAt ) ) {
-      return null;
-    }
+    if ( maxAgeMs !== undefined && age >= maxAgeMs ) return null;
     let body: string;
     try {
       body = await store.read( entry.file );
@@ -368,16 +451,17 @@ export const createHttpCache = ( {
     init?: Parameters<typeof fetch>[1],
   ): Promise<Response> => {
     const key = describeRequest( input, init );
-    if ( !key ) {
-      const method = ( init?.method ?? "GET" ).toUpperCase( );
-      if ( method !== "GET" && method !== "HEAD" ) lastWriteAt = Date.now( );
-      return networkFetch( input, init );
-    }
+    if ( !key ) return networkFetch( input, init );
 
     const signal = init?.signal ?? undefined;
     const networkOnly = !!signal && networkOnlySignals.has( signal );
     const served = ( cached: Response | null ) => {
-      if ( cached && signal ) servedFromCacheSignals.add( signal );
+      if ( cached && signal ) {
+        servedFromCacheSignals.set(
+          signal,
+          Number( cached.headers.get( CACHED_AT_HEADER ) ) || 0,
+        );
+      }
       return cached;
     };
 

@@ -96,6 +96,15 @@ describe( "exploreSavedSearches", ( ) => {
     expect( saved( ).searches ).toEqual( [] );
   } );
 
+  it( "reorders searches by key, keeping any left out after the rest", ( ) => {
+    saved( ).saveSearch( { ...search( { subject: taxonSubject( 1 ) } ), key: "a" } );
+    saved( ).saveSearch( { ...search( { subject: taxonSubject( 2 ) } ), key: "b" } );
+    saved( ).saveSearch( { ...search( { subject: taxonSubject( 3 ) } ), key: "c" } );
+    saved( ).reorderSearches( ["a", "c", "gone"] );
+
+    expect( saved( ).searches.map( s => s.key ) ).toEqual( ["a", "c", "b"] );
+  } );
+
   it( "clears the whole list", ( ) => {
     saved( ).saveSearch( search( ) );
     saved( ).saveSearch( search( { subject: taxonSubject( 13 ) } ) );

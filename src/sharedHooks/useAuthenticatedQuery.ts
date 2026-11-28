@@ -4,8 +4,9 @@ import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService
 import { useEffect, useState } from "react";
 import {
   preferCachedResponse,
+  RECENT_RESULTS_MS,
   requireNetworkResponse,
-  wasServedFromCache,
+  shouldFetchLatest,
 } from "sharedHelpers/httpCache";
 import { log } from "sharedHelpers/logger";
 import {
@@ -49,9 +50,11 @@ export type QueryFunction<Response>
 // Should work like React Query's useQuery except it calls the queryFunction
 // with an object that includes the JWT.
 //
-// Results fetched in the last HTTP_CACHE_FRESH_MS come from the HTTP cache,
-// as they do when the network fails, and are shown at once while the latest
-// are fetched in the background and replace them when they arrive.
+// Results in the HTTP cache come from there, as they do when the network
+// fails, and are shown at once. Unless they were fetched in the last
+// RECENT_RESULTS_MS, the latest are fetched in the background and replace
+// them when they arrive. A refetch (say pulling to refresh) of results
+// already shown goes to the network.
 const useAuthenticatedQuery = <Response>(
   queryKey: QueryKey,
   queryFunction: QueryFunction<Response>,
@@ -97,18 +100,19 @@ const useAuthenticatedQuery = <Response>(
         markSignal?.( signal );
         try {
           const response = await queryFunction( { api_token: apiToken, signal } );
-          return { response, fromCache: wasServedFromCache( signal ) };
+          return { response, fetchLatest: shouldFetchLatest( signal ) };
         } finally {
           clear( );
         }
       };
-      // Results already shown stay while React Query fetches them again
-      const { response, fromCache } = await fetchResponse(
+      // Results already shown stay while React Query fetches them again, as
+      // when pulling to refresh, from the network
+      const { response, fetchLatest } = await fetchResponse(
         cacheFirst && queryClient.getQueryData( key ) === undefined
           ? preferCachedResponse
           : undefined,
       );
-      if ( fromCache && onlineManager.isOnline( ) ) {
+      if ( fetchLatest && onlineManager.isOnline( ) ) {
         fetchResponse( requireNetworkResponse )
           .then( latest => queryClient.setQueryData( key, latest.response ) )
           .catch( error => {
@@ -117,6 +121,9 @@ const useAuthenticatedQuery = <Response>(
       }
       return response;
     },
+    // Results fetched in the last RECENT_RESULTS_MS aren't fetched again
+    // when shown again
+    ...( cacheFirst && { staleTime: RECENT_RESULTS_MS } ),
     ...useQueryOptions,
     retry: queryOptions.retry !== false
       ? ( failureCount, error ) => reactQueryRetry( failureCount, error, {

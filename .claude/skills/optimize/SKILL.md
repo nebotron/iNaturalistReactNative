@@ -113,16 +113,21 @@ and what question it answers. Follow existing patterns:
 
 ## 5. Report
 
-A **numbered list**, biggest expected savings first. Each item:
+One **numbered list** holding every suggested change, diagnostics included,
+biggest expected savings first (a diagnostic ranks by the size of the cost it
+would attribute). Each item:
 
-1. **Area** (CPU / memory / battery / latency / disk / network / size) — the
-   measurement (number, source, builds), the cause at `file:line`, the
-   proposed change, its risk, and how to confirm it once shipped (which log prefix or
-   MetricKit column should move).
+1. **Area** (CPU / memory / battery / latency / disk / network / size), and
+   **Diagnostic** for new logging — the measurement (number, source, builds),
+   the cause at `file:line`, the proposed change (for a diagnostic: what it
+   logs and the question it answers), its risk, and how to confirm it once
+   shipped (which log prefix or MetricKit column should move).
 
-Mark items that rest on a single data point, and list proposed diagnostics
-separately with what each would answer. Ask which proposals to implement; the
-notes below record earlier runs and are updated only when asked.
+Mark items that rest on a single data point. Leave out anything that isn't a
+change someone could make now: costs waiting on a diagnostic that already
+ships, findings with no proposed change, and "nothing to do" observations.
+Ask which items to implement, by number; the notes below record earlier runs
+and are updated only when asked.
 
 ---
 

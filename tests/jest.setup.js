@@ -75,7 +75,7 @@ jest.mock( "react-native-worklets", () => require( "react-native-worklets/src/mo
 // undefined). FlatList stand-in is enough for evidence-list integration tests.
 jest.mock( "react-native-draggable-flatlist", () => {
   const React = jest.requireActual( "react" );
-  const { FlatList, View } = jest.requireActual( "react-native" );
+  const { FlatList, ScrollView, View } = jest.requireActual( "react-native" );
 
   const DraggableFlatList = React.forwardRef( ( props, ref ) => (
     React.createElement( FlatList, { ...props, ref } )
@@ -88,6 +88,8 @@ jest.mock( "react-native-draggable-flatlist", () => {
   return {
     __esModule: true,
     default: DraggableFlatList,
+    NestableDraggableFlatList: DraggableFlatList,
+    NestableScrollContainer: ScrollView,
     ScaleDecorator,
   };
 } );

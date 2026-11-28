@@ -28,9 +28,13 @@ interface Props {
     uri: string;
   };
   white?: boolean;
-  // Lets a two-finger pinch zoom and pan the photo, starting at zoomCrop and
-  // reporting its new framing through onZoomCropChange (Group Photos, which
-  // crops the file itself).
+  // Lets a two-finger pinch zoom and pan the photo even without subject
+  // detection; the photo starts whole (or at a framing the user logged
+  // earlier) and a pinch is logged as its framing.
+  zoomable?: boolean;
+  // Hands the framing to the caller instead: the photo starts at zoomCrop
+  // and a pinch reports its new framing through onZoomCropChange rather than
+  // logging it (Group Photos, which crops the file itself).
   zoomCrop?: NormalizedCrop | null;
   onZoomCropChange?: ( crop: NormalizedCrop ) => void;
   // Exposure multiplier drawn over a zoomable photo (1 = unchanged)
@@ -54,6 +58,7 @@ const ObsImage = ( {
   uri,
   white = false,
   iconicTaxonIconSize,
+  zoomable = false,
   zoomCrop,
   onZoomCropChange,
   brightness,
@@ -63,16 +68,19 @@ const ObsImage = ( {
   );
 
   const cropControlled = !!onZoomCropChange;
-  const zoomEnabled = autoDetectSubject || cropControlled;
+  const zoomEnabled = autoDetectSubject || zoomable || cropControlled;
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );
   }, [] );
 
   const detection = useSubjectDetectionForUri(
-    autoDetectSubject && !cropControlled && uri?.uri
+    zoomEnabled && !cropControlled && uri?.uri
       ? uri.uri
       : undefined,
+    // Without autoDetectSubject the detector never runs; only a crop the user
+    // framed by hand is honored.
+    { loggedCropOnly: !autoDetectSubject },
   );
 
   const displayUri = uri?.uri;
@@ -89,11 +97,12 @@ const ObsImage = ( {
   // Once the tile is measured (and, with autoDetectSubject, subject detection
   // resolves) render the photo through the shared image-zoom engine so a
   // two-finger gesture zooms and pans it exactly like the crop editor,
-  // MediaViewer and IDing game.
+  // MediaViewer and IDing game. A zoomable photo without detection starts out
+  // whole and picks up a hand-framed crop when it resolves.
   const showZoomable = Boolean(
     ( autoDetectSubject
       ? detection
-      : cropControlled )
+      : zoomable || cropControlled )
     && containerSize
     && uri?.uri,
   );
