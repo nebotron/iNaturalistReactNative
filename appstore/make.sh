@@ -62,7 +62,7 @@ fi
 # Signed on a copy, so a build passed in with --app is left as it was
 rm -rf "$OUT/app" && mkdir -p "$OUT/app" && ditto "$APP" "$OUT/app/$( basename "$APP" )"
 APP="$OUT/app/$( basename "$APP" )"
-python3 appstore/bin/sign_simulator_app.py "$APP" "$( conf 'c["entitlements"]' )" "$( conf 'c["team_id"]' )"
+python3 appstore/bin/sign_simulator_app.py "$APP" "$( conf 'c["team_id"]' )"
 APP_ID="$( /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" )"
 echo "App $APP_ID at $APP"
 
@@ -97,6 +97,13 @@ for service in location-always photos camera microphone; do
   xcrun simctl privacy "$UDID" grant "$service" "$APP_ID"
 done
 xcrun simctl addmedia "$UDID" "$OUT"/media/*.jpg
+# Fail here, not scenes later, if the simulator won't run this build
+if ! xcrun simctl launch "$UDID" "$APP_ID" > "$OUT/debug/launch.txt" 2>&1; then
+  cat "$OUT/debug/launch.txt" >&2
+  echo "The simulator won't launch $APP_ID" >&2
+  exit 1
+fi
+xcrun simctl terminate "$UDID" "$APP_ID" || true
 
 run_flow() {
   local name="$1" flow="$2"; shift 2

@@ -2,7 +2,6 @@
   "app_store_app_id": "6811262182",
   "version": "1.0",
   "team_id": "DVURLJZFH6",
-  "entitlements": "ios/iNaturalistReactNative/iNaturalistReactNativeFork.entitlements",
   "locale": "en-US",
   "device": "iPhone 17 Pro Max",
   "display_type": "APP_IPHONE_67",

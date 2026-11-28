@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Signs a simulator build ad hoc with the app's entitlements.
+"""Signs a simulator build ad hoc, as Xcode's "Sign to Run Locally" does.
 
 A simulator build made with CODE_SIGNING_ALLOWED=NO has no entitlements, and
 without an application identifier every keychain call fails ("A required
 entitlement isn't present"), which takes the API's auth check, and so every
 request, down with it. This signs the nested code, then the app with the
-project's entitlements file resolved for TEAM_ID, plus the application
-identifier and keychain group a provisioned build would get.
+application identifier and keychain group alone. The project's other
+entitlements (iCloud, app groups) need a provisioning profile, and with them
+in the signature SpringBoard refuses to launch the app.
 
-    sign_simulator_app.py APP ENTITLEMENTS TEAM_ID
+    sign_simulator_app.py APP TEAM_ID
 """
 import plistlib
 import subprocess
@@ -24,30 +25,14 @@ def sign(path: Path, entitlements: Path | None = None) -> None:
     subprocess.run(command + [str(path)], check=True)
 
 
-def resolve(value, substitutions: dict):
-    if isinstance(value, str):
-        for key, replacement in substitutions.items():
-            value = value.replace(key, replacement)
-        return value
-    if isinstance(value, list):
-        return [resolve(v, substitutions) for v in value]
-    if isinstance(value, dict):
-        return {k: resolve(v, substitutions) for k, v in value.items()}
-    return value
-
-
 def main() -> None:
-    app, source, team = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
-    info = plistlib.loads((app / "Info.plist").read_bytes())
-    bundle_id = info["CFBundleIdentifier"]
-    entitlements = resolve(plistlib.loads(source.read_bytes()), {
-        "$(CFBundleIdentifier)": bundle_id,
-        "$(TeamIdentifierPrefix)": f"{team}.",
-        "$(AppIdentifierPrefix)": f"{team}.",
-    })
-    entitlements["application-identifier"] = f"{team}.{bundle_id}"
-    entitlements["com.apple.developer.team-identifier"] = team
-    entitlements.setdefault("keychain-access-groups", [f"{team}.{bundle_id}"])
+    app, team = Path(sys.argv[1]), sys.argv[2]
+    bundle_id = plistlib.loads((app / "Info.plist").read_bytes())["CFBundleIdentifier"]
+    entitlements = {
+        "application-identifier": f"{team}.{bundle_id}",
+        "keychain-access-groups": [f"{team}.{bundle_id}"],
+        "get-task-allow": True,
+    }
 
     # Innermost first: codesign won't seal a bundle around unsigned code
     nested = sorted(
