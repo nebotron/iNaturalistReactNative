@@ -47,22 +47,8 @@ PY="$OUT/venv/bin/python"
 
 if [ -z "$APP" ]; then
   echo "== Building the app for the simulator"
-  xcodebuild build \
-    -workspace ios/iNaturalistReactNative.xcworkspace \
-    -scheme iNaturalistReactNative \
-    -configuration Release \
-    -sdk iphonesimulator \
-    -destination 'generic/platform=iOS Simulator' \
-    -derivedDataPath ios/build \
-    CODE_SIGNING_ALLOWED=NO \
-    COMPILER_INDEX_STORE_ENABLE=NO \
-    | tail -n 40
-  APP="$REPO/ios/build/Build/Products/Release-iphonesimulator/iNaturalistReactNative.app"
+  APP="$( appstore/bin/build_simulator_app.sh | tail -n 1 )"
 fi
-# Signed on a copy, so a build passed in with --app is left as it was
-rm -rf "$OUT/app" && mkdir -p "$OUT/app" && ditto "$APP" "$OUT/app/$( basename "$APP" )"
-APP="$OUT/app/$( basename "$APP" )"
-python3 appstore/bin/sign_simulator_app.py "$APP" "$( conf 'c["team_id"]' )"
 APP_ID="$( /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" )"
 echo "App $APP_ID at $APP"
 

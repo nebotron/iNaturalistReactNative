@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/app.zip
-        key: simulator-app-${{ hashFiles( 'src/**', 'ios/**', 'assets/**', 'index.js', 'app.json', 'babel.config.js', 'metro.config.js', 'package-lock.json', 'patches/**' ) }}
+        key: simulator-app-${{ hashFiles( 'appstore/bin/build_simulator_app.sh', 'src/**', 'ios/**', 'assets/**', 'index.js', 'app.json', 'babel.config.js', 'metro.config.js', 'package-lock.json', 'patches/**' ) }}
 
     - name: Check that every secret is present
       if: steps.app.outputs.cache-hit != 'true'
@@ -133,25 +133,9 @@ jobs:
       if: steps.app.outputs.cache-hit != 'true'
       run: cd ios && pod install
 
-    # Release, so the JS bundle is inside the app and no Metro is needed, and
-    # there's no dev menu or LogBox in the shots. Simulator apps needn't be
-    # signed.
     - name: Build for the simulator
       if: steps.app.outputs.cache-hit != 'true'
-      run: |
-        set -o pipefail
-        xcodebuild build \
-          -workspace ios/iNaturalistReactNative.xcworkspace \
-          -scheme iNaturalistReactNative \
-          -configuration Release \
-          -sdk iphonesimulator \
-          -destination 'generic/platform=iOS Simulator' \
-          -derivedDataPath ios/build \
-          CODE_SIGNING_ALLOWED=NO \
-          COMPILER_INDEX_STORE_ENABLE=NO
-        ditto -c -k --keepParent \
-          ios/build/Build/Products/Release-iphonesimulator/iNaturalistReactNative.app \
-          "$RUNNER_TEMP/app.zip"
+      run: appstore/bin/build_simulator_app.sh "$RUNNER_TEMP/app.zip"
 
     - uses: actions/upload-artifact@v4
       with:
