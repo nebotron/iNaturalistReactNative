@@ -6,12 +6,18 @@ import {
   logSubjectDetectionTiming,
   subjectCropFromBounds,
 } from "sharedHelpers/detectSubjectInImage";
-import getCropForUri from "sharedHelpers/getCropForUri";
 import imageFileSize from "sharedHelpers/imageFileSize";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 
 const logger = log.extend( "prepareCropSource" );
+
+// When the detector finds no subject, the cropper opens with the whole photo
+// inside the crop square. Saliency only stands in when the subject detector
+// itself found nothing, so its guess counts as no subject here too.
+const WHOLE_IMAGE: NormalizedCrop = {
+  x: 0, y: 0, w: 1, h: 1,
+};
 
 // Longest side of the file the cropper displays. Large enough to never
 // downscale, so the cropper draws the photo at full resolution.
@@ -165,7 +171,9 @@ const prepareCropSource = async (
     return {
       displayUri: prepared.displayUri,
       size,
-      crop: knownCrop ?? subjectCropFromBounds( prepared.bounds, size.w, size.h ),
+      crop: knownCrop ?? ( prepared.bounds?.saliency
+        ? { ...WHOLE_IMAGE }
+        : subjectCropFromBounds( prepared.bounds, size.w, size.h ) ),
       stageMs: prepared.stageMs && {
         ...prepared.stageMs,
         ...( prepared.bounds?.detectMs !== undefined && { detect: prepared.bounds.detectMs } ),
@@ -181,7 +189,8 @@ const prepareCropSource = async (
   return {
     displayUri: sourceUri,
     size,
-    crop: knownCrop ?? await getCropForUri( imageUri, sourceUri, size.w, size.h ),
+    // No detector without the native call.
+    crop: knownCrop ?? { ...WHOLE_IMAGE },
   };
 };
 
