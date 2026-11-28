@@ -164,18 +164,27 @@ export const mirror = ( ): Promise<void> => {
     const next: Record<string, string> = {};
     const changed: Record<string, string> = {};
     let total = 0;
+    const leftOut: Record<string, number> = {};
     Object.entries( snapshot( ) ).forEach( ( [key, value] ) => {
-      total += key.length + value.length;
-      if ( total > MAX_TOTAL_CHARS ) {
+      const size = key.length + value.length;
+      // A value that doesn't fit is left out on its own. Counting it anyway
+      // left out every key after it too, however small (a 1.1 MB
+      // removedGroupPhotoUris pushed the total to 1.6M chars, Nov 25-27, so
+      // the usb-import and restored-device-photos keys never went up)
+      if ( total + size > MAX_TOTAL_CHARS ) {
+        leftOut[key] = size;
         // Leave whatever iCloud already has for it
         if ( mirrored[key] ) next[key] = mirrored[key];
         return;
       }
+      total += size;
       next[key] = hash( value );
       if ( mirrored[key] !== next[key] ) changed[key] = value;
     } );
-    if ( total > MAX_TOTAL_CHARS ) {
-      logger.warn( `Backup is ${total} chars, past ${MAX_TOTAL_CHARS}; not all of it was sent` );
+    if ( Object.keys( leftOut ).length > 0 ) {
+      logger.warn(
+        `Backup is past ${MAX_TOTAL_CHARS} chars; left out ${JSON.stringify( leftOut )}`,
+      );
     }
     const removals = Object.keys( mirrored ).filter( key => !( key in next ) );
     if ( Object.keys( changed ).length > 0 || removals.length > 0 ) {

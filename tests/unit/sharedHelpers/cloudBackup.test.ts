@@ -156,6 +156,20 @@ describe( "cloudBackup", ( ) => {
     expect( cloud.update ).toHaveBeenCalledWith( { "tunable-params/hotspotRadius": "7" }, [] );
   } );
 
+  it( "leaves out only what doesn't fit, not every key after it", async ( ) => {
+    local( ).set( "persisted-zustand.layout", "{}" );
+    local( ).set( "removedGroupPhotoUris", JSON.stringify( ["x".repeat( 900_000 )] ) );
+    local( "install-data" ).set( "onboardingShown", true );
+    local( "usb-import" ).set( "importedNames", "[\"DCIM/1.JPG\"]" );
+    await start( load( ) );
+
+    expect( icloud ).toEqual( {
+      "default/persisted-zustand.layout": "{}",
+      "install-data/onboardingShown": "true",
+      "usb-import/importedNames": "[\"DCIM/1.JPG\"]",
+    } );
+  } );
+
   it( "clears from iCloud what sign-out clears locally", async ( ) => {
     local( ).set( "persisted-zustand.layout", "{}" );
     local( ).set( "persisted-zustand.exploreSavedSearches", "{\"searches\":[]}" );
