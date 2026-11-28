@@ -11,7 +11,6 @@ import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
 import {
-  preferCachedResponse,
   requireNetworkResponse,
   wasServedFromCache,
 } from "sharedHelpers/httpCache";
@@ -121,14 +120,12 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
   useEffect( ( ) => {
     if ( taxonQuery.length === 0 || !isConnected ) return ( ) => undefined;
     let isSubscribed = true;
-    const fetchRemoteTaxa = async ( preferCache: boolean ) => {
+    const fetchRemoteTaxa = async ( fromCacheIfRecent: boolean ) => {
       const apiToken = await getJWT( );
       const { signal, clear } = createRequestTimeoutSignal( );
-      if ( preferCache ) {
-        preferCachedResponse( signal );
-      } else {
-        requireNetworkResponse( signal );
-      }
+      // A recent search comes from the cache (see httpCache), the latest
+      // from the network
+      if ( !fromCacheIfRecent ) requireNetworkResponse( signal );
       try {
         const remoteTaxa: ApiTaxon[] | null = await searchTaxa(
           { q: taxonQuery },

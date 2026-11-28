@@ -28,11 +28,7 @@ const useUserSearch = ( query: string ) => {
       },
       optsWithAuth,
     ),
-    {
-      enabled: shouldFetch,
-      // A user searched before shows at once while the latest loads
-      cacheFirst: true,
-    },
+    { enabled: shouldFetch },
   );
 
   return {

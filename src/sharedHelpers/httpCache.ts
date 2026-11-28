@@ -9,7 +9,8 @@ import { MMKV } from "react-native-mmkv";
 // keeps whatever was recently viewed (Explore's tabs, the map's place, taxa,
 // users...) usable offline without each screen saving its own results. Online,
 // requests go to the network first, unless the caller marked the request's
-// signal with preferCachedResponse and a fresh enough copy is cached. A signal
+// signal with preferCachedResponse, or the request is a search, and a fresh
+// enough copy is cached. A signal
 // marked with requireNetworkResponse never gets a cached response.
 
 // Entries not fetched or read for this long are dropped
@@ -42,6 +43,20 @@ export const preferCachedResponse = (
   maxAgeMs = HTTP_CACHE_FRESH_MS,
 ) => {
   cacheFirstSignals.set( signal, maxAgeMs );
+  return signal;
+};
+
+// A search (a query in `q`, or a /search or /autocomplete endpoint) answered
+// recently is answered from the cache, as preferCachedResponse would, so the
+// results show at once while the caller fetches the latest. Only requests with
+// a signal, so the caller can tell with wasServedFromCache.
+const SEARCH_REQUEST = /[?&]q=[^&\s]|"q":"[^"]|\/(search|autocomplete)(\/|\?|\s|$)/;
+
+// Signals of requests that go to the network first even when they're a
+// search, falling back to the cache only as other requests do
+const networkFirstSignals = new WeakSet<AbortSignal>( );
+export const preferNetworkResponse = ( signal: AbortSignal ) => {
+  networkFirstSignals.add( signal );
   return signal;
 };
 
@@ -385,8 +400,12 @@ export const createHttpCache = ( {
     } else if ( !isOnline( ) ) {
       const cached = served( await serve( key, { anyRequester: true } ) );
       if ( cached ) return cached;
-    } else if ( signal && cacheFirstSignals.has( signal ) ) {
-      const cached = served( await serve( key, { maxAgeMs: cacheFirstSignals.get( signal ) } ) );
+    } else if ( signal && (
+      cacheFirstSignals.has( signal )
+      || ( !networkFirstSignals.has( signal ) && SEARCH_REQUEST.test( key ) )
+    ) ) {
+      const maxAgeMs = cacheFirstSignals.get( signal ) ?? HTTP_CACHE_FRESH_MS;
+      const cached = served( await serve( key, { maxAgeMs } ) );
       if ( cached ) return cached;
     }
 

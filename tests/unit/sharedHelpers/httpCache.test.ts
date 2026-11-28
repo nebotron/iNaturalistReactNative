@@ -5,6 +5,7 @@ import {
   HTTP_CACHE_FRESH_MS,
   HTTP_CACHE_TTL_MS,
   preferCachedResponse,
+  preferNetworkResponse,
   requesterOf,
   requireNetworkResponse,
   wasServedFromCache,
@@ -250,6 +251,55 @@ describe( "httpCache", ( ) => {
     await cache.clear( );
     network.mockRejectedValueOnce( new TypeError( "Network request failed" ) );
     await expect( cache.fetch( URL ) ).rejects.toThrow( );
+  } );
+
+  describe( "searches", ( ) => {
+    const SEARCH_URL = "https://api.inaturalist.org/v2/search?q=oak&sources=places";
+    const withSignal = ( ) => ( { signal: new AbortController( ).signal } );
+
+    const cacheSearch = async ( cache: ReturnType<typeof makeCache>, url: string ) => {
+      network.mockResolvedValueOnce( jsonResponse( { v: 1 } ) );
+      await read( await cache.fetch( url, withSignal( ) ) );
+      await settle( );
+    };
+
+    it.each( [
+      SEARCH_URL,
+      "https://api.inaturalist.org/v2/taxa?q=oak",
+      "https://api.inaturalist.org/v1/taxa/autocomplete?per_page=10",
+    ] )( "serves a recent search of %s from the cache", async url => {
+      const cache = makeCache( );
+      await cacheSearch( cache, url );
+      const init = withSignal( );
+      expect( await read( await cache.fetch( url, init ) ) ).toEqual( { v: 1 } );
+      expect( wasServedFromCache( init.signal ) ).toBe( true );
+      expect( network ).toHaveBeenCalledTimes( 1 );
+    } );
+
+    it( "goes to the network for other requests", async ( ) => {
+      const cache = makeCache( );
+      await cacheSearch( cache, URL );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      expect( await read( await cache.fetch( URL, withSignal( ) ) ) ).toEqual( { v: 2 } );
+    } );
+
+    it( "goes to the network when asked to", async ( ) => {
+      const cache = makeCache( );
+      await cacheSearch( cache, SEARCH_URL );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      const networkFirst = { signal: preferNetworkResponse( new AbortController( ).signal ) };
+      expect( await read( await cache.fetch( SEARCH_URL, networkFirst ) ) ).toEqual( { v: 2 } );
+      network.mockResolvedValueOnce( jsonResponse( { v: 3 } ) );
+      const networkOnly = { signal: requireNetworkResponse( new AbortController( ).signal ) };
+      expect( await read( await cache.fetch( SEARCH_URL, networkOnly ) ) ).toEqual( { v: 3 } );
+    } );
+
+    it( "goes to the network for a search without a signal", async ( ) => {
+      const cache = makeCache( );
+      await cacheSearch( cache, SEARCH_URL );
+      network.mockResolvedValueOnce( jsonResponse( { v: 2 } ) );
+      expect( await read( await cache.fetch( SEARCH_URL ) ) ).toEqual( { v: 2 } );
+    } );
   } );
 
   describe( "preferCachedResponse", ( ) => {
