@@ -74,8 +74,10 @@ export interface MyObservationsSlice {
   setTaxonomicFetchCheckedFilterKey: ( _filterKey: string | null ) => void;
 
   // Scroll position so we can put the user back where they were when they
-  // return from the NoBottomTabStackNavigator.
-  myObsOffset: number;
+  // return from the NoBottomTabStackNavigator. The live offset changes on every
+  // scroll event and nothing renders it, so it isn't state: a set( ) per event
+  // ran every store subscriber's selector and persist's partialize (~4% of all
+  // sampled JS CPU in js_cpu_summary/cpu_profile, Nov 25-27).
   setMyObsOffset: ( _newOffset: number ) => void;
   myObsOffsetToRestore: number;
   setMyObsOffsetToRestore: ( ) => void;
@@ -95,7 +97,9 @@ export interface MyObservationsSlice {
   setNumOfUserSpecies: ( _newNum: number ) => void;
 }
 
-const createMyObservationsSlice: StateCreator<MyObservationsSlice> = ( set, get ) => ( {
+let liveMyObsOffset = 0;
+
+const createMyObservationsSlice: StateCreator<MyObservationsSlice> = set => ( {
   myObservations: initialMyObservationsState,
   updateMyObservations: updater => set( state => {
     const myObservations = updater( state.myObservations );
@@ -126,10 +130,9 @@ const createMyObservationsSlice: StateCreator<MyObservationsSlice> = ( set, get 
     taxonomicFetchCheckedFilterKey: filterKey,
   } ),
 
-  myObsOffset: 0,
-  setMyObsOffset: newOffset => set( { myObsOffset: newOffset } ),
+  setMyObsOffset: newOffset => { liveMyObsOffset = newOffset; },
   myObsOffsetToRestore: 0,
-  setMyObsOffsetToRestore: ( ) => set( { myObsOffsetToRestore: get( ).myObsOffset } ),
+  setMyObsOffsetToRestore: ( ) => set( { myObsOffsetToRestore: liveMyObsOffset } ),
   resetMyObsOffsetToRestore: ( ) => set( { myObsOffsetToRestore: 0 } ),
 
   combineSelection: null,
