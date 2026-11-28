@@ -31,8 +31,8 @@ import { useCurrentUser } from "sharedHooks";
 // With `persist: true` the results are saved to disk and shown again after a
 // restart.
 //
-// A page fetched in the last HTTP_CACHE_FRESH_MS comes from the HTTP cache
-// rather than the network, unless `cacheFirst` is false. refreshFirstPage
+// A page in the HTTP cache comes from there rather than the network, unless
+// `cacheFirst` is false. refreshFirstPage
 // always goes to the network.
 //
 // Whenever cached results are shown (saved to disk, from the HTTP cache, or

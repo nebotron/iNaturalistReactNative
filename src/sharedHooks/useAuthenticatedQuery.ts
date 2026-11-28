@@ -49,9 +49,9 @@ export type QueryFunction<Response>
 // Should work like React Query's useQuery except it calls the queryFunction
 // with an object that includes the JWT.
 //
-// Results fetched in the last HTTP_CACHE_FRESH_MS come from the HTTP cache,
-// as they do when the network fails, and are shown at once while the latest
-// are fetched in the background and replace them when they arrive.
+// Results in the HTTP cache come from there, as they do when the network
+// fails, and are shown at once while the latest are fetched in the
+// background and replace them when they arrive.
 const useAuthenticatedQuery = <Response>(
   queryKey: QueryKey,
   queryFunction: QueryFunction<Response>,
