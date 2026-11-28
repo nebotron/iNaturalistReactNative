@@ -6,8 +6,21 @@ appId: ${APP_ID}
 # A tap opens the camera; a long press offers the other ways to add one
 - longPressOn:
     id: add-obs-button
-- tapOn:
-    id: import-media-button
+# The sheet animates in; a second long press if the first didn't open it
+- extendedWaitUntil:
+    visible: Photo importer
+    timeout: 10000
+    optional: true
+- runFlow:
+    when:
+      notVisible: Photo importer
+    commands:
+      - longPressOn:
+          id: add-obs-button
+      - extendedWaitUntil:
+          visible: Photo importer
+          timeout: 10000
+- tapOn: Photo importer
 - extendedWaitUntil:
     visible:
       id: PhotoGallery.done
@@ -18,9 +31,9 @@ appId: ${APP_ID}
     index: 0
 - tapOn:
     id: PhotoGallery.done
+# The crop view itself isn't exposed to Maestro; its sliders are
 - extendedWaitUntil:
-    visible:
-      id: "ImageCropView\\..+"
+    visible: Adjust brightness
     timeout: 60000
 - swipe:
     from: Adjust zoom

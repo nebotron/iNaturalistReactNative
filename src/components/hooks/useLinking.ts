@@ -10,7 +10,7 @@ import type { ExploreLink } from "components/hooks/exploreLink";
 import { parseExploreLink } from "components/hooks/exploreLink";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
-import { DATE_OBSERVED } from "providers/ExploreContext";
+import { DATE_OBSERVED, EXPLORE_PLACE_MODE } from "providers/ExploreContext";
 import { useCallback, useEffect, useState } from "react";
 import { Linking } from "react-native";
 import type { UserPojo } from "realmModels/User";
@@ -67,6 +67,8 @@ const useLinking = ( currentUser: UserPojo | null ) => {
     }
     const params = {
       ...( user && { subject: resultToSubject( { type: "user", user } ) } ),
+      // As on the web, a search that names no place is worldwide
+      location: { placeMode: EXPLORE_PLACE_MODE.WORLDWIDE },
       ...( link.view && { activeTab: link.view } ),
       filters: {
         taxonFilters: normalizeTaxonFilters( ( taxa || [] ).map( taxon => ( {
