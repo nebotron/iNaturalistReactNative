@@ -1,0 +1,248 @@
+##
+# App Store screenshots: builds the app for the iOS Simulator, then on each
+# device boots a fresh simulator, installs the app, and runs
+# e2e/maestro/ios/screenshots.yaml, which taps through the app taking shots.
+# The PNGs come out at the device's native resolution (iPhone 17 Pro Max is
+# 1320x2868, App Store Connect's 6.9" display size) and are uploaded as the
+# screenshots artifact, one folder per device, with Maestro's debug output.
+#
+# The build takes most of the time. To rerun only the screenshots, say after
+# changing the flow, pass app_run_id: a run whose simulator-app artifact to
+# reuse.
+#
+# Needs the same DOTENV_BASE64 and GOOGLE_SERVICE_INFO_PRODUCTION_BASE64
+# secrets as testflight-ios-build.yml. Nothing is signed or uploaded.
+##
+name: App Store screenshots (iOS)
+on:
+  workflow_dispatch:
+    inputs:
+      app_run_id:
+        description: Reuse the simulator-app artifact of this run instead of building.
+        type: string
+        default: ''
+      devices:
+        description: Comma-separated simulator device types.
+        type: string
+        default: iPhone 17 Pro Max
+      observation_ids:
+        description: Up to two comma-separated observation ids to open by deep link.
+        type: string
+        default: 202565126,107700686
+      location:
+        description: Simulated location, "latitude,longitude".
+        type: string
+        default: 37.7694,-122.4862
+      runner:
+        description: macOS runner image.
+        type: string
+        default: macos-26
+  # Lets a branch iterate on the flow without first landing it on main
+  push:
+    branches: ['claude/**']
+    paths:
+      - .github/workflows/screenshots-ios.yml
+      - e2e/maestro/ios/screenshots.yaml
+
+concurrency:
+  group: screenshots-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVICES: ${{ inputs.devices || 'iPhone 17 Pro Max' }}
+  OBSERVATION_IDS: ${{ inputs.observation_ids || '202565126,107700686' }}
+  LOCATION: ${{ inputs.location || '37.7694,-122.4862' }}
+
+jobs:
+  build:
+    if: ${{ !inputs.app_run_id }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 120
+    steps:
+    - name: Check that every secret is present
+      env:
+        DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
+        GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
+      run: |
+        missing=""
+        for secret in DOTENV_BASE64 GOOGLE_SERVICE_INFO_PRODUCTION_BASE64; do
+          [ -n "${!secret}" ] || missing="$missing $secret"
+        done
+        if [ -n "$missing" ]; then
+          echo "Missing repository secrets:$missing" >&2
+          exit 1
+        fi
+
+    - uses: actions/checkout@v6
+
+    - uses: actions/setup-node@v6
+      with:
+        node-version-file: '.nvmrc'
+
+    - name: Add Intel macOS to Gemfile.lock
+      if: runner.arch == 'X64'
+      run: bundle lock --add-platform x86_64-darwin
+
+    - uses: ruby/setup-ruby@v1
+      with:
+        bundler-cache: true
+
+    # Required workaround for Firebase & XCode >26.0.1
+    - name: Set Xcode Toolchain
+      run: echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> "$GITHUB_ENV"
+
+    # Same key as testflight-ios-build.yml, so the two share the cache
+    - name: Restore node_modules and the installed Pods
+      id: deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          node_modules
+          ios/Pods
+        key: deps-${{ runner.arch == 'X64' && 'macOSX64' || runner.os }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**', 'ios/Podfile.lock' ) }}
+
+    - name: Install Dependencies
+      if: steps.deps.outputs.cache-hit != 'true'
+      run: npm ci
+
+    - name: Create .env file
+      env:
+        DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
+      run: |
+        printf '%s' "$DOTENV_BASE64" | base64 --decode > .env
+        # DOTENV_BASE64 predates the per-platform OAuth rename
+        sed -i '' -e 's/\r$//' -e 's/^OAUTH_CLIENT_/IOS_OAUTH_CLIENT_/' .env
+
+    - name: Create GoogleService-Info.production.plist
+      env:
+        GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
+      run: |
+        printf '%s' "$GOOGLE_SERVICE_INFO_PRODUCTION_BASE64" | base64 --decode \
+          > ios/GoogleService-Info.production.plist
+
+    - name: Download the cv model and taxonomy file into the ios folder
+      run: npm run add-example-model
+
+    - name: Restore the CocoaPods download cache
+      uses: actions/cache@v4
+      with:
+        path: ~/Library/Caches/CocoaPods
+        key: cocoapods-downloads-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}
+        restore-keys: |
+          cocoapods-downloads-${{ runner.os }}-
+
+    - name: Update Pods
+      run: cd ios && pod install
+
+    # Release, so the JS bundle is inside the app and no Metro is needed, and
+    # there's no dev menu or LogBox in the shots. Simulator apps needn't be
+    # signed.
+    - name: Build for the simulator
+      run: |
+        set -o pipefail
+        xcodebuild build \
+          -workspace ios/iNaturalistReactNative.xcworkspace \
+          -scheme iNaturalistReactNative \
+          -configuration Release \
+          -sdk iphonesimulator \
+          -destination 'generic/platform=iOS Simulator' \
+          -derivedDataPath ios/build \
+          CODE_SIGNING_ALLOWED=NO \
+          COMPILER_INDEX_STORE_ENABLE=NO
+        ditto -c -k --keepParent \
+          ios/build/Build/Products/Release-iphonesimulator/iNaturalistReactNative.app \
+          "$RUNNER_TEMP/app.zip"
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: simulator-app
+        path: ${{ runner.temp }}/app.zip
+        retention-days: 14
+
+  screenshots:
+    needs: build
+    # Runs after a build, or with no build when app_run_id is given
+    if: ${{ !cancelled() && ( needs.build.result == 'success' || inputs.app_run_id ) }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v6
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: simulator-app
+        path: ${{ runner.temp }}/app
+        run-id: ${{ inputs.app_run_id || github.run_id }}
+        github-token: ${{ github.token }}
+
+    - name: Unpack the app
+      run: |
+        cd "$RUNNER_TEMP/app" && ditto -x -k app.zip .
+        APP="$RUNNER_TEMP/app/iNaturalistReactNative.app"
+        echo "APP=$APP" >> "$GITHUB_ENV"
+        echo "APP_ID=$( /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" )" \
+          >> "$GITHUB_ENV"
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Install Maestro
+      run: |
+        curl -fsSL --retry 3 "https://get.maestro.mobile.dev" | bash
+        echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+    - name: Take the screenshots
+      run: |
+        set -u
+        IFS=, read -r OBS_ID_1 OBS_ID_2 <<< "$OBSERVATION_IDS,"
+        RUNTIME=$( xcrun simctl list runtimes -j \
+          | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["platform"]=="iOS" and x["isAvailable"]]; print(r[-1]["identifier"])' )
+        echo "Runtime $RUNTIME"
+        status=0
+        IFS=, read -r -a devices <<< "$DEVICES"
+        for device in "${devices[@]}"; do
+          device="$( echo "$device" | xargs )"
+          slug="$( echo "$device" | tr -cs 'A-Za-z0-9' '-' | sed 's/-$//' )"
+          out="$RUNNER_TEMP/shots/$slug"
+          mkdir -p "$out"
+          UDID=$( xcrun simctl create "shots-$slug" "$device" "$RUNTIME" )
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          # Apple's marketing status bar
+          xcrun simctl status_bar "$UDID" override --time 9:41 \
+            --dataNetwork wifi --wifiMode active --wifiBars 3 \
+            --cellularMode active --cellularBars 4 \
+            --batteryState charged --batteryLevel 100
+          xcrun simctl location "$UDID" set "$LOCATION"
+          xcrun simctl install "$UDID" "$APP"
+          for service in location-always photos camera microphone; do
+            xcrun simctl privacy "$UDID" grant "$service" "$APP_ID" || true
+          done
+          # takeScreenshot writes relative to the working directory
+          ( cd "$out" && maestro --device "$UDID" test \
+              -e APP_ID="$APP_ID" -e OBS_ID_1="$OBS_ID_1" -e OBS_ID_2="$OBS_ID_2" \
+              --debug-output "$out/debug" \
+              "$GITHUB_WORKSPACE/e2e/maestro/ios/screenshots.yaml" ) || status=1
+          # Where the flow ended up, for fixing it when a step missed
+          maestro --device "$UDID" hierarchy > "$out/debug/final-hierarchy.json" 2>&1 || true
+          xcrun simctl io "$UDID" screenshot "$out/debug/final.png" || true
+          {
+            echo "### $device"
+            for png in "$out"/*.png; do
+              [ -e "$png" ] || continue
+              echo "- $( basename "$png" ): $( sips -g pixelWidth -g pixelHeight "$png" \
+                | awk '/pixel/ { printf "%s ", $2 }' )"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          xcrun simctl shutdown "$UDID"
+        done
+        exit $status
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: screenshots
+        path: ${{ runner.temp }}/shots
+        retention-days: 30
